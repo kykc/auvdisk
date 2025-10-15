@@ -229,6 +229,7 @@ namespace auvdisk
             }
         }
 
+#pragma warning disable CA1416
         private FileSystemRecord? HandleFileSystem(Stream stream, ulong offset, Action<DiscFileSystem> impl)
         {
             var openFat = () => new DiscUtils.Fat.FatFileSystem(stream, DiscUtils.Streams.Ownership.None);
@@ -266,6 +267,7 @@ namespace auvdisk
             }
 
             return null;
+#pragma warning restore CA1416
         }
     }
 }
