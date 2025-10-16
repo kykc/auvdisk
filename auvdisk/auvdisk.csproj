@@ -5,6 +5,10 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AssemblyName>auvdisk</AssemblyName>
+    <Version>1.0.0</Version>
+    <Authors>Alexander Automatl</Authors>
+    <Company>Tomatl Inc</Company>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,5 +17,10 @@
     <PackageReference Include="DiskAccessLibrary" Version="1.6.4.3" />
     <PackageReference Include="DotNext" Version="5.25.1" />
   </ItemGroup>
+  <Target Name="PackChoco" DependsOnTargets="Publish">
+     <Message Importance="High" Text="Packing $(PublishDir), generating nuspec:" />
+     <Exec Command="python3 generate-choco-spec.py $(PublishDir)" />
+     <Exec Command="choco pack auvdisk.choco.nuspec" />
+  </Target>
 
 </Project>

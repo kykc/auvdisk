@@ -1,0 +1,20 @@
+name: build choco package
+run-name: ${{ gitea.actor }} is building auvdisk
+on: [push]
+
+jobs:
+  build-choco:
+    runs-on: ${{ secrets.CI_USER }}-net8-ubuntu2204
+    if: gitea.ref == 'refs/heads/main'
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - name: build with dotnet
+        run: |
+          pushd auvdisk && dotnet publish -c Release -r win-x64 -t:PackChoco && popd
+      - name: rename nupkg
+        run: |
+          mv auvdisk/auvdisk.portable*.nupkg auvdisk.portable.nupkg
+      - name: upload nupkg to choco repo
+        run: |
+          choco push auvdisk.portable.nupkg --source https://${{ secrets.CI_USER }}:${{ secrets.CI_TOKEN }}@${{ vars.AU_GITEA_HOST }}/api/packages/audist/nuget/index.json --api-key ${{ secrets.CI_TOKEN }}
