@@ -83,4 +83,15 @@ namespace auvdisk.Cli
         [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
         public bool Verbose { get; set; } = false;
     }
+
+    [Verb("create-diff-vhd", HelpText = "Create differencing VHD image")]
+    class CreateDiffVhd
+    {
+        [Option('p', "parent", Required = true, HelpText = "Parent VHD image")]
+        public string Parent { get; set; } = "";
+        [Option('c', "child", Required = true, HelpText = "Child differencing VHD image")]
+        public string Child { get; set; } = "";
+        [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
+        public bool Verbose { get; set; } = false;
+    }
 }

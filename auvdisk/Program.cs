@@ -1,3 +1,4 @@
+using auvdisk.Extensions;
 using CommandLine;
 using DiscUtils.Ext;
 using DiscUtils.Fat;
@@ -17,7 +18,7 @@ namespace auvdisk
 
         static int Main(string[] args)
         {
-            var cliResult = Parser.Default.ParseArguments<Cli.VdiskProbe, Cli.VdiskList, Cli.VdiskCat, Cli.LoopToVhd, Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg>(args);
+            var cliResult = Parser.Default.ParseArguments<Cli.VdiskProbe, Cli.VdiskList, Cli.VdiskCat, Cli.LoopToVhd, Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg, Cli.CreateDiffVhd>(args);
             var logger = (string s) => Console.WriteLine(s);
 
             var exitCode = cliResult.MapResult(
@@ -63,6 +64,20 @@ namespace auvdisk
                 (Cli.VhdToImg opts) =>
                 {
                     Convert.DiskImageConverter.ConvertVhdToImg(opts.Target, logger, opts.Verbose);
+
+                    return 0;
+                },
+                (Cli.CreateDiffVhd opts) =>
+                {
+                    var action = () =>
+                    {
+                        DiscUtils.Vhd.Disk.InitializeDifferencing(opts.Child, opts.Parent);
+                    };
+
+                    action
+                        .WithCheckedDiskType("VHD", opts.Parent, logger, opts.Verbose)
+                        .WithCheckedSourceExists(opts.Parent, logger)
+                        .WithCheckedTargetAvailable(opts.Child, logger)();
 
                     return 0;
                 },

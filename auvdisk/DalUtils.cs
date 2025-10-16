@@ -23,7 +23,7 @@ namespace auvdisk
             return numToRound + multiple - remainder;
         }
 
-        private static VirtualHardDisk CreateVhd(string path, ulong size, Action<String> logger)
+        private static VirtualHardDisk CreateFixedVhd(string path, ulong size, Action<String> logger)
         {
             // Faster due to disabled Windows FS security (resulting file contains contents from real disk, potential security issue)
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && Vhdtool.IsVhdToolPresent())
@@ -50,7 +50,7 @@ namespace auvdisk
 
             ulong totalSize = offsetLba * Program.LbaSize + overheadSize + bootSizeInBytes + dataSizeInBytes;
             logger("Total size of the image contents is " + totalSize.ToString());
-            var vdisk = CreateVhd(target, totalSize, logger);
+            var vdisk = CreateFixedVhd(target, totalSize, logger);
 
             List<GuidPartitionEntry> list = new List<GuidPartitionEntry>();
 
