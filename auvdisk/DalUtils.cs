@@ -23,23 +23,72 @@ namespace auvdisk
             return numToRound + multiple - remainder;
         }
 
-        private static VirtualHardDisk CreateFixedVhd(string path, ulong size, Action<String> logger)
+        private static VHDFooter CreateVhdFooter(ulong size)
         {
+            VHDFooter vhdFooter = new VHDFooter();
+            vhdFooter.OriginalSize = size;
+            vhdFooter.CurrentSize = size;
+            vhdFooter.SetCurrentTimeStamp();
+            vhdFooter.SetDiskGeometry(size / Program.LbaSize);
+
+            return vhdFooter;
+        }
+
+        public static VirtualHardDisk CreateFixedVhd(string path, ulong size, Action<String> logger, bool forceZeroFill = false)
+        {
+            if (size % Program.LbaSize > 0)
+            {
+                size = RoundUp(size, Program.LbaSize);
+                logger($"WARNING: VHD size must be a multiple of {Program.LbaSize}, rounded up size to {size}");
+            }
+
             // Faster due to disabled Windows FS security (resulting file contains contents from real disk, potential security issue)
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && Vhdtool.IsVhdToolPresent())
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && CliTools.IsVhdToolPresent() && !forceZeroFill)
             {
                 logger("Found VhdTool, will use it to speed things up. You may receive UAC prompt");
-                Vhdtool.Create(path, size);
+                CliTools.CreateWithVhdTool(path, size);
+                
+                return new VirtualHardDisk(path);
+            }
+            else if (CliTools.IsDdPresent() && !forceZeroFill)
+            {
+                logger("Found dd, will allocate VHD using it to speed things up");
+                logger("WARNING: this may result in a sparse file, and Windows doesn't like sparse VHDs");
+
+                CliTools.AllocateWithDd(path, size);
+
+                using (var stream = new FileStream(path, FileMode.Open))
+                {
+                    stream.Seek(0, SeekOrigin.End);
+                    stream.Write(CreateVhdFooter(size).GetBytes());
+                }
+
                 return new VirtualHardDisk(path);
             }
             else
             {
                 logger("Using DiskAccessLibrary to create VHD");
-                return VirtualHardDisk.CreateFixedDisk(path, (long)size);
+                logger("Will do full-length zeroing which is slow");
+                logger("This is needed to avoid creating a sparse file. Known to happen on Linux when writing to Samba share");
+
+                byte[] nullSector = Enumerable.Repeat((byte)0x0, (int)Program.LbaSize).ToArray();
+                ulong sectorCount = size / Program.LbaSize;
+
+                using (var stream = new FileStream(path, FileMode.CreateNew))
+                {
+                    for (ulong sector = 0; sector < sectorCount; ++sector)
+                    {
+                        stream.Write(nullSector);
+                    }
+
+                    stream.Write(CreateVhdFooter(size).GetBytes());
+                }
+
+                return new VirtualHardDisk(path);
             }
         }
 
-        public static ulong CreateBootableFixedVhdLayout(string target, ulong bootSizeInBytes, ulong dataSizeInBytes, Action<string> logger)
+        public static ulong CreateBootableFixedVhdLayout(string target, ulong bootSizeInBytes, ulong dataSizeInBytes, Action<string> logger, bool zeroFill = false)
         {
             logger("Creating fixed VHD layout");
             dataSizeInBytes = RoundUp(dataSizeInBytes, Program.LbaSize);
@@ -50,7 +99,7 @@ namespace auvdisk
 
             ulong totalSize = offsetLba * Program.LbaSize + overheadSize + bootSizeInBytes + dataSizeInBytes;
             logger("Total size of the image contents is " + totalSize.ToString());
-            var vdisk = CreateFixedVhd(target, totalSize, logger);
+            var vdisk = CreateFixedVhd(target, totalSize, logger, zeroFill);
 
             List<GuidPartitionEntry> list = new List<GuidPartitionEntry>();
 

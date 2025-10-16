@@ -53,6 +53,8 @@ namespace auvdisk.Cli
         public string Target { get; set; } = "";
         [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
         public bool Verbose { get; set; } = false;
+        [Option('z', "zero-fill", Required = false, Default = false, HelpText = "Explicitly zero-fill created VHD. May help avoiding creation of sparse file")]
+        public bool ZeroFill { get; set; } = false;
     }
 
     [Verb("vhd-to-loop", HelpText = "Unwrap VHD and create raw filesystem loop")]
@@ -93,5 +95,16 @@ namespace auvdisk.Cli
         public string Child { get; set; } = "";
         [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
         public bool Verbose { get; set; } = false;
+    }
+
+    [Verb("create-fixed-vhd", HelpText = "Create fixed size VHD image")]
+    class CreateFixedVhd
+    {
+        [Option('t', "target", Required = true, HelpText = "Target VHD path")]
+        public string Target { get; set; } = "";
+        [Option('s', "size", Required = true, HelpText = "Target VHD size in bytes. Actual file will be 512 bytes longer, as it needs to contain VHD footer")]
+        public ulong Size { get; set; } = 0;
+        [Option('z', "zero-fill", Required = false, Default = false, HelpText = "Explicitly zero-fill created VHD. May help avoiding creation of sparse file")]
+        public bool ZeroFill { get; set; } = false;
     }
 }

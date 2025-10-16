@@ -14,7 +14,7 @@ namespace auvdisk.Convert
 {
     internal class DiskImageConverter
     {
-        public static void ConvertLoopToVhd(string source, string target, Action<String> logger, bool verbose)
+        public static void ConvertLoopToVhd(string source, string target, Action<String> logger, bool verbose, bool zeroFill = false)
         {
             var action = () =>
             {
@@ -23,7 +23,7 @@ namespace auvdisk.Convert
 
                 logger("Source file length is " + sourceLength.ToString());
 
-                DalUtils.CreateBootableFixedVhdLayout(target, efiBootSize, (ulong)sourceLength, logger);
+                DalUtils.CreateBootableFixedVhdLayout(target, efiBootSize, (ulong)sourceLength, logger, zeroFill);
 
                 logger("Opening VHD using DiscUtils");
                 using (var disk = new DiscUtils.Vhd.Disk(target, FileAccess.ReadWrite))

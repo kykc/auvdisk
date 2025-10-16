@@ -1,10 +1,5 @@
 using auvdisk.Extensions;
 using CommandLine;
-using DiscUtils.Ext;
-using DiscUtils.Fat;
-using DiscUtils.Partitions;
-using DiscUtils.Streams;
-using DiscUtils.Vhd;
 using System;
 using System.IO;
 using System.Net.Security;
@@ -14,11 +9,11 @@ namespace auvdisk
 {
     internal class Program
     {
-        public static ulong LbaSize = 512;
+        public const ulong LbaSize = 512;
 
         static int Main(string[] args)
         {
-            var cliResult = Parser.Default.ParseArguments<Cli.VdiskProbe, Cli.VdiskList, Cli.VdiskCat, Cli.LoopToVhd, Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg, Cli.CreateDiffVhd>(args);
+            var cliResult = Parser.Default.ParseArguments<Cli.VdiskProbe, Cli.VdiskList, Cli.VdiskCat, Cli.LoopToVhd, Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg, Cli.CreateDiffVhd, Cli.CreateFixedVhd>(args);
             var logger = (string s) => Console.WriteLine(s);
 
             var exitCode = cliResult.MapResult(
@@ -45,7 +40,7 @@ namespace auvdisk
                 },
                 (Cli.LoopToVhd opts) =>
                 {
-                    Convert.DiskImageConverter.ConvertLoopToVhd(opts.Source, opts.Target, logger, opts.Verbose);
+                    Convert.DiskImageConverter.ConvertLoopToVhd(opts.Source, opts.Target, logger, opts.Verbose, opts.ZeroFill);
 
                     return 0;
                 },
@@ -78,6 +73,18 @@ namespace auvdisk
                         .WithCheckedDiskType("VHD", opts.Parent, logger, opts.Verbose)
                         .WithCheckedSourceExists(opts.Parent, logger)
                         .WithCheckedTargetAvailable(opts.Child, logger)();
+
+                    return 0;
+                },
+                (Cli.CreateFixedVhd opts) =>
+                {
+                    var action = () =>
+                    {
+                        DalUtils.CreateFixedVhd(opts.Target, opts.Size, logger, opts.ZeroFill);
+                    };
+
+                    action
+                            .WithCheckedTargetAvailable(opts.Target, logger)();
 
                     return 0;
                 },

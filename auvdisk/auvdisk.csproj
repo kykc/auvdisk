@@ -1,14 +1,14 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>auvdisk</AssemblyName>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Authors>Alexander Automatl</Authors>
     <Company>Tomatl Inc</Company>
+    <IsWindows Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Windows)))' == 'true'">true</IsWindows>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,11 +16,17 @@
     <PackageReference Include="DiscUtils" Version="0.16.13" />
     <PackageReference Include="DiskAccessLibrary" Version="1.6.4.3" />
     <PackageReference Include="DotNext" Version="5.25.1" />
+    <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.213">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
   <Target Name="PackChoco" DependsOnTargets="Publish">
      <Message Importance="High" Text="Packing $(PublishDir), generating nuspec:" />
      <Exec Command="python3 generate-choco-spec.py $(PublishDir)" />
      <Exec Command="choco pack auvdisk.choco.nuspec" />
   </Target>
-
+  <PropertyGroup Condition="'$(IsWindows)'=='true'">
+    <DefineConstants>WINDOWS</DefineConstants>
+  </PropertyGroup>
 </Project>
