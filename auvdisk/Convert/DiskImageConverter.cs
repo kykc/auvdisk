@@ -14,11 +14,11 @@ namespace auvdisk.Convert
 {
     internal class DiskImageConverter
     {
-        public static void ConvertLoopToVhd(string source, string target, Action<String> logger)
+        public static void ConvertLoopToVhd(string source, string target, Action<String> logger, bool verbose)
         {
             var action = () =>
             {
-                var sourceLength = new System.IO.FileInfo(source).Length; // TODO: file not found
+                var sourceLength = new System.IO.FileInfo(source).Length;
                 ulong efiBootSize = 512 * 1024 * 1024; // 512MiB
 
                 logger("Source file length is " + sourceLength.ToString());
@@ -44,16 +44,19 @@ namespace auvdisk.Convert
                 logger("Closed VHD, done! It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
             };
 
-            action.WithCheckedFsType("EXT", source, logger)();
+            action
+                .WithCheckedTargetAvailable(target, logger)
+                .WithCheckedFsType("EXT", source, logger, verbose)
+                .WithCheckedSourceExists(source, logger)();
         }
 
-        public static void ConvertVhdToLoop(string source, string target, Action<string> logger)
+        public static void ConvertVhdToLoop(string source, string target, Action<string> logger, bool verbose)
         {
             var action = () =>
             {
                 logger("Opening VHD using DiscUtils");
 
-                using (var disk = new DiscUtils.Vhd.Disk(source, FileAccess.Read)) // TODO: file not found
+                using (var disk = new DiscUtils.Vhd.Disk(source, FileAccess.Read))
                 {
                     logger("VHD contains " + disk.Partitions.Count + " partitions:");
                     var parts = disk.Partitions.Partitions.Select((part, idx) =>
@@ -78,15 +81,18 @@ namespace auvdisk.Convert
                 logger("Done! It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
             };
 
-            action.WithCheckedDiskType("VHD", source, logger)();
+            action
+                .WithCheckedTargetAvailable(target, logger)
+                .WithCheckedDiskType("VHD", source, logger, verbose)
+                .WithCheckedSourceExists(source, logger)();
         }
 
-        public static void ConvertImgToVhd(string source, Action<string> logger)
+        public static void ConvertImgToVhd(string source, Action<string> logger, bool verbose)
         {
             var action = () =>
             {
                 logger("Opening disk image using FileStream");
-                using (var disk = new FileStream(source, FileMode.Open)) // TODO: file not found
+                using (var disk = new FileStream(source, FileMode.Open))
                 {
                     long diskSize = disk.Length;
 
@@ -108,17 +114,18 @@ namespace auvdisk.Convert
                 logger("Done! It's probably a good idea to rename file to *.vhd now");
             };
 
-            action.WithCheckedDiskType("RAW", source, logger)();
+            action
+                .WithCheckedDiskType("RAW", source, logger, verbose)
+                .WithCheckedSourceExists(source, logger)();
         }
 
-        // TODO: add verbose and output prober log
-        public static void ConvertVhdToImg(string source, Action<string> logger)
+        public static void ConvertVhdToImg(string source, Action<string> logger, bool verbose)
         {
             var action = () =>
             {
                 logger("Opening disk image using FileStream");
 
-                using (var disk = new FileStream(source, FileMode.Open)) // TODO: file not found
+                using (var disk = new FileStream(source, FileMode.Open))
                 {
                     logger($"Truncating last {Program.LbaSize.ToString()} bytes of the file");
                     long currentSize = disk.Length;
@@ -128,7 +135,9 @@ namespace auvdisk.Convert
                 logger("Done! It's probably a good idea to rename file to *.img or something similar now");
             };
 
-            action.WithCheckedDiskType("VHD", source, logger)();
+            action
+                .WithCheckedDiskType("VHD", source, logger, verbose)
+                .WithCheckedSourceExists(source, logger)();
         }
 
         

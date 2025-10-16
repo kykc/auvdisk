@@ -51,6 +51,8 @@ namespace auvdisk.Cli
         public string Source { get; set; } = "";
         [Option('t', "target", Required = true, HelpText = "Target imagefile path")]
         public string Target { get; set; } = "";
+        [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
+        public bool Verbose { get; set; } = false;
     }
 
     [Verb("vhd-to-loop", HelpText = "Unwrap VHD and create raw filesystem loop")]
@@ -60,6 +62,8 @@ namespace auvdisk.Cli
         public string Source { get; set; } = "";
         [Option('t', "target", Required = true, HelpText = "Target imagefile path")]
         public string Target { get; set; } = "";
+        [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
+        public bool Verbose { get; set; } = false;
     }
 
     [Verb("img-to-vhd", HelpText = "Append VHD footer to RAW image file")]
@@ -67,6 +71,8 @@ namespace auvdisk.Cli
     {
         [Option('t', "target", Required = true, HelpText = "Target imagefile path")]
         public string Target { get; set; } = "";
+        [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
+        public bool Verbose { get; set; } = false;
     }
 
     [Verb("vhd-to-img", HelpText = "Delete VHD footer from image, effectively converting it to RAW image")]
@@ -74,5 +80,7 @@ namespace auvdisk.Cli
     {
         [Option('t', "target", Required = true, HelpText = "Target imagefile path")]
         public string Target { get; set; } = "";
+        [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
+        public bool Verbose { get; set; } = false;
     }
 }

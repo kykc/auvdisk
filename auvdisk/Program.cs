@@ -44,25 +44,25 @@ namespace auvdisk
                 },
                 (Cli.LoopToVhd opts) =>
                 {
-                    Convert.DiskImageConverter.ConvertLoopToVhd(opts.Source, opts.Target, logger);
+                    Convert.DiskImageConverter.ConvertLoopToVhd(opts.Source, opts.Target, logger, opts.Verbose);
 
                     return 0;
                 },
                 (Cli.VhdToLoop opts) =>
                 {
-                    Convert.DiskImageConverter.ConvertVhdToLoop(opts.Source, opts.Target, logger);
+                    Convert.DiskImageConverter.ConvertVhdToLoop(opts.Source, opts.Target, logger, opts.Verbose);
 
                     return 0;
                 },
                 (Cli.ImgToVhd opts) =>
                 {
-                    Convert.DiskImageConverter.ConvertImgToVhd(opts.Target, logger);
+                    Convert.DiskImageConverter.ConvertImgToVhd(opts.Target, logger, opts.Verbose);
 
                     return 0;
                 },
                 (Cli.VhdToImg opts) =>
                 {
-                    Convert.DiskImageConverter.ConvertVhdToImg(opts.Target, logger);
+                    Convert.DiskImageConverter.ConvertVhdToImg(opts.Target, logger, opts.Verbose);
 
                     return 0;
                 },

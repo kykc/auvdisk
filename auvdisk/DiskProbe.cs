@@ -45,7 +45,14 @@ namespace auvdisk
         public ProbeResult Probe()
         {
             Logger("Starting disk probe");
-            // TODO: file exists
+            
+            if (!File.Exists(Path))
+            {
+                Logger($"Error: source file {Path} does not exist");
+
+                return new ProbeResult(null, null);
+            }
+
             var rawFileStream = new FileStream(Path, FileMode.Open);
 
             using (var fileStream = new OffsetStreamDecorator(rawFileStream, Offset, Trim))
@@ -233,7 +240,7 @@ namespace auvdisk
         private FileSystemRecord? HandleFileSystem(Stream stream, ulong offset, Action<DiscFileSystem> impl)
         {
             var openFat = () => new DiscUtils.Fat.FatFileSystem(stream, DiscUtils.Streams.Ownership.None);
-            var openNtfs = () => new DiscUtils.Ntfs.NtfsFileSystem(stream); // TODO: exclude on non-Win platform
+            var openNtfs = () => new DiscUtils.Ntfs.NtfsFileSystem(stream);
             var openExt = () => new DiscUtils.Ext.ExtFileSystem(stream);
 
             var fillFsRecord = (DiscFileSystem fs) =>
@@ -267,7 +274,7 @@ namespace auvdisk
             }
 
             return null;
-#pragma warning restore CA1416
         }
+#pragma warning restore CA1416
     }
 }

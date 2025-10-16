@@ -40,13 +40,13 @@ namespace auvdisk.Extensions
             }
         }
 
-        public static Action WithCheckedDiskType(this Action action, string diskType, string source, Action<string> logger)
+        public static Action WithCheckedDiskType(this Action action, string diskType, string source, Action<string> logger, bool verbose)
         {
             return () =>
             {
-                logger($"Checking that target file contains valid {diskType} image");
+                logger($"Checking that source file contains valid {diskType} image");
 
-                var probeResult = new DiskProbe(source, 0, 0, (DiscFileSystem) => { }, (string s) => { }).Probe();
+                var probeResult = new DiskProbe(source, 0, 0, (DiscFileSystem) => { }, verbose ? logger : (string s) => { }).Probe();
 
                 if (probeResult.Disk == null)
                 {
@@ -63,13 +63,13 @@ namespace auvdisk.Extensions
             };
         }
 
-        public static Action WithCheckedFsType(this Action action, string fsType, string source, Action<string> logger)
+        public static Action WithCheckedFsType(this Action action, string fsType, string source, Action<string> logger, bool verbose)
         {
             return () =>
             {
-                logger($"Checking that target file contains valid {fsType} image");
+                logger($"Checking that source file contains valid {fsType} image");
 
-                var probeResult = new DiskProbe(source, 0, 0, (DiscFileSystem) => { }, (string s) => { }).Probe();
+                var probeResult = new DiskProbe(source, 0, 0, (DiscFileSystem) => { }, verbose ? logger : (string s) => { }).Probe();
 
                 if (probeResult.Fs == null)
                 {
@@ -78,6 +78,40 @@ namespace auvdisk.Extensions
                 else if (probeResult.Fs.FsType != fsType)
                 {
                     logger($"Error: expected {fsType} filesystem, got {probeResult.Fs.FsType}, exiting");
+                }
+                else
+                {
+                    action();
+                }
+            };
+        }
+
+        public static Action WithCheckedSourceExists(this Action action, string source, Action<string> logger)
+        {
+            return () =>
+            {
+                logger("Checking that source file exists");
+
+                if (!File.Exists(source))
+                {
+                    logger($"Error: source file {source} does not exist");
+                }
+                else
+                {
+                    action();
+                }
+            };
+        }
+
+        public static Action WithCheckedTargetAvailable(this Action action, string target, Action<string> logger)
+        {
+            return () =>
+            {
+                logger("Checking that target file doesn't exists");
+
+                if (File.Exists(target))
+                {
+                    logger($"Error: {target} already exists");
                 }
                 else
                 {
