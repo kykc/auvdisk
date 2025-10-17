@@ -4,6 +4,7 @@ using System;
 using System.IO;
 using System.Net.Security;
 using System.Runtime.InteropServices;
+using Spectre.Console;
 
 namespace auvdisk
 {
@@ -13,8 +14,22 @@ namespace auvdisk
 
         static int Main(string[] args)
         {
-            var cliResult = Parser.Default.ParseArguments<Cli.VdiskProbe, Cli.VdiskList, Cli.VdiskCat, Cli.LoopToVhd, Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg, Cli.CreateDiffVhd, Cli.CreateFixedVhd>(args);
-            var logger = (string s) => Console.WriteLine(s);
+            var cliResult = Parser.Default.ParseArguments<Cli.VdiskProbe, Cli.VdiskList, Cli.VdiskCat, Cli.LoopToVhd, Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg, Cli.CreateDiffVhd, Cli.CreateFixedVhd, Cli.MergeVhd>(args);
+            var logger = (string s) =>
+            {
+                if (s.StartsWith("ERROR"))
+                {
+                    AnsiConsole.MarkupLine($"[red]{s}[/]");
+                }
+                else if (s.StartsWith("WARNING"))
+                {
+                    AnsiConsole.MarkupLine($"[yellow]{s}[/]");
+                }
+                else
+                {
+                    AnsiConsole.WriteLine(s);
+                }
+            };
 
             var exitCode = cliResult.MapResult(
                 (Cli.VdiskProbe opts) =>
@@ -85,6 +100,12 @@ namespace auvdisk
 
                     action
                             .WithCheckedTargetAvailable(opts.Target, logger)();
+
+                    return 0;
+                },
+                (Cli.MergeVhd opts) =>
+                {
+                    Vhd.Merge.PerformMerge(opts.Parent, opts.Child, opts.Target, logger);
 
                     return 0;
                 },

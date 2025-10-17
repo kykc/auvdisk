@@ -107,4 +107,15 @@ namespace auvdisk.Cli
         [Option('z', "zero-fill", Required = false, Default = false, HelpText = "Explicitly zero-fill created VHD. May help avoiding creation of sparse file")]
         public bool ZeroFill { get; set; } = false;
     }
+
+    [Verb("merge-vhd", HelpText = "Merge differencing VHD into parent. Only fixed parent and a single direct child pair is supported")]
+    class MergeVhd
+    {
+        [Option('p', "parent", Required = true, HelpText = "Parent VHD image")]
+        public string Parent { get; set; } = "";
+        [Option('c', "child", Required = true, HelpText = "Child differencing VHD image")]
+        public string Child { get; set; } = "";
+        [Option('t', "target", Required = true, HelpText = "Target VHD path")]
+        public string Target { get; set; } = "";
+    }
 }

@@ -50,7 +50,7 @@ namespace auvdisk.Convert
                 .WithCheckedSourceExists(source, logger)();
         }
 
-        public static void ConvertVhdToLoop(string source, string target, Action<string> logger, bool verbose)
+        public static void ConvertVhdToLoop(string source, string target, Action<string> logger, bool verbose) // TODO: check that VHD is fixed
         {
             var action = () =>
             {
@@ -119,7 +119,7 @@ namespace auvdisk.Convert
                 .WithCheckedSourceExists(source, logger)();
         }
 
-        public static void ConvertVhdToImg(string source, Action<string> logger, bool verbose)
+        public static void ConvertVhdToImg(string source, Action<string> logger, bool verbose) // TODO: check that VHD is fixed
         {
             var action = () =>
             {
