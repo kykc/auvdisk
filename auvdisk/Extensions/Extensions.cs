@@ -88,7 +88,7 @@ namespace auvdisk.Extensions
         {
             return () =>
             {
-                logger($"Checking that source file contains valid {diskType} image");
+                logger($"Checking that source file contains valid {(diskType == "" ? "disk" : diskType)} image");
 
                 var probeResult = new DiskProbe(source, 0, 0, (DiscFileSystem) => { }, verbose ? logger : (string s) => { }).Probe();
 
@@ -96,7 +96,7 @@ namespace auvdisk.Extensions
                 {
                     logger($"ERROR: no {diskType} footer and/or partition table found, exiting");
                 }
-                else if (probeResult.Disk.ImageType != diskType)
+                else if (probeResult.Disk.ImageType != diskType && diskType != "")
                 {
                     logger($"ERROR: expected {diskType} image file got {probeResult.Disk.ImageType}, exiting");
                 }
@@ -111,7 +111,7 @@ namespace auvdisk.Extensions
         {
             return () =>
             {
-                logger($"Checking that source file contains valid {fsType} image");
+                logger($"Checking that source file contains valid {(fsType == "" ? "filesystem" : fsType)} image");
 
                 var probeResult = new DiskProbe(source, 0, 0, (DiscFileSystem) => { }, verbose ? logger : (string s) => { }).Probe();
 
