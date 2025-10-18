@@ -7,9 +7,9 @@ using System.Threading.Tasks;
 
 namespace auvdisk
 {
-    internal class CommandExecutor
+    internal static class CommandExecutor
     {
-        public static int execute(CommandExecutorConfig config)
+        public static int Execute(CommandExecutorConfig config)
         {
             //string arguments = config.Arguments.Select(x => Environment.ExpandEnvironmentVariables(x)).Aggregate((x, y) => x + " " + y);
             string arguments = String.Join(' ', config.Arguments.Select(x => Environment.ExpandEnvironmentVariables(x)));

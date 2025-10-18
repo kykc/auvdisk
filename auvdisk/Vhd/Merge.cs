@@ -8,7 +8,7 @@ using Spectre.Console;
 
 namespace auvdisk.Vhd
 {
-    internal class Merge
+    internal static class Merge
     {
         public static void PerformMerge(string parent, string child, string target, Action<string> logger)
         {

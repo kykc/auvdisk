@@ -1,37 +1,42 @@
-using DiskAccessLibrary;
+﻿using System.Runtime.InteropServices;
+using DiscUtils.Streams;
 using DiskAccessLibrary.VHD;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
+using DiskAccessLibrary;
 
-namespace auvdisk
+namespace auvdisk.Vhd
 {
-    internal static class DalUtils
+    public static class Util
     {
-        private static ulong RoundUp(ulong numToRound, ulong multiple)
+        public static VHDFooter? ReadVhdHeaderSafe(string source)
         {
-            if (multiple == 0)
-                return numToRound;
+            try
+            {
+                using (var stream = new FileStream(source, FileMode.Open, FileAccess.Read))
+                {
+                    if (stream.Length > (long)Program.LbaSize)
+                    {
+                        byte[] footerBytes = new byte[Program.LbaSize];
+                        stream.Seek(-(long)Program.LbaSize, SeekOrigin.End);
+                        stream.ReadExactly(footerBytes);
 
-            ulong remainder = numToRound % multiple;
-            if (remainder == 0)
-                return numToRound;
+                        var header = new VHDFooter(footerBytes);
 
-            return numToRound + multiple - remainder;
+                        return header.IsValid ? header : null;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+            }
+
+            return null;
         }
 
-        private static VHDFooter CreateVhdFooter(ulong size)
+        public static DiscUtils.Vhd.Disk CreateDynamicVhd(string path, ulong size)
         {
-            VHDFooter vhdFooter = new VHDFooter();
-            vhdFooter.OriginalSize = size;
-            vhdFooter.CurrentSize = size;
-            vhdFooter.SetCurrentTimeStamp();
-            vhdFooter.SetDiskGeometry(size / Program.LbaSize);
-
-            return vhdFooter;
+            // No using here, as we're returning disk owning the stream
+            var stream = new FileStream(path, FileMode.Create, FileAccess.ReadWrite);
+            return DiscUtils.Vhd.Disk.InitializeDynamic(stream, Ownership.Dispose, (long)size);
         }
 
         public static VirtualHardDisk CreateFixedVhd(string path, ulong size, Action<String> logger, bool forceZeroFill = false)
@@ -125,6 +130,29 @@ namespace auvdisk
             DiskAccessLibrary.GuidPartitionTable.InitializeDisk(vdisk, (long)offsetLba, list);
 
             return dataSizeInBytes;
+        }
+        
+        private static ulong RoundUp(ulong numToRound, ulong multiple)
+        {
+            if (multiple == 0)
+                return numToRound;
+
+            ulong remainder = numToRound % multiple;
+            if (remainder == 0)
+                return numToRound;
+
+            return numToRound + multiple - remainder;
+        }
+
+        private static VHDFooter CreateVhdFooter(ulong size)
+        {
+            VHDFooter vhdFooter = new VHDFooter();
+            vhdFooter.OriginalSize = size;
+            vhdFooter.CurrentSize = size;
+            vhdFooter.SetCurrentTimeStamp();
+            vhdFooter.SetDiskGeometry(size / Program.LbaSize);
+
+            return vhdFooter;
         }
     }
 }

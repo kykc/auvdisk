@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Spectre.Console;
 
 namespace auvdisk.Convert
 {
@@ -23,7 +24,7 @@ namespace auvdisk.Convert
 
                 logger("Source file length is " + sourceLength.ToString());
 
-                DalUtils.CreateBootableFixedVhdLayout(target, efiBootSize, (ulong)sourceLength, logger, zeroFill);
+                Vhd.Util.CreateBootableFixedVhdLayout(target, efiBootSize, (ulong)sourceLength, logger, zeroFill);
 
                 logger("Opening VHD using DiscUtils");
                 using (var disk = new DiscUtils.Vhd.Disk(target, FileAccess.ReadWrite))
@@ -50,7 +51,7 @@ namespace auvdisk.Convert
                 .WithCheckedSourceExists(source, logger)();
         }
 
-        public static void ConvertVhdToLoop(string source, string target, Action<string> logger, bool verbose) // TODO: check that VHD is fixed
+        public static void ConvertVhdToLoop(string source, string target, Action<string> logger, bool verbose)
         {
             var action = () =>
             {
@@ -58,6 +59,15 @@ namespace auvdisk.Convert
 
                 using (var disk = new DiscUtils.Vhd.Disk(source, FileAccess.Read))
                 {
+                    var dynamicOrDifferencing =
+                        disk.Layers.Any((l) => l.IsSparse || l.NeedsParent) || disk.Layers.Count() > 1;
+                    
+                    if (dynamicOrDifferencing && !AnsiConsole.Confirm(
+                            "[yellow]WARNING: Source VHD is differencing or dynamic disk, this was never properly tested, proceed?[/]"))
+                    {
+                        return;
+                    }
+                    
                     logger("VHD contains " + disk.Partitions.Count + " partitions:");
                     var parts = disk.Partitions.Partitions.Select((part, idx) =>
                     {
@@ -136,6 +146,7 @@ namespace auvdisk.Convert
             };
 
             action
+                .WithCheckedVhdType(source, VirtualHardDiskType.Fixed, logger)
                 .WithCheckedDiskType("VHD", source, logger, verbose)
                 .WithCheckedSourceExists(source, logger)();
         }

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace auvdisk
 {
-    internal class CliTools
+    internal static class CliTools
     {
         public static void CreateWithVhdTool(string filename, ulong size)
         {
@@ -18,7 +18,7 @@ namespace auvdisk
                 WaitForExit = true,
             };
 
-            CommandExecutor.execute(config);
+            CommandExecutor.Execute(config);
         }
 
         public static void AllocateWithDd(string filename, ulong size)
@@ -31,7 +31,7 @@ namespace auvdisk
                 WaitForExit = true
             };
 
-            CommandExecutor.execute(config);
+            CommandExecutor.Execute(config);
         }
 
         // TODO: search in the executable path as well?

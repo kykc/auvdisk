@@ -8,6 +8,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
+using DiskAccessLibrary.VHD;
 
 namespace auvdisk
 {
@@ -48,16 +49,60 @@ namespace auvdisk
             
             if (!File.Exists(Path))
             {
-                Logger($"Error: source file {Path} does not exist");
+                Logger($"ERROR: source file {Path} does not exist");
 
                 return new ProbeResult(null, null);
             }
 
-            var rawFileStream = new FileStream(Path, FileMode.Open);
+            try
+            {
+                using var fs = new FileStream(Path, FileMode.Open, FileAccess.Read);
+            }
+            catch (IOException e)
+            {
+                Logger($"ERROR: {e.Message}");
+                return new ProbeResult(null, null);
+            }
+            
+            if (Vhd.Util.ReadVhdHeaderSafe(Path)?.DiskType == VirtualHardDiskType.Differencing)
+            {
+                return ProbeInVhdFileMode();
+            }
+            else
+            {
+                return ProbeInStreamMode();
+            }
+        }
+
+        private ProbeResult ProbeInVhdFileMode()
+        {
+            Logger($"Trying to open file as differencing VHD image");
+
+            if (Offset != 0 || Trim != 0)
+            {
+                Logger($"WARNING: offset and trim are ignored in this mode");
+            }
+            
+            var vdisk = HandleVirtualDisk(new DiscUtils.Vhd.Disk(Path, FileAccess.Read), "VHD");
+
+            return new ProbeResult(Disk: vdisk, Fs: null);
+        }
+
+        private ProbeResult ProbeInStreamMode()
+        {
+            var rawFileStream = new FileStream(Path, FileMode.Open, FileAccess.Read);
 
             using (var fileStream = new OffsetStreamDecorator(rawFileStream, Offset, Trim))
             {
-                var openVhd = () => new DiscUtils.Vhd.Disk(fileStream, DiscUtils.Streams.Ownership.None);
+                var openVhd = () =>
+                {
+                    var vdisk = new DiscUtils.Vhd.Disk(fileStream, DiscUtils.Streams.Ownership.None);
+
+                    // Differencing VHDs cannot be opened with FileStream in DiscUtils, so those are the only two options
+                    Logger($"VHD type is {(vdisk.Layers.First().IsSparse ? "Dynamic" : "Fixed")}");
+                    
+                    return vdisk;
+                };
 
                 var openRaw = () =>
                 {
@@ -71,13 +116,13 @@ namespace auvdisk
                     return vdisk;
                 };
 
-                if (openVhd.ActWithLog(Logger, "Trying to open file as VHD image") is var resultVhd && resultVhd.IsSuccessful)
+                if (openVhd.ActWithLog(Logger, "Trying to open file as VHD image", "WARNING") is var resultVhd && resultVhd.IsSuccessful)
                 {
                     var diskRecord = HandleVirtualDisk(resultVhd.Value, "VHD");
 
                     return new ProbeResult(Disk: diskRecord, Fs: null);
                 }
-                else if (openRaw.ActWithLog(Logger, "Trying to open file as RAW image") is var resultRaw && resultRaw.IsSuccessful)
+                else if (openRaw.ActWithLog(Logger, "Trying to open file as RAW image", "WARNING") is var resultRaw && resultRaw.IsSuccessful)
                 {
                     var diskRecord = HandleVirtualDisk(resultRaw.Value, "RAW");
 
@@ -130,15 +175,15 @@ namespace auvdisk
                 }
                 catch (DirectoryNotFoundException ex)
                 {
-                    logger("Error: " + ex.Message);
+                    logger("ERROR: " + ex.Message);
                 }
                 catch (ArgumentException ex) // Filename too long for FAT throws this
                 {
-                    logger("Error: " + ex.Message);
+                    logger("ERROR: " + ex.Message);
                 }
                 catch (Exception ex)
                 {
-                    logger("Unexpected Error " + ex.GetType().ToString() + ":" + ex.Message);
+                    logger("Unexpected Error " + ex.GetType().ToString() + ": " + ex.Message);
                 }
             };
         }
@@ -160,15 +205,15 @@ namespace auvdisk
                 }
                 catch (FileNotFoundException ex)
                 {
-                    logger("Error: " + ex.Message);
+                    logger("ERROR: " + ex.Message);
                 }
                 catch (ArgumentException ex) // Filename too long for fat throws this
                 {
-                    logger("Error: " + ex.Message);
+                    logger("ERROR: " + ex.Message);
                 }
                 catch (Exception ex)
                 {
-                    logger("Unexpected Error " + ex.GetType().ToString() + ":" + ex.Message);
+                    logger("Unexpected Error " + ex.GetType().ToString() + ": " + ex.Message);
                 }
             };
         }
@@ -177,17 +222,17 @@ namespace auvdisk
         {
             if (vdisk.IsPartitioned)
             {
-                Logger("Found partition table " + vdisk.Partitions.GetType());
-
                 var diskRecord = new DiskRecord( 
-                    PartitionTableType: vdisk.Partitions is DiscUtils.Partitions.GuidPartitionTable ? "GPT" : "MBR", // TODO: more broad PT type detection
+                    PartitionTableType: vdisk.Partitions.ToReadableString(),
                     Partitions: new List<PartitionRecord>(),
                     ImageType: imageType
                 );
+                
+                Logger($"[green]Found partition table of type {diskRecord.PartitionTableType}[/]");
 
                 foreach (var partition in vdisk.Partitions.Partitions)
                 {
-                    Logger("Found partition starting at " + partition.FirstSector + " LBA, ending at " + partition.LastSector + " LBA of type " + partition.GuidType);
+                    Logger($"[green]Found partition starting at {partition.FirstSector} LBA, ending at {partition.LastSector} LBA of type {partition.GuidType}[/]");
 
                     Guid? partGuid = null;
                     
@@ -254,21 +299,21 @@ namespace auvdisk
                 );
             };
 
-            if (openNtfs.ActWithLog(Logger, "Trying to open as NTFS filesystem") is var resultNtfs && resultNtfs.IsSuccessful)
+            if (openNtfs.ActWithLog(Logger, "Trying to open as NTFS filesystem", "WARNING") is var resultNtfs && resultNtfs.IsSuccessful)
             {
-                Logger("Found filesystem of type NTFS at " + offset.ToString() + " bytes");
+                Logger($"[green]Found filesystem of type NTFS at {offset} bytes[/]");
                 impl(resultNtfs.Value);
                 return fillFsRecord(resultNtfs.Value);
             }
-            else if (openFat.ActWithLog(Logger, "Trying to open as FAT filesystem") is var resultFat && resultFat.IsSuccessful)
+            else if (openFat.ActWithLog(Logger, "Trying to open as FAT filesystem", "WARNING") is var resultFat && resultFat.IsSuccessful)
             {
-                Logger("Found filesystem of type FAT at " + offset.ToString() + " bytes");
+                Logger($"[green]Found filesystem of type FAT at {offset} bytes[/]");
                 impl(resultFat.Value);
                 return fillFsRecord(resultFat.Value);
             }
-            else if (openExt.ActWithLog(Logger, "Trying to open as EXT filesystem") is var resultExt && resultExt.IsSuccessful)
+            else if (openExt.ActWithLog(Logger, "Trying to open as EXT filesystem", "WARNING") is var resultExt && resultExt.IsSuccessful)
             {
-                Logger("Found filesystem of type EXT at " + offset.ToString() + " bytes");
+                Logger($"[green]Found filesystem of type EXT at {offset} bytes[/]");
                 impl(resultExt.Value);
                 return fillFsRecord(resultExt.Value);
             }

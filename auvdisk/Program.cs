@@ -8,13 +8,13 @@ using Spectre.Console;
 
 namespace auvdisk
 {
-    internal class Program
+    internal static class Program
     {
         public const ulong LbaSize = 512;
 
         static int Main(string[] args)
         {
-            var cliResult = Parser.Default.ParseArguments<Cli.VdiskProbe, Cli.VdiskList, Cli.VdiskCat, Cli.LoopToVhd, Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg, Cli.CreateDiffVhd, Cli.CreateFixedVhd, Cli.MergeVhd>(args);
+            var cliResult = Parser.Default.ParseArguments<Cli.VdiskProbe, Cli.VdiskList, Cli.VdiskCat, Cli.LoopToVhd, Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg, Cli.CreateDiffVhd, Cli.CreateFixedVhd, Cli.MergeVhd, Cli.CreateDynamicVhd>(args);
             var logger = (string s) =>
             {
                 if (s.StartsWith("ERROR"))
@@ -27,28 +27,35 @@ namespace auvdisk
                 }
                 else
                 {
-                    AnsiConsole.WriteLine(s);
+                    try
+                    {
+                        AnsiConsole.MarkupLine(s);
+                    }
+                    catch (InvalidOperationException e)
+                    {
+                        AnsiConsole.WriteLine(s);
+                    }
                 }
             };
 
             var exitCode = cliResult.MapResult(
                 (Cli.VdiskProbe opts) =>
                 {
-                    var probe = new DiskProbe(opts.Path, opts.Offset, opts.Trim, null, logger);
+                    var probe = new DiskProbe(opts.Source, opts.Offset, opts.Trim, null, logger);
                     probe.Probe();
 
                     return 0;
                 },
                 (Cli.VdiskList opts) =>
                 {
-                    var probe = new DiskProbe(opts.Path, opts.Offset, opts.Trim, DiskProbe.GetListArbitraryDir(opts.Target, logger), logger);
+                    var probe = new DiskProbe(opts.Source, opts.Offset, opts.Trim, DiskProbe.GetListArbitraryDir(opts.Target, logger), logger);
                     probe.Probe();
 
                     return 0;
                 },
                 (Cli.VdiskCat opts) =>
                 {
-                    var probe = new DiskProbe(opts.Path, opts.Offset, opts.Trim, DiskProbe.GetCatArbitraryFile(opts.Target, logger), logger);
+                    var probe = new DiskProbe(opts.Source, opts.Offset, opts.Trim, DiskProbe.GetCatArbitraryFile(opts.Target, logger), logger);
                     probe.Probe();
 
                     return 0;
@@ -67,13 +74,13 @@ namespace auvdisk
                 },
                 (Cli.ImgToVhd opts) =>
                 {
-                    Convert.DiskImageConverter.ConvertImgToVhd(opts.Target, logger, opts.Verbose);
+                    Convert.DiskImageConverter.ConvertImgToVhd(opts.Source, logger, opts.Verbose);
 
                     return 0;
                 },
                 (Cli.VhdToImg opts) =>
                 {
-                    Convert.DiskImageConverter.ConvertVhdToImg(opts.Target, logger, opts.Verbose);
+                    Convert.DiskImageConverter.ConvertVhdToImg(opts.Source, logger, opts.Verbose);
 
                     return 0;
                 },
@@ -95,7 +102,7 @@ namespace auvdisk
                 {
                     var action = () =>
                     {
-                        DalUtils.CreateFixedVhd(opts.Target, opts.Size, logger, opts.ZeroFill);
+                        Vhd.Util.CreateFixedVhd(opts.Target, opts.Size, logger, opts.ZeroFill);
                     };
 
                     action
@@ -107,6 +114,18 @@ namespace auvdisk
                 {
                     Vhd.Merge.PerformMerge(opts.Parent, opts.Child, opts.Target, logger);
 
+                    return 0;
+                },
+                (Cli.CreateDynamicVhd opts) =>
+                {
+                    var action = () =>
+                    {
+                        Vhd.Util.CreateDynamicVhd(opts.Target, opts.Size);
+                        logger("Done!");
+                    };
+                    
+                    action.WithCheckedTargetAvailable(opts.Target, logger)();
+                    
                     return 0;
                 },
                 _ => 1

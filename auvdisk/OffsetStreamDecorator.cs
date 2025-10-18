@@ -8,72 +8,72 @@ namespace auvdisk
 {
     class OffsetStreamDecorator : Stream
     {
-        private readonly Stream instance;
-        private readonly long offset;
-        private readonly long trim;
+        private readonly Stream _instance;
+        private readonly long _offset;
+        private readonly long _trim;
 
         public OffsetStreamDecorator(FileStream instance, long offset, long trim)
         {
-            this.instance = instance;
-            this.offset = offset;
-            this.trim = trim;
+            this._instance = instance;
+            this._offset = offset;
+            this._trim = trim;
         }
 
         public override long Length
         {
-            get { return instance.Length - offset - trim; }
+            get { return _instance.Length - _offset - _trim; }
         }
 
         public override void SetLength(long value)
         {
-            instance.SetLength(value + offset);
+            _instance.SetLength(value + _offset);
         }
 
         public override long Position
         {
-            get { return instance.Position - this.offset; }
-            set { instance.Position = value + this.offset; }
+            get { return _instance.Position - this._offset; }
+            set { _instance.Position = value + this._offset; }
         }
 
-        public override bool CanRead => instance.CanRead;
+        public override bool CanRead => _instance.CanRead;
 
-        public override bool CanSeek => instance.CanSeek;
+        public override bool CanSeek => _instance.CanSeek;
 
-        public override bool CanWrite => instance.CanWrite;
+        public override bool CanWrite => _instance.CanWrite;
 
         public override IAsyncResult BeginRead(byte[] array, int offset, int numBytes, AsyncCallback? userCallback, object? stateObject)
         {
-            return instance.BeginRead(array, offset, numBytes, userCallback, stateObject);
+            return _instance.BeginRead(array, offset, numBytes, userCallback, stateObject);
         }
 
         public override IAsyncResult BeginWrite(byte[] array, int offset, int numBytes, AsyncCallback? userCallback, object? stateObject)
         {
-            return instance.BeginWrite(array, offset, numBytes, userCallback, stateObject);
+            return _instance.BeginWrite(array, offset, numBytes, userCallback, stateObject);
         }
 
         public override void Flush()
         {
-            instance.Flush();
+            _instance.Flush();
         }
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            return instance.Read(buffer, offset, count);
+            return _instance.Read(buffer, offset, count);
         }
 
         public override long Seek(long offset, SeekOrigin origin)
         {
-            return instance.Seek(offset, origin);
+            return _instance.Seek(offset, origin);
         }
 
         public override void Write(byte[] buffer, int offset, int count)
         {
-            instance.Write(buffer, offset, count);
+            _instance.Write(buffer, offset, count);
         }
 
         protected override void Dispose(bool disposing)
         {
-            instance.Dispose();
+            _instance.Dispose();
             base.Dispose(disposing);
         }
     }
