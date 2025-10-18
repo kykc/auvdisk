@@ -44,7 +44,7 @@ namespace auvdisk.Cli
         public string Target { get; set; } = "";
     }
 
-    [Verb("conv-loop-to-vhd", HelpText = "Wrap raw filesystem loop image into GPT VHD with prepended EFI boot partition")]
+    [Verb("conv-loop-to-vhd", HelpText = "Wrap raw filesystem loop image into GPT VHD with prepended EFI boot partition, formatted into FAT32")]
     class LoopToVhd
     {
         [Option('s', "source", Required = true, HelpText = "Source imagefile path")]
@@ -57,7 +57,7 @@ namespace auvdisk.Cli
         public bool ZeroFill { get; set; } = false;
     }
 
-    [Verb("conv-vhd-to-loop", HelpText = "Unwrap VHD and create raw filesystem loop")]
+    [Verb("conv-vhd-to-loop", HelpText = "Extract raw filesystem image from one of the partitions present in the source VHD image")]
     class VhdToLoop
     {
         [Option('s', "source", Required = true, HelpText = "Source imagefile path")]
@@ -66,6 +66,8 @@ namespace auvdisk.Cli
         public string Target { get; set; } = "";
         [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
         public bool Verbose { get; set; } = false;
+        [Option("part-index", Required = false, Default = -1, HelpText = "Partition index. Select largest partition by default")]
+        public int PartIndex { get; set; } = -1;
     }
 
     [Verb("conv-img-to-vhd", HelpText = "Append VHD footer to RAW image file (in-place)")]

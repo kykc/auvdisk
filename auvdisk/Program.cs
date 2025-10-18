@@ -68,7 +68,7 @@ namespace auvdisk
                 },
                 (Cli.VhdToLoop opts) =>
                 {
-                    Convert.DiskImageConverter.ConvertVhdToLoop(opts.Source, opts.Target, logger, opts.Verbose);
+                    Convert.DiskImageConverter.ConvertVhdToLoop(opts.Source, opts.Target, logger, opts.Verbose, opts.PartIndex);
 
                     return 0;
                 },

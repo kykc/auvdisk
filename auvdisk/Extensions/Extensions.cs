@@ -119,7 +119,7 @@ namespace auvdisk.Extensions
                 {
                     logger("ERROR: no filesystem found, exiting");
                 }
-                else if (probeResult.Fs.FsType != fsType)
+                else if (probeResult.Fs.FsType != fsType && fsType != "")
                 {
                     logger($"ERROR: expected {fsType} filesystem, got {probeResult.Fs.FsType}, exiting");
                 }

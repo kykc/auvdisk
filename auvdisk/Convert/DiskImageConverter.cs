@@ -9,12 +9,14 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using DotNext.Collections.Generic;
 using Spectre.Console;
 
 namespace auvdisk.Convert
 {
     internal class DiskImageConverter
     {
+        // TODO: make an option to disable prepending of EFI boot partition
         public static void ConvertLoopToVhd(string source, string target, Action<String> logger, bool verbose, bool zeroFill = false)
         {
             var action = () =>
@@ -47,11 +49,11 @@ namespace auvdisk.Convert
 
             action
                 .WithCheckedTargetAvailable(target, logger)
-                .WithCheckedFsType("EXT", source, logger, verbose)
+                .WithCheckedFsType("", source, logger, verbose) // this will effectively check that filesystem was recognized and will accept any type of FS
                 .WithCheckedSourceExists(source, logger)();
         }
 
-        public static void ConvertVhdToLoop(string source, string target, Action<string> logger, bool verbose)
+        public static void ConvertVhdToLoop(string source, string target, Action<string> logger, bool verbose, int partIdx = -1)
         {
             var action = () =>
             {
@@ -75,12 +77,22 @@ namespace auvdisk.Convert
                         return (idx, part.SectorCount);
                     }).ToList();
 
-                    parts = parts.OrderByDescending((x) => x.SectorCount).ToList();
+                    parts = partIdx >= 0 
+                        ? parts.Where(p => p.idx == partIdx).ToList() // find partition by provided index 
+                        : parts.OrderByDescending((x) => x.SectorCount).ToList(); // select largest partition by default
 
-                    logger($"Selecting partition {parts[0].idx}");
+                    if (parts.Count == 0)
+                    {
+                        logger($"ERROR: partition not found");
+                        return;
+                    }
+
+                    var selectedPart = parts.First();
+
+                    logger($"Selecting partition {selectedPart.idx}");
                     logger("Opening partition using DiscUtils, target file using FileStream");
 
-                    using (var partStream = disk.Partitions.Partitions[parts[0].idx].Open())
+                    using (var partStream = disk.Partitions.Partitions[selectedPart.idx].Open())
                     using (var targetStream = new FileStream(target, FileMode.Create))
                     {
                         logger("Copying data from VHD to loop. Depending on disk speed and image size this might take a while");
