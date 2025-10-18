@@ -230,9 +230,9 @@ namespace auvdisk
                 
                 Logger($"[green]Found partition table of type {diskRecord.PartitionTableType}[/]");
 
-                foreach (var partition in vdisk.Partitions.Partitions)
+                foreach (var (partition, idx) in vdisk.Partitions.Partitions.Select((part, idx) => (part, idx)))
                 {
-                    Logger($"[green]Found partition starting at {partition.FirstSector} LBA, ending at {partition.LastSector} LBA of type {partition.GuidType}[/]");
+                    Logger($"[green]Found partition {idx} starting at {partition.FirstSector} LBA, ending at {partition.LastSector} LBA of type {partition.GuidType}[/]");
 
                     Guid? partGuid = null;
                     
