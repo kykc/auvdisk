@@ -8,15 +8,11 @@ using Spectre.Console;
 
 namespace auvdisk.Vhd
 {
-    internal static class Merge
+    public static class Merge
     {
-        public static void PerformMerge(string parent, string child, string target, Action<string> logger)
+        public static void PerformMerge(string parent, string child, string target, Action<string> logger, bool confirm = false)
         {
             // TODO: I don't like a lot of returns here. It is easy to miss one when adding a new check
-            
-            parent = Path.GetFullPath(parent);
-            child = Path.GetFullPath(child);
-            target = Path.GetFullPath(target);
 
             if (!File.Exists(parent))
             {
@@ -41,15 +37,23 @@ namespace auvdisk.Vhd
 
                 var childLayer = layers[0];
                 var parentLayer = layers[1];
+                
+                var passedParentId = Util.ReadVhdFooterSafe(parent)?.UniqueId;
+                var detectedParentId = Util.ReadVhdFooterSafe(parentLayer.FullPath)?.UniqueId;
 
                 if (parentLayer.IsSparse || parentLayer.NeedsParent || !childLayer.IsSparse || !childLayer.NeedsParent)
                 {
                     logger($"ERROR: invalid image layer configuration. Parent must be fixed, child must be sparse.");
                     return;
                 }
-                else if (Path.GetFullPath(parentLayer.FullPath) != parent)
+                else if (passedParentId == null || detectedParentId == null)
                 {
-                    logger($"ERROR: child image points to {parentLayer.FullPath} while {parent} was passed");
+                    logger($"ERROR: failed to obtain parent image unique id");
+                    return;
+                }
+                else if (passedParentId != detectedParentId)
+                {
+                    logger($"ERROR: child image points to {detectedParentId} while {passedParentId} was passed");
                     return;
                 }
             }
@@ -60,7 +64,7 @@ namespace auvdisk.Vhd
                 return;
             }
             
-            if (parent != target && !File.Exists(target) && !AnsiConsole.Confirm(
+            if (parent != target && !File.Exists(target) && !confirm && !AnsiConsole.Confirm(
                     "Passed target is different than the parent; full image copy is needed before merge. This might take a while, proceed?"))
             {
                 logger("Exiting");
@@ -85,7 +89,8 @@ namespace auvdisk.Vhd
             var diffHandler = new DifferencingVhdHandler(child);
 
             logger("Merging...");
-            var foundSectors = diffHandler.MergeChangedSectorsIntoFixedParent(new FileStream(target, FileMode.Open, FileAccess.Write));
+            using var fileStream = new FileStream(target, FileMode.Open, FileAccess.Write);
+            var foundSectors = diffHandler.MergeChangedSectorsIntoFixedParent(fileStream);
 
             timer.Stop();
 

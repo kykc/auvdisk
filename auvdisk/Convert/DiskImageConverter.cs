@@ -14,7 +14,7 @@ using Spectre.Console;
 
 namespace auvdisk.Convert
 {
-    internal class DiskImageConverter
+    public static class DiskImageConverter
     {
         // TODO: make an option to disable prepending of EFI boot partition
         public static void ConvertLoopToVhd(string source, string target, Action<String> logger, bool verbose, bool zeroFill = false)
@@ -141,7 +141,7 @@ namespace auvdisk.Convert
                 .WithCheckedSourceExists(source, logger)();
         }
 
-        public static void ConvertVhdToImg(string source, Action<string> logger, bool verbose) // TODO: check that VHD is fixed
+        public static void ConvertVhdToImg(string source, Action<string> logger, bool verbose)
         {
             var action = () =>
             {
@@ -162,7 +162,5 @@ namespace auvdisk.Convert
                 .WithCheckedDiskType("VHD", source, logger, verbose)
                 .WithCheckedSourceExists(source, logger)();
         }
-
-        
     }
 }

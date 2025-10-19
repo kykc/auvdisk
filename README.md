@@ -43,14 +43,25 @@ packages directly from this repo (see `.gitea/workflows` for some examples on pa
 |help              |Display more information on a specific command.                                                  |
 |version           |Display version information.                                                                     |
 
+## Unit tests
+
+Unit tests are located in a separate `auvdisk.tests` project. As I didn't decouple my code from direct calls
+to the FS APIs the only way to write tests was to include some binary image blobs as testing data. If you're
+allergic to binary blobs of unknown origin you should probably avoid building the tests. But I swear that those
+are harmless test images without any shady xz-style code injections.
+
+To run the tests simply run `dotnet run` from the tests project directory or look into xUnit documentation on how to
+integrate them with your favorite IDE.
+
 ## Used libraries
 
-Many thanks to the original authors of `DiscUtils` and `DiskAccessLibrary`, they actually did 90% of 
+Many thanks to the original authors of `DiskAccessLibrary` and `DiscUtils` (with all of its forks), they actually did 90% of 
 the work that was needed here. The only thing I had to write "from scratch" was VHD merging.
 
-* [DiscUtils](https://github.com/DiscUtils/DiscUtils)
+* [DiscUtils](https://github.com/LTRData/DiscUtils)
 * [DiskAccessLibrary](https://github.com/TalAloni/DiskAccessLibrary)
 * [CommandLineParser](https://github.com/commandlineparser/commandline)
 * [DotNext](https://dotnet.github.io/dotNext/)
 * [Spectre.Console](https://spectreconsole.net/)
 * [Microsoft.Windows.CsWin32](https://github.com/microsoft/CsWin32)
+* [xUnit](https://xunit.net/?tabs=cs)

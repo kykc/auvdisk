@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 
 namespace auvdisk
 {
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     internal static class CommandExecutor
     {
         public static int Execute(CommandExecutorConfig config)

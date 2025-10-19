@@ -21,7 +21,7 @@ namespace auvdisk
     // FS   | try to open as FAT32, if success list root
     // FS   | try to open as EXT4, if success list root
 
-    internal class DiskProbe
+    public class DiskProbe
     {
         public Action<string> Logger { get; private set; }
         public Action<DiscFileSystem> FsHandler { get; private set; }
@@ -64,7 +64,7 @@ namespace auvdisk
                 return new ProbeResult(null, null);
             }
             
-            if (Vhd.Util.ReadVhdHeaderSafe(Path)?.DiskType == VirtualHardDiskType.Differencing)
+            if (Vhd.Util.ReadVhdFooterSafe(Path)?.DiskType == VirtualHardDiskType.Differencing)
             {
                 return ProbeInVhdFileMode();
             }
@@ -82,10 +82,11 @@ namespace auvdisk
             {
                 Logger($"WARNING: offset and trim are ignored in this mode");
             }
-            
-            var vdisk = HandleVirtualDisk(new DiscUtils.Vhd.Disk(Path, FileAccess.Read), "VHD");
 
-            return new ProbeResult(Disk: vdisk, Fs: null);
+            using var vdisk = new DiscUtils.Vhd.Disk(Path, FileAccess.Read);
+            var vdiskRecord = HandleVirtualDisk(vdisk, "VHD");
+
+            return new ProbeResult(Disk: vdiskRecord, Fs: null);
         }
 
         private ProbeResult ProbeInStreamMode()
@@ -111,6 +112,10 @@ namespace auvdisk
                     if (!vdisk.IsPartitioned)
                     {
                         throw new InvalidDataException("Unable to detect partition table in RAW image");
+                    }
+                    else if (vdisk.Partitions.Partitions.Count == 0)
+                    {
+                        throw new InvalidDataException("Partition table is empty, will try to open as FS");
                     }
 
                     return vdisk;
@@ -200,7 +205,19 @@ namespace auvdisk
                     using (var stream = fs.OpenFile(searchPath, FileMode.Open))
                     {
                         logger("File " + path + " contents:");
-                        stream.CopyTo(Console.OpenStandardOutput());
+
+                        // Mostly to be able to intercept output in tests
+                        // we still need to properly stream large files
+                        if (stream.Length < 1024)
+                        {
+                            var streamReader = new StreamReader(stream);
+                            
+                            logger(streamReader.ReadToEnd());
+                        }
+                        else
+                        {
+                            stream.CopyTo(Console.OpenStandardOutput());
+                        }
                     }
                 }
                 catch (FileNotFoundException ex)

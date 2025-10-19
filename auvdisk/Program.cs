@@ -8,6 +8,7 @@ using Spectre.Console;
 
 namespace auvdisk
 {
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     internal static class Program
     {
         public const ulong LbaSize = 512;

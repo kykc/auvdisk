@@ -67,7 +67,7 @@ namespace auvdisk.Extensions
             {
                 logger($"Checking that source VHD file is of type {diskType}");
 
-                var vhdHeader = Vhd.Util.ReadVhdHeaderSafe(source);
+                var vhdHeader = Vhd.Util.ReadVhdFooterSafe(source);
 
                 if (vhdHeader != null && vhdHeader.DiskType == diskType)
                 {

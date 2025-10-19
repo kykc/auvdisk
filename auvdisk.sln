@@ -5,6 +5,8 @@ VisualStudioVersion = 17.14.36127.28 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "auvdisk", "auvdisk\auvdisk.csproj", "{834284AD-F0C3-45CF-9AF7-5896240EFEFF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "auvdisk.test", "auvdisk.test\auvdisk.test.csproj", "{4661ACC1-16B0-4919-97F4-3BE330BC7A93}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{834284AD-F0C3-45CF-9AF7-5896240EFEFF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{834284AD-F0C3-45CF-9AF7-5896240EFEFF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{834284AD-F0C3-45CF-9AF7-5896240EFEFF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4661ACC1-16B0-4919-97F4-3BE330BC7A93}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4661ACC1-16B0-4919-97F4-3BE330BC7A93}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4661ACC1-16B0-4919-97F4-3BE330BC7A93}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4661ACC1-16B0-4919-97F4-3BE330BC7A93}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

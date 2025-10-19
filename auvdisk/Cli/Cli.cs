@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 
 namespace auvdisk.Cli
 {
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("probe-vdisk", HelpText = "Probe disk image, try to guess the format, existing partitions and filesystems ")]
     class VdiskProbe
     {
@@ -18,6 +19,7 @@ namespace auvdisk.Cli
         public string Source { get; set; } = "";
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("ls-vdisk", HelpText = "Try to list specific directory in all filesystems that were found")]
     class VdiskList
     {
@@ -31,6 +33,7 @@ namespace auvdisk.Cli
         public string Target { get; set; } = "";
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("cat-vdisk", HelpText = "Try to cat specific file in all filesystems that were found")]
     class VdiskCat
     {
@@ -44,6 +47,7 @@ namespace auvdisk.Cli
         public string Target { get; set; } = "";
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("conv-loop-to-vhd", HelpText = "Wrap raw filesystem loop image into GPT VHD with prepended EFI boot partition, formatted into FAT32")]
     class LoopToVhd
     {
@@ -57,6 +61,7 @@ namespace auvdisk.Cli
         public bool ZeroFill { get; set; } = false;
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("conv-vhd-to-loop", HelpText = "Extract raw filesystem image from one of the partitions present in the source VHD image")]
     class VhdToLoop
     {
@@ -70,6 +75,7 @@ namespace auvdisk.Cli
         public int PartIndex { get; set; } = -1;
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("conv-img-to-vhd", HelpText = "Append VHD footer to RAW image file (in-place)")]
     class ImgToVhd
     {
@@ -79,6 +85,7 @@ namespace auvdisk.Cli
         public bool Verbose { get; set; } = false;
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("conv-vhd-to-img", HelpText = "Delete VHD footer from image, effectively converting it to RAW image (in-place)")]
     class VhdToImg
     {
@@ -88,6 +95,7 @@ namespace auvdisk.Cli
         public bool Verbose { get; set; } = false;
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("create-diff-vhd", HelpText = "Create differencing VHD image")]
     class CreateDiffVhd
     {
@@ -99,6 +107,7 @@ namespace auvdisk.Cli
         public bool Verbose { get; set; } = false;
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("create-fixed-vhd", HelpText = "Create fixed size VHD image")]
     class CreateFixedVhd
     {
@@ -110,6 +119,7 @@ namespace auvdisk.Cli
         public bool ZeroFill { get; set; } = false;
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("create-dynamic-vhd", HelpText = "Create dynamic VHD image")]
     class CreateDynamicVhd
     {
@@ -119,6 +129,7 @@ namespace auvdisk.Cli
         public ulong Size { get; set; } = 0;
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("merge-vhd", HelpText = "Merge differencing VHD into parent. Only fixed parent and a single direct child pair is supported")]
     class MergeVhd
     {

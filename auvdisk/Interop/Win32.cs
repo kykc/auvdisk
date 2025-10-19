@@ -15,6 +15,7 @@ using Microsoft.Win32.SafeHandles;
 namespace auvdisk.Interop
 {
     [SupportedOSPlatform("windows5.1.2600")]
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     internal static class Win32
     {
         [SupportedOSPlatform("windows5.1.2600")]

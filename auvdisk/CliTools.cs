@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 namespace auvdisk
 {
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     internal static class CliTools
     {
         public static void CreateWithVhdTool(string filename, ulong size)

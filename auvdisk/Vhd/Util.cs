@@ -7,7 +7,7 @@ namespace auvdisk.Vhd
 {
     public static class Util
     {
-        public static VHDFooter? ReadVhdHeaderSafe(string source)
+        public static VHDFooter? ReadVhdFooterSafe(string source)
         {
             try
             {
