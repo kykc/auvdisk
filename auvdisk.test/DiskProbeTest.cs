@@ -48,6 +48,38 @@ public class DiskProbeTest
         Assert.NotNull(probeResult.Disk);
         Assert.Equal("VHD", probeResult.Disk.ImageType);
         Assert.Single(probeResult.Disk.Partitions);
+        Assert.True(probeResult.Disk.Partitions[0].FileSystem.HasValue);
+        Assert.Equal("NTFS",  probeResult.Disk.Partitions[0].FileSystem.Value.FsType);
+        Assert.Equal("423CA96F3CA95F23", probeResult.Disk.Partitions[0].FileSystem.Value.VolumeId);
+    }
+
+    [Fact]
+    public void TestDynamicVhd()
+    {
+        var logger = (string s) => { };
+        
+        var subjectVhd = Path.Join("testdata", "dynamic_fat32.vhd");
+        
+        var probeResult = new DiskProbe(subjectVhd, 0, 0, null, logger).Probe();
+        
+        Assert.NotNull(probeResult.Disk);
+        Assert.Equal(2, probeResult.Disk.Partitions.Count);
+        Assert.True(probeResult.Disk.Partitions[1].FileSystem.HasValue);
+        Assert.Equal("FAT32", probeResult.Disk.Partitions[1].FileSystem.Value.FsType);
+        Assert.Equal("B4A3-3F88",  probeResult.Disk.Partitions[1].FileSystem.Value.VolumeId);
+    }
+
+    [Fact]
+    public void TestExtLoop()
+    {
+        var logger = (string s) => { };
+        var subjectLoop = Path.Join("testdata", "ext4.loop");
+        
+        var probeResult =  new DiskProbe(subjectLoop, 0, 0, null, logger).Probe();
+        
+        Assert.NotNull(probeResult.Fs);
+        Assert.Equal("EXT", probeResult.Fs.FsType);
+        Assert.Equal("2c9e6984-a7e3-4632-bb69-45d9a78f0ea1", probeResult.Fs.VolumeId);
     }
 
     [Fact]

@@ -32,7 +32,7 @@ namespace auvdisk
         public record ProbeResult(DiskRecord? Disk, FileSystemRecord? Fs);
         public record DiskRecord(string PartitionTableType, List<PartitionRecord> Partitions, string ImageType);
         public record PartitionRecord(long StartLba, long EndLba, long SectorCountLba, Guid? PartGuid, Guid TypeGuid, Optional<FileSystemRecord> FileSystem);
-        public record FileSystemRecord(string FsType, string VolumeLabel, long Size, long UsedSpace, long AvailableSpace);
+        public record FileSystemRecord(string FsType, string VolumeLabel, long Size, long UsedSpace, long AvailableSpace, long Offset, string? VolumeId);
 
         public DiskProbe(string path, long offset, long trim, Action<DiscFileSystem>? fsHandler = null, Action<string>? logger = null)
         {
@@ -256,6 +256,7 @@ namespace auvdisk
                     if (partition is DiscUtils.Partitions.GuidPartitionInfo)
                     {
                         partGuid = (partition as DiscUtils.Partitions.GuidPartitionInfo)!.Identity;
+                        Logger($"[green]Partition ID: {partGuid.ToString()}[/]");
                     }
 
                     var maybeFsRecord = HandleFileSystem(partition.Open(), (ulong)partition.FirstSector * Program.LbaSize, FsHandler);
@@ -304,35 +305,56 @@ namespace auvdisk
             var openFat = () => new DiscUtils.Fat.FatFileSystem(stream, DiscUtils.Streams.Ownership.None);
             var openNtfs = () => new DiscUtils.Ntfs.NtfsFileSystem(stream);
             var openExt = () => new DiscUtils.Ext.ExtFileSystem(stream);
-
-            var fillFsRecord = (DiscFileSystem fs) =>
+            
+            var fillFsRecord = (DiscFileSystem fs, string? volumeId) =>
             {
                 return new FileSystemRecord(
                     FsType: GetFsType(fs),
                     VolumeLabel: fs.VolumeLabel,
                     Size: fs.Size,
                     AvailableSpace: fs.AvailableSpace,
-                    UsedSpace: fs.UsedSpace
+                    UsedSpace: fs.UsedSpace,
+                    VolumeId: volumeId,
+                    Offset: (long)offset
                 );
+            };
+            
+            var outputVolumeInfo = (FileSystemRecord record) =>
+            {
+                Logger($"[green]Found filesystem of type {record.FsType} at {record.Offset} bytes[/]");
+                
+                if (record.VolumeId != null)
+                {
+                    Logger($"[green]Volume ID: {record.VolumeId}[/]");
+                }
             };
 
             if (openNtfs.ActWithLog(Logger, "Trying to open as NTFS filesystem", "WARNING") is var resultNtfs && resultNtfs.IsSuccessful)
             {
-                Logger($"[green]Found filesystem of type NTFS at {offset} bytes[/]");
+                var volumeId = Ntfs.Util.ExtractUuid(resultNtfs.Value, Logger);
+                var record = fillFsRecord(resultNtfs.Value, volumeId);
+                outputVolumeInfo(record);
                 impl(resultNtfs.Value);
-                return fillFsRecord(resultNtfs.Value);
+
+                return record;
             }
             else if (openFat.ActWithLog(Logger, "Trying to open as FAT filesystem", "WARNING") is var resultFat && resultFat.IsSuccessful)
             {
-                Logger($"[green]Found filesystem of type FAT at {offset} bytes[/]");
+                var volumeId = Fat.Util.ExtractUuid(resultFat.Value, Logger);
+                var record = fillFsRecord(resultFat.Value, volumeId);
+                outputVolumeInfo(record);
                 impl(resultFat.Value);
-                return fillFsRecord(resultFat.Value);
+
+                return record;
             }
             else if (openExt.ActWithLog(Logger, "Trying to open as EXT filesystem", "WARNING") is var resultExt && resultExt.IsSuccessful)
             {
-                Logger($"[green]Found filesystem of type EXT at {offset} bytes[/]");
+                var volumeId = Ext.Util.ExtractUuid(resultExt.Value, Logger).ToString();
+                var record = fillFsRecord(resultExt.Value, volumeId);
+                outputVolumeInfo(record);
                 impl(resultExt.Value);
-                return fillFsRecord(resultExt.Value);
+
+                return record;
             }
 
             return null;
