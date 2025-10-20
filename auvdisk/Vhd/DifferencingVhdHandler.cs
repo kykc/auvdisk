@@ -27,7 +27,7 @@ namespace auvdisk.Vhd
 
             _vhdFooter = new VHDFooter(footerBytes);
 
-            if (_vhdFooter.DiskType == VirtualHardDiskType.Differencing)
+            if (_vhdFooter is { DiskType: VirtualHardDiskType.Differencing, IsValid: true })
             {
                 byte[] headerBytes = new byte[BytesPerDiskSector * HeaderSectorCount];
                 _file.Seek((long)_vhdFooter.DataOffset, SeekOrigin.Begin);

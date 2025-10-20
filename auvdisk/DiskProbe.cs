@@ -1,13 +1,6 @@
 using auvdisk.Extensions;
 using DiscUtils;
 using DotNext;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
 using DiskAccessLibrary.VHD;
 
 namespace auvdisk
@@ -32,7 +25,7 @@ namespace auvdisk
         public record ProbeResult(DiskRecord? Disk, FileSystemRecord? Fs);
         public record DiskRecord(string PartitionTableType, List<PartitionRecord> Partitions, string ImageType);
         public record PartitionRecord(long StartLba, long EndLba, long SectorCountLba, Guid? PartGuid, Guid TypeGuid, Optional<FileSystemRecord> FileSystem);
-        public record FileSystemRecord(string FsType, string VolumeLabel, long Size, long UsedSpace, long AvailableSpace, long Offset, string? VolumeId);
+        public record FileSystemRecord(string FsType, string VolumeLabel, long? Size, long? UsedSpace, long? AvailableSpace, long Offset, string? VolumeId);
 
         public DiskProbe(string path, long offset, long trim, Action<DiscFileSystem>? fsHandler = null, Action<string>? logger = null)
         {
@@ -64,13 +57,29 @@ namespace auvdisk
                 return new ProbeResult(null, null);
             }
             
-            if (Vhd.Util.ReadVhdFooterSafe(Path)?.DiskType == VirtualHardDiskType.Differencing)
+            if (Vhd.Util.ReadVhdFooterSafe(Path) is { DiskType: VirtualHardDiskType.Differencing, IsValid: true })
             {
                 return ProbeInVhdFileMode();
             }
             else
             {
-                return ProbeInStreamMode();
+                var streamModeResult = ProbeInStreamMode();
+
+                var foundMeaningfulPartitions = streamModeResult.Disk?.Partitions?.Any(p =>
+                    p.FileSystem is { HasValue: true, Value.FsType.Length: > 0 }) ?? false;
+
+                if (streamModeResult.Fs != null || foundMeaningfulPartitions)
+                {
+                    return streamModeResult;
+                }
+                
+                Logger($"Didn't find meaningful partitions while trying to open file as VHD/RAW image, falling back to DiscUtil heuristics");
+                Logger($"WARNING: offset and trim are ignored in this mode due to DiscUtils API limitations");
+                using var disk = VirtualDisk.OpenDisk(Path, FileAccess.Read);
+
+                return disk != null
+                    ? new ProbeResult(HandleVirtualDisk(disk, disk.GetType().ToString()), null) // TODO: human readable disk type
+                    : new ProbeResult(null, null);
             }
         }
 
@@ -82,7 +91,7 @@ namespace auvdisk
             {
                 Logger($"WARNING: offset and trim are ignored in this mode");
             }
-
+            
             using var vdisk = new DiscUtils.Vhd.Disk(Path, FileAccess.Read);
             var vdiskRecord = HandleVirtualDisk(vdisk, "VHD");
 
@@ -246,10 +255,22 @@ namespace auvdisk
                 );
                 
                 Logger($"[green]Found partition table of type {diskRecord.PartitionTableType}[/]");
-
-                foreach (var (partition, idx) in vdisk.Partitions.Partitions.Select((part, idx) => (part, idx)))
+                
+                var volumeManager = new VolumeManager(vdisk);
+                
+                foreach (var (volume, idx) in volumeManager.GetPhysicalVolumes().Select((volume, idx) => (volume, idx)))
                 {
-                    Logger($"[green]Found partition {idx} starting at {partition.FirstSector} LBA, ending at {partition.LastSector} LBA of type {partition.GuidType}[/]");
+                    var partition = volume.Partition;
+
+                    if (partition.GuidType != Guid.Empty)
+                    {
+                        Logger(
+                            $"[green]Found partition {idx} starting at {partition.FirstSector} LBA, ending at {partition.LastSector} LBA of type {partition.GuidType}[/]");
+                    }
+                    else
+                    {
+                        Logger($"[green]Found partition {idx} starting at {partition.FirstSector} LBA, ending at {partition.LastSector}[/]");
+                    }
 
                     Guid? partGuid = null;
                     
@@ -258,8 +279,8 @@ namespace auvdisk
                         partGuid = (partition as DiscUtils.Partitions.GuidPartitionInfo)!.Identity;
                         Logger($"[green]Partition ID: {partGuid.ToString()}[/]");
                     }
-
-                    var maybeFsRecord = HandleFileSystem(partition.Open(), (ulong)partition.FirstSector * Program.LbaSize, FsHandler);
+                    
+                    var maybeFsRecord = HandleFileSystem(partition.Open(), (ulong)partition.FirstSector * Program.LbaSize, FsHandler, volume);
 
                     var partitionRecord = new PartitionRecord(
                         StartLba: partition.FirstSector,
@@ -279,82 +300,46 @@ namespace auvdisk
             return null;
         }
 
-        private string GetFsType(DiscFileSystem fs)
-        {
-            if (fs is DiscUtils.Ext.ExtFileSystem)
-            {
-                return "EXT";
-            }
-            else if (fs is DiscUtils.Fat.FatFileSystem)
-            {
-                return "FAT32";
-            }
-            else if (fs is DiscUtils.Ntfs.NtfsFileSystem)
-            {
-                return "NTFS";
-            }
-            else
-            {
-                return "UNKNOWN";
-            }
-        }
-
 #pragma warning disable CA1416
-        private FileSystemRecord? HandleFileSystem(Stream stream, ulong offset, Action<DiscFileSystem> impl)
+        private FileSystemRecord? HandleFileSystem(Stream stream, ulong offset, Action<DiscFileSystem> impl, VolumeInfo? volumeInfo = null)
         {
-            var openFat = () => new DiscUtils.Fat.FatFileSystem(stream, DiscUtils.Streams.Ownership.None);
-            var openNtfs = () => new DiscUtils.Ntfs.NtfsFileSystem(stream);
-            var openExt = () => new DiscUtils.Ext.ExtFileSystem(stream);
-            
-            var fillFsRecord = (DiscFileSystem fs, string? volumeId) =>
+            FileSystemRecord FillFsRecord(DiscUtils.FileSystemInfo fsInfo, DiscFileSystem fs, string? volumeId)
             {
                 return new FileSystemRecord(
-                    FsType: GetFsType(fs),
-                    VolumeLabel: fs.VolumeLabel,
-                    Size: fs.Size,
-                    AvailableSpace: fs.AvailableSpace,
-                    UsedSpace: fs.UsedSpace,
-                    VolumeId: volumeId,
-                    Offset: (long)offset
-                );
-            };
-            
-            var outputVolumeInfo = (FileSystemRecord record) =>
+                    FsType: fsInfo.Name.ToUpper(), 
+                    VolumeLabel: fs.VolumeLabel, 
+                    Size: Extensions.Extensions.SuppressVal<NotSupportedException, long>(() => fs.Size),
+                    AvailableSpace: Extensions.Extensions.SuppressVal<NotSupportedException, long>(() => fs.AvailableSpace),
+                    UsedSpace: Extensions.Extensions.SuppressVal<NotSupportedException, long>(() => fs.UsedSpace),
+                    VolumeId: volumeId, 
+                    Offset: (long)offset);
+            }
+
+            void OutputVolumeInfo(FileSystemRecord record)
             {
                 Logger($"[green]Found filesystem of type {record.FsType} at {record.Offset} bytes[/]");
-                
+
                 if (record.VolumeId != null)
                 {
                     Logger($"[green]Volume ID: {record.VolumeId}[/]");
                 }
-            };
-
-            if (openNtfs.ActWithLog(Logger, "Trying to open as NTFS filesystem", "WARNING") is var resultNtfs && resultNtfs.IsSuccessful)
-            {
-                var volumeId = Ntfs.Util.ExtractUuid(resultNtfs.Value, Logger);
-                var record = fillFsRecord(resultNtfs.Value, volumeId);
-                outputVolumeInfo(record);
-                impl(resultNtfs.Value);
-
-                return record;
             }
-            else if (openFat.ActWithLog(Logger, "Trying to open as FAT filesystem", "WARNING") is var resultFat && resultFat.IsSuccessful)
+            
+            var fsList = volumeInfo != null
+                ? FileSystemManager.DetectFileSystems(volumeInfo)
+                : FileSystemManager.DetectFileSystems(stream);
+            
+            if (fsList.Count > 0)
             {
-                var volumeId = Fat.Util.ExtractUuid(resultFat.Value, Logger);
-                var record = fillFsRecord(resultFat.Value, volumeId);
-                outputVolumeInfo(record);
-                impl(resultFat.Value);
+                return fsList.Select((fsInfo) =>
+                {
+                    using var fs = fsInfo.Open(stream);
+                    var record = FillFsRecord(fsInfo, fs, FsUtils.ExtractUuid(fs, Logger));
+                    OutputVolumeInfo(record);
+                    impl(fs);
 
-                return record;
-            }
-            else if (openExt.ActWithLog(Logger, "Trying to open as EXT filesystem", "WARNING") is var resultExt && resultExt.IsSuccessful)
-            {
-                var volumeId = Ext.Util.ExtractUuid(resultExt.Value, Logger).ToString();
-                var record = fillFsRecord(resultExt.Value, volumeId);
-                outputVolumeInfo(record);
-                impl(resultExt.Value);
-
-                return record;
+                    return record;
+                }).First(); // TODO: modify record to support multiple filesystems per volume?
             }
 
             return null;

@@ -11,6 +11,34 @@ namespace auvdisk.Extensions
 {
     internal static class Extensions
     {
+        public static TResult? SuppressRef<TException, TResult>(Func<TResult> func) 
+            where TException : Exception
+            where TResult : class
+        {
+            try
+            {
+                return func();
+            }
+            catch (TException ex)
+            {
+                return null;
+            }
+        }
+
+        public static TResult? SuppressVal<TException, TResult>(Func<TResult> func)
+            where TException : Exception
+            where TResult : struct
+        {
+            try
+            {
+                return func();
+            }
+            catch (TException ex)
+            {
+                return null;
+            }
+        }
+        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Result<TResult> ActWithLog<TResult>(this Func<TResult> function, Action<string> logger, string message, string errorLevel = "ERROR")
         {
@@ -67,15 +95,19 @@ namespace auvdisk.Extensions
             {
                 logger($"Checking that source VHD file is of type {diskType}");
 
-                var vhdHeader = Vhd.Util.ReadVhdFooterSafe(source);
+                var vhdFooter = Vhd.Util.ReadVhdFooterSafe(source);
 
-                if (vhdHeader != null && vhdHeader.DiskType == diskType)
+                if (vhdFooter != null && vhdFooter.DiskType == diskType && vhdFooter.IsValid)
                 {
                     action();
                 }
-                else if (vhdHeader != null)
+                else if (vhdFooter is { IsValid: false })
                 {
-                    logger($"ERROR: expected VHD of type {diskType}, got {vhdHeader.DiskType}");
+                    logger($"ERROR: invalid VHD footer format");
+                }
+                else if (vhdFooter != null)
+                {
+                    logger($"ERROR: expected VHD of type {diskType}, got {vhdFooter.DiskType}");
                 }
                 else
                 {

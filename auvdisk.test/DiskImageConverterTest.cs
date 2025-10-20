@@ -56,7 +56,7 @@ public class DiskImageConverterTest : IDisposable
         Assert.Equal(2, probeResult.Disk.Partitions.Count);
         
         Assert.True(probeResult.Disk.Partitions[0].FileSystem.HasValue);
-        Assert.Equal("FAT32", probeResult.Disk.Partitions[0].FileSystem.Value.FsType);
+        Assert.Equal("FAT", probeResult.Disk.Partitions[0].FileSystem.Value.FsType);
         
         Assert.True(probeResult.Disk.Partitions[1].FileSystem.HasValue);
         Assert.Equal("EXT", probeResult.Disk.Partitions[1].FileSystem.Value.FsType);
@@ -66,7 +66,7 @@ public class DiskImageConverterTest : IDisposable
         probeResult = new DiskProbe("ext4.loop", 0, 0, fsHandler, logger).Probe();
 
         Assert.NotNull(probeResult.Fs);
-        Assert.Equal("FAT32", probeResult.Fs.FsType);
+        Assert.Equal("FAT", probeResult.Fs.FsType);
 
         File.Delete("ext4.loop");
         

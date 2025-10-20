@@ -24,5 +24,25 @@ namespace auvdisk
 #endif
         }
 #pragma warning restore CA1416
+
+        public static string? ExtractUuid(DiscUtils.DiscFileSystem fs, Action<string> logger)
+        {
+            if (fs is DiscUtils.Ntfs.NtfsFileSystem)
+            {
+                return Ntfs.Util.ExtractUuid(fs, logger);
+            }
+            else if (fs is DiscUtils.Fat.FatFileSystem)
+            {
+                return Fat.Util.ExtractUuid(fs, logger);
+            }
+            else if (fs is DiscUtils.Ext.ExtFileSystem)
+            {
+                return Ext.Util.ExtractUuid(fs, logger).ToString();
+            }
+            else
+            {
+                return null;
+            }
+        }
     }
 }

@@ -15,6 +15,7 @@ namespace auvdisk
 
         static int Main(string[] args)
         {
+            DiscUtils.Complete.SetupHelper.SetupComplete();
             var cliResult = Parser.Default.ParseArguments<Cli.VdiskProbe, Cli.VdiskList, Cli.VdiskCat, Cli.LoopToVhd, Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg, Cli.CreateDiffVhd, Cli.CreateFixedVhd, Cli.MergeVhd, Cli.CreateDynamicVhd>(args);
             var logger = (string s) =>
             {

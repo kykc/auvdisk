@@ -65,7 +65,7 @@ public class DiskProbeTest
         Assert.NotNull(probeResult.Disk);
         Assert.Equal(2, probeResult.Disk.Partitions.Count);
         Assert.True(probeResult.Disk.Partitions[1].FileSystem.HasValue);
-        Assert.Equal("FAT32", probeResult.Disk.Partitions[1].FileSystem.Value.FsType);
+        Assert.Equal("FAT", probeResult.Disk.Partitions[1].FileSystem.Value.FsType);
         Assert.Equal("B4A3-3F88",  probeResult.Disk.Partitions[1].FileSystem.Value.VolumeId);
     }
 
@@ -101,7 +101,7 @@ public class DiskProbeTest
 
         var remainder = indexedLogLines.Where(x => x.idx > line.idx);
         
-        // Basically this checks that there was no errors after listing attempt
+        // Basically this checks that there were no errors after listing attempt
         Assert.DoesNotContain(remainder, x => x.line.StartsWith("ERROR"));
     }
 
