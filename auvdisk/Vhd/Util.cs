@@ -7,16 +7,18 @@ namespace auvdisk.Vhd
 {
     public static class Util
     {
+        public const ulong LbaSize = 512;
+        
         public static VHDFooter? ReadVhdFooterSafe(string source)
         {
             try
             {
                 using (var stream = new FileStream(source, FileMode.Open, FileAccess.Read))
                 {
-                    if (stream.Length > (long)Program.LbaSize)
+                    if (stream.Length > (long)LbaSize)
                     {
-                        byte[] footerBytes = new byte[Program.LbaSize];
-                        stream.Seek(-(long)Program.LbaSize, SeekOrigin.End);
+                        byte[] footerBytes = new byte[LbaSize];
+                        stream.Seek(-(long)LbaSize, SeekOrigin.End);
                         stream.ReadExactly(footerBytes);
 
                         var header = new VHDFooter(footerBytes);
@@ -41,10 +43,10 @@ namespace auvdisk.Vhd
 
         public static VirtualHardDisk CreateFixedVhd(string path, ulong size, Action<String> logger, bool forceZeroFill = false)
         {
-            if (size % Program.LbaSize > 0)
+            if (size % LbaSize > 0)
             {
-                size = RoundUp(size, Program.LbaSize);
-                logger($"WARNING: VHD size must be a multiple of {Program.LbaSize}, rounded up size to {size}");
+                size = RoundUp(size, LbaSize);
+                logger($"WARNING: VHD size must be a multiple of {LbaSize}, rounded up size to {size}");
             }
 
             // Faster due to disabled Windows FS security (resulting file contains contents from real disk, potential security issue)
@@ -76,8 +78,8 @@ namespace auvdisk.Vhd
                 logger("Will do full-length zeroing which is slow");
                 logger("This is needed to avoid creating a sparse file. Known to happen on Linux when writing to Samba share");
 
-                byte[] nullSector = Enumerable.Repeat((byte)0x0, (int)Program.LbaSize).ToArray();
-                ulong sectorCount = size / Program.LbaSize;
+                byte[] nullSector = Enumerable.Repeat((byte)0x0, (int)LbaSize).ToArray();
+                ulong sectorCount = size / LbaSize;
 
                 using (var stream = new FileStream(path, FileMode.CreateNew))
                 {
@@ -96,13 +98,13 @@ namespace auvdisk.Vhd
         public static ulong CreateBootableFixedVhdLayout(string target, ulong bootSizeInBytes, ulong dataSizeInBytes, Action<string> logger, bool zeroFill = false)
         {
             logger("Creating fixed VHD layout");
-            dataSizeInBytes = RoundUp(dataSizeInBytes, Program.LbaSize);
+            dataSizeInBytes = RoundUp(dataSizeInBytes, LbaSize);
             logger("Rounded up data partition size is " + dataSizeInBytes.ToString());
 
             const ulong offsetLba = 2048UL; // Start first partition from the sector/LBA 2048, this is what Windows does AFAIK
             const ulong overheadSize = 1024UL * 1024UL; // 1MiB for partition table and stuff
 
-            ulong totalSize = offsetLba * Program.LbaSize + overheadSize + bootSizeInBytes + dataSizeInBytes;
+            ulong totalSize = offsetLba * LbaSize + overheadSize + bootSizeInBytes + dataSizeInBytes;
             logger("Total size of the image contents is " + totalSize.ToString());
             var vdisk = CreateFixedVhd(target, totalSize, logger, zeroFill);
 
@@ -112,7 +114,7 @@ namespace auvdisk.Vhd
             bootPartitionEntry.PartitionGuid = Guid.NewGuid();
             bootPartitionEntry.PartitionTypeGuid = GPTPartition.EFISystemPartitionTypeGuid;
             bootPartitionEntry.FirstLBA = offsetLba;
-            bootPartitionEntry.LastLBA = offsetLba + bootSizeInBytes / Program.LbaSize - 1;
+            bootPartitionEntry.LastLBA = offsetLba + bootSizeInBytes / LbaSize - 1;
             bootPartitionEntry.PartitionName = "Boot";
             list.Add(bootPartitionEntry);
 
@@ -144,13 +146,13 @@ namespace auvdisk.Vhd
             return numToRound + multiple - remainder;
         }
 
-        private static VHDFooter CreateVhdFooter(ulong size)
+        public static VHDFooter CreateVhdFooter(ulong size)
         {
             VHDFooter vhdFooter = new VHDFooter();
             vhdFooter.OriginalSize = size;
             vhdFooter.CurrentSize = size;
             vhdFooter.SetCurrentTimeStamp();
-            vhdFooter.SetDiskGeometry(size / Program.LbaSize);
+            vhdFooter.SetDiskGeometry(size / LbaSize);
 
             return vhdFooter;
         }

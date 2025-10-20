@@ -9,7 +9,7 @@ namespace auvdisk.Vhd
 {
     class DifferencingVhdHandler : IDisposable
     {
-        const int BytesPerDiskSector = (int)Program.LbaSize;
+        private const int BytesPerDiskSector = (int)Util.LbaSize;
         const int HeaderSectorCount = 2;
 
         private readonly VHDFooter _vhdFooter;

@@ -23,7 +23,7 @@ namespace auvdisk
         public string Path { get; private set; }
 
         public record ProbeResult(DiskRecord? Disk, FileSystemRecord? Fs);
-        public record DiskRecord(string PartitionTableType, List<PartitionRecord> Partitions, string ImageType);
+        public record DiskRecord(string PartitionTableType, List<PartitionRecord> Partitions, string ImageType, ulong SectorSize);
         public record PartitionRecord(long StartLba, long EndLba, long SectorCountLba, Guid? PartGuid, Guid TypeGuid, Optional<FileSystemRecord> FileSystem);
         public record FileSystemRecord(string FsType, string VolumeLabel, long? Size, long? UsedSpace, long? AvailableSpace, long Offset, string? VolumeId);
 
@@ -207,13 +207,14 @@ namespace auvdisk
 
         private DiskRecord? HandleVirtualDisk(DiscUtils.VirtualDisk vdisk, string imageType)
         {
-            Logger($"Processing virtual disk of type {imageType}");
+            Logger($"Processing virtual disk of type {imageType} with LBA size {vdisk.SectorSize} bytes");
             if (vdisk.IsPartitioned)
             {
                 var diskRecord = new DiskRecord( 
                     PartitionTableType: vdisk.Partitions.ToReadableString(),
                     Partitions: new List<PartitionRecord>(),
-                    ImageType: imageType
+                    ImageType: imageType,
+                    SectorSize: (ulong)vdisk.SectorSize
                 );
                 
                 Logger($"[green]Found partition table of type {diskRecord.PartitionTableType}[/]");
@@ -242,8 +243,7 @@ namespace auvdisk
                         Logger($"[green]Partition ID: {partGuid.ToString()}[/]");
                     }
                     
-                    // TODO: as we're handling more than just VHD now, LbaSize can be different.
-                    var maybeFsRecord = HandleFileSystem(partition.Open(), (ulong)partition.FirstSector * Program.LbaSize, FsHandler, volume);
+                    var maybeFsRecord = HandleFileSystem(partition.Open(), (ulong)partition.FirstSector * (ulong)vdisk.SectorSize, FsHandler, volume);
 
                     var partitionRecord = new PartitionRecord(
                         StartLba: partition.FirstSector,
@@ -262,8 +262,7 @@ namespace auvdisk
 
             return null;
         }
-
-#pragma warning disable CA1416
+        
         private FileSystemRecord? HandleFileSystem(Stream stream, ulong offset, Action<DiscFileSystem> impl, VolumeInfo? volumeInfo = null)
         {
             FileSystemRecord FillFsRecord(DiscUtils.FileSystemInfo fsInfo, DiscFileSystem fs, string? volumeId)
@@ -307,6 +306,5 @@ namespace auvdisk
 
             return null;
         }
-#pragma warning restore CA1416
     }
 }

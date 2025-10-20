@@ -11,8 +11,6 @@ namespace auvdisk
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     internal static class Program
     {
-        public const ulong LbaSize = 512;
-
         static int Main(string[] args)
         {
             DiscUtils.Complete.SetupHelper.SetupComplete();

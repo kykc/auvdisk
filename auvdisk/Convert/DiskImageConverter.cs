@@ -119,12 +119,8 @@ namespace auvdisk.Convert
                     long diskSize = disk.Length;
 
                     logger("Generating VHD footer using DiskAccessLibrary");
-                    VHDFooter vhdFooter = new VHDFooter();
-                    vhdFooter.OriginalSize = (ulong)diskSize;
-                    vhdFooter.CurrentSize = (ulong)diskSize;
-                    vhdFooter.SetCurrentTimeStamp();
-                    vhdFooter.SetDiskGeometry((ulong)diskSize / Program.LbaSize);
-
+                    var vhdFooter = Vhd.Util.CreateVhdFooter((ulong)diskSize);
+                    
                     logger("Appending VHD footer to image file");
                     disk.Seek(0, SeekOrigin.End);
                     foreach (var bt in vhdFooter.GetBytes())
@@ -149,9 +145,9 @@ namespace auvdisk.Convert
 
                 using (var disk = new FileStream(source, FileMode.Open))
                 {
-                    logger($"Truncating last {Program.LbaSize.ToString()} bytes of the file");
+                    logger($"Truncating last {Vhd.Util.LbaSize.ToString()} bytes of the file");
                     long currentSize = disk.Length;
-                    disk.SetLength(currentSize - (long)Program.LbaSize); // Truncate VHD footer
+                    disk.SetLength(currentSize - (long)Vhd.Util.LbaSize); // Truncate VHD footer
                 }
 
                 logger("Done! It's probably a good idea to rename file to *.img or something similar now");
