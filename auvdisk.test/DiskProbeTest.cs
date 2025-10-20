@@ -16,8 +16,8 @@ public class DiskProbeTest
         var loopHashBefore = TestUtil.CalcSha256Hash(subjectLoop);
         var vhdHashBefore = TestUtil.CalcSha256Hash(subjectVhd);
 
-        var loopProbeResult = new DiskProbe(subjectLoop, 0, 0, null, logger).Probe();
-        var vhdProbeResult = new DiskProbe(subjectVhd, 0, 0, null, logger).Probe();
+        var loopProbeResult = new DiskProbe(subjectLoop, null, logger).Probe();
+        var vhdProbeResult = new DiskProbe(subjectVhd, null, logger).Probe();
         
         var loopHashAfter = TestUtil.CalcSha256Hash(subjectLoop);
         var vhdHashAfter = TestUtil.CalcSha256Hash(subjectVhd);
@@ -43,7 +43,7 @@ public class DiskProbeTest
             }
         };
         
-        var probeResult = new DiskProbe(subjectVhd, 0, 0, fsHandler, logger).Probe();
+        var probeResult = new DiskProbe(subjectVhd, fsHandler, logger).Probe();
         
         Assert.NotNull(probeResult.Disk);
         Assert.Equal("VHD", probeResult.Disk.ImageType);
@@ -60,7 +60,7 @@ public class DiskProbeTest
         
         var subjectVhd = Path.Join("testdata", "dynamic_fat32.vhd");
         
-        var probeResult = new DiskProbe(subjectVhd, 0, 0, null, logger).Probe();
+        var probeResult = new DiskProbe(subjectVhd, null, logger).Probe();
         
         Assert.NotNull(probeResult.Disk);
         Assert.Equal(2, probeResult.Disk.Partitions.Count);
@@ -75,7 +75,7 @@ public class DiskProbeTest
         var logger = (string s) => { };
         var subjectLoop = Path.Join("testdata", "ext4.loop");
         
-        var probeResult =  new DiskProbe(subjectLoop, 0, 0, null, logger).Probe();
+        var probeResult =  new DiskProbe(subjectLoop, null, logger).Probe();
         
         Assert.NotNull(probeResult.Fs);
         Assert.Equal("EXT", probeResult.Fs.FsType);
@@ -91,7 +91,7 @@ public class DiskProbeTest
 
         var fsHandler = DiskProbe.GetListArbitraryDir(@"\test_dir", logger);
 
-        var probeResult = new DiskProbe(subjectVhd, 0, 0, fsHandler, logger).Probe();
+        var probeResult = new DiskProbe(subjectVhd, fsHandler, logger).Probe();
         
         Assert.NotNull(probeResult.Disk);
 
@@ -114,7 +114,7 @@ public class DiskProbeTest
 
         var fsHandler = DiskProbe.GetCatArbitraryFile(@"\test_text.txt", logger);
 
-        var probeResult = new DiskProbe(subjectVhd, 0, 0, fsHandler, logger).Probe();
+        var probeResult = new DiskProbe(subjectVhd, fsHandler, logger).Probe();
         
         Assert.NotNull(probeResult.Disk);
 

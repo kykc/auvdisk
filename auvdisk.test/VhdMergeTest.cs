@@ -39,7 +39,7 @@ public class VhdMergeTest : IDisposable
         
         auvdisk.Vhd.Merge.PerformMerge(parentPath, childPath, targetPath, logger, true);
 
-        var probeResult = new DiskProbe(targetPath, 0, 0, fsHandler, logger).Probe();
+        var probeResult = new DiskProbe(targetPath, fsHandler, logger).Probe();
 
         Assert.NotNull(probeResult.Disk);
         Assert.Equal("VHD", probeResult.Disk.ImageType);

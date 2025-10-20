@@ -11,10 +11,6 @@ namespace auvdisk.Cli
     [Verb("probe-vdisk", HelpText = "Probe disk image, try to guess the format, existing partitions and filesystems ")]
     class VdiskProbe
     {
-        [Option("offset", Default = 0, HelpText = "Skip number of bytes from the beginning of the file")]
-        public long Offset { get; set; } = 0;
-        [Option("trim", Default = 0, HelpText = "Skip number of bytes from the end of the file")]
-        public long Trim { get; set; } = 0;
         [Option('s', "source", Required = true, HelpText = "Path to vdisk image file")]
         public string Source { get; set; } = "";
     }
@@ -139,5 +135,20 @@ namespace auvdisk.Cli
         public string Child { get; set; } = "";
         [Option('t', "target", Required = true, HelpText = "Target VHD path")]
         public string Target { get; set; } = "";
+    }
+    
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("extract-file", HelpText = "Extract file using offset and length in bytes")]
+    class ExtractFile
+    {
+        [Option('s', "source", Required = true, HelpText = "Source file path")]
+        public string Source { get; set; } = "";
+        [Option('t', "target", Required = true, HelpText = "Target file path")]
+        public string Target { get; set; } = "";
+        [Option('o', "offset", Required = true, HelpText = "Skip number of bytes from the beginning of the file")]
+        public ulong Offset { get; set; } = 0;
+
+        [Option('l', "length", Required = true, HelpText = "Count of bytes to copy")]
+        public ulong Length { get; set; } = 0;
     }
 }

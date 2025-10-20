@@ -1,5 +1,7 @@
 using auvdisk.Extensions;
 using DiscUtils;
+using DiscUtils.Ntfs;
+using DiskAccessLibrary.FileSystems.NTFS;
 using DotNext;
 using DiskAccessLibrary.VHD;
 
@@ -19,21 +21,17 @@ namespace auvdisk
         public Action<string> Logger { get; private set; }
         public Action<DiscFileSystem> FsHandler { get; private set; }
         public string Path { get; private set; }
-        public long Offset { get; private set; }
-        public long Trim { get; private set; }
 
         public record ProbeResult(DiskRecord? Disk, FileSystemRecord? Fs);
         public record DiskRecord(string PartitionTableType, List<PartitionRecord> Partitions, string ImageType);
         public record PartitionRecord(long StartLba, long EndLba, long SectorCountLba, Guid? PartGuid, Guid TypeGuid, Optional<FileSystemRecord> FileSystem);
         public record FileSystemRecord(string FsType, string VolumeLabel, long? Size, long? UsedSpace, long? AvailableSpace, long Offset, string? VolumeId);
 
-        public DiskProbe(string path, long offset, long trim, Action<DiscFileSystem>? fsHandler = null, Action<string>? logger = null)
+        public DiskProbe(string path, Action<DiscFileSystem>? fsHandler = null, Action<string>? logger = null)
         {
-            FsHandler = fsHandler == null ? ListFsRoot : fsHandler;
-            Logger = logger == null ? (string s) => Console.WriteLine(s) : logger;
+            FsHandler = fsHandler ?? ListFsRoot;
+            Logger = logger ?? ((string s) => Console.WriteLine(s));
             Path = path;
-            Offset = offset;
-            Trim = trim;
         }
 
         public ProbeResult Probe()
@@ -47,6 +45,7 @@ namespace auvdisk
                 return new ProbeResult(null, null);
             }
 
+            // Checking for file access issues
             try
             {
                 using var fs = new FileStream(Path, FileMode.Open, FileAccess.Read);
@@ -57,97 +56,59 @@ namespace auvdisk
                 return new ProbeResult(null, null);
             }
             
-            if (Vhd.Util.ReadVhdFooterSafe(Path) is { DiskType: VirtualHardDiskType.Differencing, IsValid: true })
+            using var rawDisk = new DiscUtils.Raw.Disk(Path, FileAccess.Read);
+            VHDFooter? maybeVhdFooter = Vhd.Util.ReadVhdFooterSafe(Path);
+
+            if (maybeVhdFooter?.IsValid ?? false)
             {
-                return ProbeInVhdFileMode();
+                Logger($"Valid VHD footer found, assuming VHD file format");
+                using var vhdDisk = new DiscUtils.Vhd.Disk(Path, FileAccess.Read);
+
+                return new ProbeResult(HandleVirtualDisk(vhdDisk, "VHD"), null);
+            }
+            else if (rawDisk is { IsPartitioned: true, Partitions: DiscUtils.Partitions.GuidPartitionTable} &&
+                rawDisk.Partitions.Partitions.Count > 0)
+            {
+                Logger($"Found sensible GPT partition table at offset 0, assuming RAW disk image");
+                return new ProbeResult(HandleVirtualDisk(rawDisk, "RAW"), null);
+            }
+            else if (Extensions.Extensions.SuppressRef<Exception, DiscUtils.VirtualDisk>(() => VirtualDisk.OpenDisk(Path, FileAccess.Read))
+                     is { } detectedDisk)
+            {
+                Logger("Utilizing DiscUtils heuristics to determine possible disk image type");
+                return new ProbeResult(HandleVirtualDisk(detectedDisk, GetDiskType(detectedDisk)), null);
+            }
+            else if (rawDisk is { IsPartitioned: true, Partitions: DiscUtils.Partitions.BiosPartitionTable } &&
+                     rawDisk.Partitions.Partitions.Count > 0)
+            {
+                Logger($"Found sensible MBR partition table at offset 0, assuming RAW disk image");
+                return new ProbeResult(HandleVirtualDisk(rawDisk, "RAW"), null);
             }
             else
             {
-                var streamModeResult = ProbeInStreamMode();
+                Logger(
+                    "WARNING: failed to determine virtual disk format, trying to open file as raw filesystem dump file");
+                using var fsStream = new FileStream(Path, FileMode.Open, FileAccess.Read);
 
-                var foundMeaningfulPartitions = streamModeResult.Disk?.Partitions?.Any(p =>
-                    p.FileSystem is { HasValue: true, Value.FsType.Length: > 0 }) ?? false;
-
-                if (streamModeResult.Fs != null || foundMeaningfulPartitions)
-                {
-                    return streamModeResult;
-                }
-                
-                Logger($"Didn't find meaningful partitions while trying to open file as VHD/RAW image, falling back to DiscUtil heuristics");
-                Logger($"WARNING: offset and trim are ignored in this mode due to DiscUtils API limitations");
-                using var disk = VirtualDisk.OpenDisk(Path, FileAccess.Read);
-
-                return disk != null
-                    ? new ProbeResult(HandleVirtualDisk(disk, disk.GetType().ToString()), null) // TODO: human readable disk type
-                    : new ProbeResult(null, null);
+                return new ProbeResult(null, HandleFileSystem(fsStream, 0, FsHandler));
             }
         }
 
-        private ProbeResult ProbeInVhdFileMode()
+        private string GetDiskType(DiscUtils.VirtualDisk disk)
         {
-            Logger($"Trying to open file as differencing VHD image");
-
-            if (Offset != 0 || Trim != 0)
+            var knownTypes = new Dictionary<Type, string>
             {
-                Logger($"WARNING: offset and trim are ignored in this mode");
+                {typeof(DiscUtils.Raw.Disk), "RAW"},
+                {typeof(DiscUtils.Vhd.Disk), "VHD"} 
+            };
+
+            if (knownTypes.ContainsKey(disk.GetType()))
+            {
+                return knownTypes[disk.GetType()];
             }
-            
-            using var vdisk = new DiscUtils.Vhd.Disk(Path, FileAccess.Read);
-            var vdiskRecord = HandleVirtualDisk(vdisk, "VHD");
-
-            return new ProbeResult(Disk: vdiskRecord, Fs: null);
-        }
-
-        private ProbeResult ProbeInStreamMode()
-        {
-            var rawFileStream = new FileStream(Path, FileMode.Open, FileAccess.Read);
-
-            using (var fileStream = new OffsetStreamDecorator(rawFileStream, Offset, Trim))
+            else
             {
-                var openVhd = () =>
-                {
-                    var vdisk = new DiscUtils.Vhd.Disk(fileStream, DiscUtils.Streams.Ownership.None);
-
-                    // Differencing VHDs cannot be opened with FileStream in DiscUtils, so those are the only two options
-                    Logger($"VHD type is {(vdisk.Layers.First().IsSparse ? "Dynamic" : "Fixed")}");
-                    
-                    return vdisk;
-                };
-
-                var openRaw = () =>
-                {
-                    var vdisk = new DiscUtils.Raw.Disk(fileStream, DiscUtils.Streams.Ownership.None);
-
-                    if (!vdisk.IsPartitioned)
-                    {
-                        throw new InvalidDataException("Unable to detect partition table in RAW image");
-                    }
-                    else if (vdisk.Partitions.Partitions.Count == 0)
-                    {
-                        throw new InvalidDataException("Partition table is empty, will try to open as FS");
-                    }
-
-                    return vdisk;
-                };
-
-                if (openVhd.ActWithLog(Logger, "Trying to open file as VHD image", "WARNING") is var resultVhd && resultVhd.IsSuccessful)
-                {
-                    var diskRecord = HandleVirtualDisk(resultVhd.Value, "VHD");
-
-                    return new ProbeResult(Disk: diskRecord, Fs: null);
-                }
-                else if (openRaw.ActWithLog(Logger, "Trying to open file as RAW image", "WARNING") is var resultRaw && resultRaw.IsSuccessful)
-                {
-                    var diskRecord = HandleVirtualDisk(resultRaw.Value, "RAW");
-
-                    return new ProbeResult(Disk: diskRecord, Fs: null);
-                }
-                else
-                {
-                    var fsRecord = HandleFileSystem(fileStream, 0, FsHandler);
-
-                    return new ProbeResult(Disk: null, Fs: fsRecord);
-                }
+                return disk.GetType().Name;
             }
         }
 
@@ -246,6 +207,7 @@ namespace auvdisk
 
         private DiskRecord? HandleVirtualDisk(DiscUtils.VirtualDisk vdisk, string imageType)
         {
+            Logger($"Processing virtual disk of type {imageType}");
             if (vdisk.IsPartitioned)
             {
                 var diskRecord = new DiskRecord( 
@@ -280,6 +242,7 @@ namespace auvdisk
                         Logger($"[green]Partition ID: {partGuid.ToString()}[/]");
                     }
                     
+                    // TODO: as we're handling more than just VHD now, LbaSize can be different.
                     var maybeFsRecord = HandleFileSystem(partition.Open(), (ulong)partition.FirstSector * Program.LbaSize, FsHandler, volume);
 
                     var partitionRecord = new PartitionRecord(
@@ -317,7 +280,7 @@ namespace auvdisk
 
             void OutputVolumeInfo(FileSystemRecord record)
             {
-                Logger($"[green]Found filesystem of type {record.FsType} at {record.Offset} bytes[/]");
+                Logger($"[green]Found filesystem of type {record.FsType} at {record.Offset} bytes with length of {stream.Length} bytes[/]");
 
                 if (record.VolumeId != null)
                 {

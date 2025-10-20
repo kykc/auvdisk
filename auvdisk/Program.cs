@@ -16,7 +16,10 @@ namespace auvdisk
         static int Main(string[] args)
         {
             DiscUtils.Complete.SetupHelper.SetupComplete();
-            var cliResult = Parser.Default.ParseArguments<Cli.VdiskProbe, Cli.VdiskList, Cli.VdiskCat, Cli.LoopToVhd, Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg, Cli.CreateDiffVhd, Cli.CreateFixedVhd, Cli.MergeVhd, Cli.CreateDynamicVhd>(args);
+            var cliResult = Parser.Default.ParseArguments<
+                Cli.VdiskProbe, Cli.VdiskList, Cli.VdiskCat, Cli.LoopToVhd, 
+                Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg, Cli.CreateDiffVhd, 
+                Cli.CreateFixedVhd, Cli.MergeVhd, Cli.CreateDynamicVhd, Cli.ExtractFile>(args);
             var logger = (string s) =>
             {
                 if (s.StartsWith("ERROR"))
@@ -33,7 +36,7 @@ namespace auvdisk
                     {
                         AnsiConsole.MarkupLine(s);
                     }
-                    catch (InvalidOperationException e)
+                    catch (InvalidOperationException)
                     {
                         AnsiConsole.WriteLine(s);
                     }
@@ -43,21 +46,21 @@ namespace auvdisk
             var exitCode = cliResult.MapResult(
                 (Cli.VdiskProbe opts) =>
                 {
-                    var probe = new DiskProbe(opts.Source, opts.Offset, opts.Trim, null, logger);
+                    var probe = new DiskProbe(opts.Source, null, logger);
                     probe.Probe();
 
                     return 0;
                 },
                 (Cli.VdiskList opts) =>
                 {
-                    var probe = new DiskProbe(opts.Source, opts.Offset, opts.Trim, DiskProbe.GetListArbitraryDir(opts.Target, logger), logger);
+                    var probe = new DiskProbe(opts.Source, DiskProbe.GetListArbitraryDir(opts.Target, logger), logger);
                     probe.Probe();
 
                     return 0;
                 },
                 (Cli.VdiskCat opts) =>
                 {
-                    var probe = new DiskProbe(opts.Source, opts.Offset, opts.Trim, DiskProbe.GetCatArbitraryFile(opts.Target, logger), logger);
+                    var probe = new DiskProbe(opts.Source, DiskProbe.GetCatArbitraryFile(opts.Target, logger), logger);
                     probe.Probe();
 
                     return 0;
@@ -128,6 +131,17 @@ namespace auvdisk
                     
                     action.WithCheckedTargetAvailable(opts.Target, logger)();
                     
+                    return 0;
+                },
+                (Cli.ExtractFile opts) =>
+                {
+                    var action = () => FsUtils.ExtractFileSegment(opts.Source, opts.Target, opts.Offset, opts.Length);
+                    
+                    action
+                        .WithCheckedStreamBoundaries(opts.Source, opts.Offset, opts.Length, logger)
+                        .WithCheckedTargetAvailable(opts.Target, logger)
+                        .WithCheckedSourceExists(opts.Source, logger)();
+
                     return 0;
                 },
                 _ => 1

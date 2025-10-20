@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace auvdisk
 {
-    internal class FsUtils
+    public class FsUtils
     {
 #pragma warning disable CA1416
         public static void CreateFileFastUnsafe(string target, ulong size)
@@ -43,6 +43,14 @@ namespace auvdisk
             {
                 return null;
             }
+        }
+        
+        public static void ExtractFileSegment(string source, string target, ulong offset, ulong length)
+        {
+            using var rawFileStream = new FileStream(source, FileMode.Open, FileAccess.Read);
+            using var decoratedStream = new SegmentStream(rawFileStream, (long)offset, (long)length);
+            using var targetStream = new FileStream(target, FileMode.Create, FileAccess.Write);
+            decoratedStream.CopyTo(targetStream);
         }
     }
 }

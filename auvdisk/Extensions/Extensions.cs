@@ -1,4 +1,3 @@
-using DotNext;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,7 +18,7 @@ namespace auvdisk.Extensions
             {
                 return func();
             }
-            catch (TException ex)
+            catch (TException)
             {
                 return null;
             }
@@ -33,34 +32,12 @@ namespace auvdisk.Extensions
             {
                 return func();
             }
-            catch (TException ex)
+            catch (TException)
             {
                 return null;
             }
         }
-        
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Result<TResult> ActWithLog<TResult>(this Func<TResult> function, Action<string> logger, string message, string errorLevel = "ERROR")
-        {
-            Result<TResult> result;
-            try
-            {
-                logger(message);
-                result = function();
-            }
-            catch (Exception e)
-            {
-                result = new(e);
 
-                if (errorLevel != "")
-                {
-                    logger($"{errorLevel}: {e.Message}");
-                }
-            }
-
-            return result;
-        }
-        
         public static string FormatDuPath(this string path, bool pretty = true)
         {
             if (pretty)
@@ -122,7 +99,7 @@ namespace auvdisk.Extensions
             {
                 logger($"Checking that source file contains valid {(diskType == "" ? "disk" : diskType)} image");
 
-                var probeResult = new DiskProbe(source, 0, 0, (DiscFileSystem) => { }, verbose ? logger : (string s) => { }).Probe();
+                var probeResult = new DiskProbe(source, (DiscFileSystem) => { }, verbose ? logger : (string s) => { }).Probe();
 
                 if (probeResult.Disk == null)
                 {
@@ -145,7 +122,7 @@ namespace auvdisk.Extensions
             {
                 logger($"Checking that source file contains valid {(fsType == "" ? "filesystem" : fsType)} image");
 
-                var probeResult = new DiskProbe(source, 0, 0, (DiscFileSystem) => { }, verbose ? logger : (string s) => { }).Probe();
+                var probeResult = new DiskProbe(source, (DiscFileSystem) => { }, verbose ? logger : (string s) => { }).Probe();
 
                 if (probeResult.Fs == null)
                 {
@@ -171,6 +148,28 @@ namespace auvdisk.Extensions
                 if (!File.Exists(source))
                 {
                     logger($"ERROR: source file {source} does not exist");
+                }
+                else
+                {
+                    action();
+                }
+            };
+        }
+
+        public static Action WithCheckedStreamBoundaries(this Action action, string path, 
+            ulong offset, ulong length, Action<string> logger)
+        {
+            return () =>
+            {
+                using var fileStream = new FileStream(path, FileMode.Open, FileAccess.Read);
+                
+                logger("Checking file stream boundaries");
+
+                ulong readBoundary = offset + length;
+
+                if (readBoundary > (ulong)fileStream.Length)
+                {
+                    logger($"ERROR: requested operation exceeds file length");
                 }
                 else
                 {
