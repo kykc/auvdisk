@@ -151,4 +151,12 @@ namespace auvdisk.Cli
         [Option('l', "length", Required = true, HelpText = "Count of bytes to copy")]
         public ulong Length { get; set; } = 0;
     }
+
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("diag-vhd", HelpText = "Output VHD diagnostics info")]
+    class DiagVhd
+    {
+        [Option('s', "source", Required = true, HelpText = "Source VHD file path")]
+        public string Source { get; set; } = "";
+    }
 }

@@ -7,15 +7,6 @@ using DiskAccessLibrary.VHD;
 
 namespace auvdisk
 {
-    // prefer discutils if there are no issues as there are more stuff implemented there
-    // disc | try to open as vhd, if success to partition table
-    // disc | try to open as raw, if success to partition table
-    // PT   | try to open as GPT, if success list partitions and to FS
-    // PT   | try to open as MBR, if success list partitions and to FS
-    // FS   | try to open as NTFS, if success list root
-    // FS   | try to open as FAT32, if success list root
-    // FS   | try to open as EXT4, if success list root
-
     public class DiskProbe
     {
         public Action<string> Logger { get; private set; }
@@ -23,7 +14,7 @@ namespace auvdisk
         public string Path { get; private set; }
 
         public record ProbeResult(DiskRecord? Disk, FileSystemRecord? Fs);
-        public record DiskRecord(string PartitionTableType, List<PartitionRecord> Partitions, string ImageType, ulong SectorSize);
+        public record DiskRecord(string PartitionTableType, List<PartitionRecord> Partitions, string ImageType, ulong SectorSize, Guid? PartTableGuid, Guid? DiskGuid);
         public record PartitionRecord(long StartLba, long EndLba, long SectorCountLba, Guid? PartGuid, Guid TypeGuid, Optional<FileSystemRecord> FileSystem);
         public record FileSystemRecord(string FsType, string VolumeLabel, long? Size, long? UsedSpace, long? AvailableSpace, long Offset, string? VolumeId);
 
@@ -61,10 +52,10 @@ namespace auvdisk
 
             if (maybeVhdFooter?.IsValid ?? false)
             {
-                Logger($"Valid VHD footer found, assuming VHD file format");
+                Logger($"Valid VHD footer with id {maybeVhdFooter.UniqueId} was found, assuming VHD file format");
                 using var vhdDisk = new DiscUtils.Vhd.Disk(Path, FileAccess.Read);
 
-                return new ProbeResult(HandleVirtualDisk(vhdDisk, "VHD"), null);
+                return new ProbeResult(HandleVirtualDisk(vhdDisk, "VHD", maybeVhdFooter.UniqueId), null);
             }
             else if (rawDisk is { IsPartitioned: true, Partitions: DiscUtils.Partitions.GuidPartitionTable} &&
                 rawDisk.Partitions.Partitions.Count > 0)
@@ -205,7 +196,7 @@ namespace auvdisk
             };
         }
 
-        private DiskRecord? HandleVirtualDisk(DiscUtils.VirtualDisk vdisk, string imageType)
+        private DiskRecord? HandleVirtualDisk(DiscUtils.VirtualDisk vdisk, string imageType, Guid? diskGuid = null)
         {
             Logger($"Processing virtual disk of type {imageType} with LBA size {vdisk.SectorSize} bytes");
             if (vdisk.IsPartitioned)
@@ -214,10 +205,19 @@ namespace auvdisk
                     PartitionTableType: vdisk.Partitions.ToReadableString(),
                     Partitions: new List<PartitionRecord>(),
                     ImageType: imageType,
-                    SectorSize: (ulong)vdisk.SectorSize
+                    SectorSize: (ulong)vdisk.SectorSize,
+                    PartTableGuid: vdisk.Partitions.DiskGuid,
+                    DiskGuid: diskGuid
                 );
-                
-                Logger($"[green]Found partition table of type {diskRecord.PartitionTableType}[/]");
+
+                if (diskRecord.PartTableGuid != null && diskRecord.PartTableGuid != Guid.Empty)
+                {
+                    Logger($"[green]Found partition table of type {diskRecord.PartitionTableType} with id {diskRecord.PartTableGuid}[/]");
+                }
+                else
+                {
+                    Logger($"[green]Found partition table of type {diskRecord.PartitionTableType}[/]");
+                }
                 
                 var volumeManager = new VolumeManager(vdisk);
                 

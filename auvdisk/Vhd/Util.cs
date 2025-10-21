@@ -2,6 +2,9 @@
 using DiscUtils.Streams;
 using DiskAccessLibrary.VHD;
 using DiskAccessLibrary;
+using Spectre.Console;
+using System.Text;
+using auvdisk.Log;
 
 namespace auvdisk.Vhd
 {
@@ -34,11 +37,14 @@ namespace auvdisk.Vhd
             return null;
         }
 
-        public static DiscUtils.Vhd.Disk CreateDynamicVhd(string path, ulong size)
+        public static void CreateDynamicVhd(string path, ulong size, Log.ILog logger)
         {
-            // No using here, as we're returning disk owning the stream
-            var stream = new FileStream(path, FileMode.Create, FileAccess.ReadWrite);
-            return DiscUtils.Vhd.Disk.InitializeDynamic(stream, Ownership.Dispose, (long)size);
+            CreateNonFixedVhd(path, size, null, logger);
+        }
+
+        public static void CreateDifferentialVhd(string parent, string child, Log.ILog logger)
+        {
+            CreateNonFixedVhd(child, null, parent, logger);
         }
 
         public static VirtualHardDisk CreateFixedVhd(string path, ulong size, Action<String> logger, bool forceZeroFill = false)
@@ -155,6 +161,175 @@ namespace auvdisk.Vhd
             vhdFooter.SetDiskGeometry(size / LbaSize);
 
             return vhdFooter;
+        }
+
+        public static void OutputDiagnosticInfo(string path, Log.ILog logger)
+        {
+            var maybeFooter = ReadVhdFooterSafe(path);
+
+            if (maybeFooter != null)
+            {
+                var diskType = maybeFooter.DiskType;
+                IEnumerable<VirtualHardDiskType> dynamicTypes = [VirtualHardDiskType.Differencing, VirtualHardDiskType.Dynamic];
+
+                var dataOffsetStr = maybeFooter.DataOffset.ToString();
+                
+                if (maybeFooter is { DataOffset: ulong.MaxValue, DiskType: VirtualHardDiskType.Fixed })
+                {
+                    dataOffsetStr = "[green]unavailable[/]";
+                }
+                else if (maybeFooter.DiskType == VirtualHardDiskType.Fixed)
+                {
+                    dataOffsetStr = $"[red]{maybeFooter.DataOffset}[/]";
+                }
+                
+                logger.Log(new Rule("[green]VHD Footer[/]").LeftJustified());
+                logger.Log($"[yellow]Unique id[/]: {maybeFooter.UniqueId}");
+                logger.Log($"[yellow]Disk type[/]: {diskType}");
+                logger.Log($"[yellow]Current size in bytes[/]: {maybeFooter.CurrentSize}");
+                logger.Log($"[yellow]Original size in bytes[/]: {maybeFooter.OriginalSize}");
+                logger.Log($"[yellow]Cookie[/]: {maybeFooter.Cookie}");
+                logger.Log($"[yellow]Sector size[/]: {LbaSize}");
+                logger.Log($"[yellow]Timestamp[/]: {maybeFooter.TimeStamp}");
+                logger.Log($"[yellow]Data offset in bytes[/]: {dataOffsetStr}");
+                logger.Log($"[yellow]Footer validation[/]: {(maybeFooter.IsValid ? "[green]valid[/]": "[red]invalid[/]")}");
+                
+                if (dynamicTypes.Contains(diskType))
+                {
+                    using var diffHandler = new DifferencingVhdHandler(path);
+
+                    diffHandler.OutputDiagnosticInfo(logger);
+                }
+                else
+                {
+                    var fileLength = (ulong)(new FileInfo(path).Length);
+                    var validSectorCount = maybeFooter.CurrentSize + LbaSize == fileLength;
+                    logger.Log($"[yellow]Sector count validation[/]: {(validSectorCount ? "[green]valid[/]": "[red]invalid[/]")}");
+                    logger.Log(new Rule("[green]End of VHD Footer[/]").LeftJustified());
+                }
+            }
+            else
+            {
+                logger.Error("Failed to read/parse VHD footer");
+            }
+        }
+
+        public static uint CalculateChecksum(byte[] data, uint checksumOffset)
+        {
+            uint checksum = 0;
+
+            for (int i = 0; i < data.Length; ++i)
+            {
+                if (!Enumerable.Range((int)checksumOffset, 4).Contains(i))
+                {
+                    checksum += data[i];
+                }
+            }
+            
+            checksum = ~checksum;
+
+            return checksum;
+        }
+
+        private static void CreateNonFixedVhd(string path, ulong? maybeSize, string? maybeParentPath, Log.ILog logger)
+        {
+            ulong size = 0;
+            ulong parentLocatorSpaceInBytes = 0;
+            var dynamicHeader = new DynamicDiskHeader();
+
+            var parentLocatorData = new List<byte[]>();
+            
+            if (maybeParentPath != null)
+            {
+                var parentFooter = ReadVhdFooterSafe(maybeParentPath!);
+
+                if (parentFooter is not { IsValid: true })
+                {
+                    logger.Error("Failed to read/parse VHD footer");
+                    
+                    return;
+                }
+                
+                size = parentFooter.CurrentSize;
+                var absoluteParentPath = Path.GetFullPath(maybeParentPath);
+                // TODO: perform more experiments on what to write to relative locator to make every consumer happy
+                var relativeParentPath = Path.GetRelativePath(Path.GetDirectoryName(Path.GetFullPath(path)), maybeParentPath);
+                Console.WriteLine(relativeParentPath.Length);
+
+                if (absoluteParentPath.Length >= 256 || relativeParentPath.Length >= 256)
+                {
+                    logger.Error($"Absolute or relative parent path is longer than 256 characters");
+
+                    return;
+                }
+                
+                // TODO: support length > 256 symbols?
+                var absolutePathBytes = Encoding.Unicode.GetBytes(absoluteParentPath.PadRight(256, '\0'));
+                var relativePathBytes = Encoding.Unicode.GetBytes(relativeParentPath.PadRight(256, '\0'));
+                
+                parentLocatorSpaceInBytes += (ulong)absolutePathBytes.Length + (ulong)relativePathBytes.Length;
+                
+                parentLocatorData.Add(absolutePathBytes);
+                dynamicHeader.ParentLocatorEntry1.PlatformDataLength = (uint)absoluteParentPath.Length * 2;
+                dynamicHeader.ParentLocatorEntry1.PlatformDataSpace = (uint)LbaSize;
+                dynamicHeader.ParentLocatorEntry1.PlatformDataOffset = LbaSize * 3;
+                dynamicHeader.ParentLocatorEntry1.PlatformCode =
+                    (uint)DynamicDiskHeader.ParentLocatorPlatformCode.WindowsUtf16Absolute;
+                
+                parentLocatorData.Add(relativePathBytes);
+                dynamicHeader.ParentLocatorEntry2.PlatformDataLength = (uint)relativeParentPath.Length * 2;
+                dynamicHeader.ParentLocatorEntry2.PlatformDataSpace = (uint)LbaSize;
+                dynamicHeader.ParentLocatorEntry2.PlatformDataOffset = LbaSize * 4;
+                dynamicHeader.ParentLocatorEntry2.PlatformCode =
+                    (uint)DynamicDiskHeader.ParentLocatorPlatformCode.WindowsUtf16Relative;
+
+                dynamicHeader.ParentUniqueID = parentFooter.UniqueId;
+                dynamicHeader.ParentUnicodeName = absoluteParentPath;
+            }
+            else
+            {
+                size = maybeSize!.Value;
+            }
+            
+            var footer = CreateVhdFooter(size);
+            footer.DiskType = maybeParentPath != null ? VirtualHardDiskType.Differencing : VirtualHardDiskType.Dynamic;
+            footer.DataOffset = LbaSize;
+            
+            using var stream = new FileStream(path, FileMode.Create, FileAccess.Write);
+
+            dynamicHeader.TableOffset = LbaSize * 3 + parentLocatorSpaceInBytes;
+            dynamicHeader.BlockSize = 1024 * 1024 * 2; // 2MiB
+            dynamicHeader.MaxTableEntries = (uint)size / dynamicHeader.BlockSize;
+            
+            ulong batSize = sizeof(uint) * dynamicHeader.MaxTableEntries;
+            ulong batSpace = RoundUp(batSize, LbaSize);
+
+            var footerBytes = footer.GetBytes();
+            var dynamicHeaderBytes = dynamicHeader.GetBytes();
+            
+            stream.Seek(0, SeekOrigin.Begin);
+            stream.Write(footerBytes);
+            stream.Write(dynamicHeaderBytes);
+            
+            byte[] gapBeforeBatBytes = new byte[dynamicHeader.TableOffset - (ulong)footerBytes.Length - (ulong)dynamicHeaderBytes.Length];
+            stream.Write(gapBeforeBatBytes);
+
+            if (parentLocatorData.Any())
+            {
+                var locatorEntries = dynamicHeader.GetParentLocatorEntries();
+
+                foreach (var (locatorEntry, idx) in locatorEntries.Select((locatorEntry, idx) => (locatorEntry, idx)))
+                {
+                    stream.Seek((long)locatorEntry.PlatformDataOffset, SeekOrigin.Begin);
+                    stream.Write(parentLocatorData[idx]);
+                }
+            }
+            
+            byte[] bat = Enumerable.Repeat((byte)0xFF, (int)batSpace).ToArray();
+            
+            stream.Seek((long)dynamicHeader.TableOffset, SeekOrigin.Begin);
+            stream.Write(bat);
+            stream.Write(footerBytes);
         }
     }
 }

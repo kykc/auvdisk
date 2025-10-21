@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Spectre.Console;
+using auvdisk.Util;
 
 namespace auvdisk.Vhd
 {
@@ -13,6 +15,7 @@ namespace auvdisk.Vhd
         const int HeaderSectorCount = 2;
 
         private readonly VHDFooter _vhdFooter;
+        private readonly byte[] _headerBytes; // used for diagnostics only. Remove when upstream DiskAccessLibrary will merge the bugfixes (hopefully)
         private readonly DynamicDiskHeader _dynamicHeader;
         private readonly FileStream _file;
         private readonly uint[] _batEntries; // Block Allocation Table
@@ -27,16 +30,19 @@ namespace auvdisk.Vhd
 
             _vhdFooter = new VHDFooter(footerBytes);
 
-            if (_vhdFooter is { DiskType: VirtualHardDiskType.Differencing, IsValid: true })
+            IEnumerable<VirtualHardDiskType> supportedTypes = 
+                [VirtualHardDiskType.Differencing, VirtualHardDiskType.Dynamic];
+            
+            if (_vhdFooter.IsValid && supportedTypes.Contains(_vhdFooter.DiskType))
             {
-                byte[] headerBytes = new byte[BytesPerDiskSector * HeaderSectorCount];
+                _headerBytes = new byte[BytesPerDiskSector * HeaderSectorCount];
                 _file.Seek((long)_vhdFooter.DataOffset, SeekOrigin.Begin);
-                _file.ReadExactly(headerBytes);
-                _dynamicHeader = new DynamicDiskHeader(headerBytes);
+                _file.ReadExactly(_headerBytes);
+                _dynamicHeader = new DynamicDiskHeader(_headerBytes);
 
                 uint maxTableEntries = _dynamicHeader.MaxTableEntries;
                 long byteIndex = (long)(_dynamicHeader.TableOffset);
-                int byteCount = (int)Math.Ceiling((double)maxTableEntries * 4.0);
+                int byteCount = (int)maxTableEntries * sizeof(UInt32);
 
                 byte[] batBytes = new byte[byteCount];
                 _file.Seek(byteIndex, SeekOrigin.Begin);
@@ -45,7 +51,7 @@ namespace auvdisk.Vhd
                 _batEntries = new uint[maxTableEntries];
                 for (int i = 0; i < maxTableEntries; i++)
                 {
-                    _batEntries[i] = BigEndianToUInt32(batBytes, i * 4);
+                    _batEntries[i] = Bytes.FromBigEndianUInt32(batBytes, i * 4);
                 }
             }
             else
@@ -145,10 +151,79 @@ namespace auvdisk.Vhd
             _file.Dispose();
         }
 
-        private static uint BigEndianToUInt32(byte[] buffer, int offset)
+        public void OutputDiagnosticInfo(Log.ILog logger)
         {
-            return (uint)((buffer[offset + 0] << 24) | (buffer[offset + 1] << 16)
-                | (buffer[offset + 2] << 8) | (buffer[offset + 3] << 0));
+            var dataOffsetBytes = BitConverter.GetBytes(_dynamicHeader.DataOffset);
+            
+            logger.Log(new Rule("[green]VHD Dynamic Header[/]").LeftJustified());
+            
+            logger.Log($"[yellow]Header cookie[/]: {_dynamicHeader.Cookie}");
+            logger.Log($"[yellow]Data offset[/]: 0x{System.Convert.ToHexString(dataOffsetBytes)}");
+            logger.Log($"[yellow]BAT offset in bytes[/]: {_dynamicHeader.TableOffset}");
+            logger.Log($"[yellow]Header version[/]: {_dynamicHeader.HeaderVersion}");
+            logger.Log($"[yellow]Max BAT table entries[/]: {_dynamicHeader.MaxTableEntries}");
+            logger.Log($"[yellow]Parent timestamp[/]: {_dynamicHeader.ParentTimeStamp}");
+            logger.Log($"[yellow]Parent name[/]: {_dynamicHeader.ParentUnicodeName}");
+            logger.Log($"[yellow]Parent id[/]: {_dynamicHeader.ParentUniqueID}");
+            logger.Log($"[yellow]Block size[/]: {_dynamicHeader.BlockSize}");
+
+            ulong usedBatCount = 0;
+            
+            foreach (var bat in _batEntries)
+            {
+                if (bat != UInt32.MaxValue)
+                {
+                    ++usedBatCount;
+                }
+            }
+            
+            logger.Log($"[yellow]Used BAT entry count[/]: {usedBatCount}");
+            
+            logger.Log(new Rule("[green]Diagnostics[/]").LeftJustified());
+
+            var checkFooterCookie = _vhdFooter.Cookie == "conectix";
+            var checkHeaderCookie = _dynamicHeader.Cookie == "cxsparse";
+            var checkDataOffset = ulong.MaxValue == _dynamicHeader.DataOffset;
+            var checkBatSize = _dynamicHeader.TableOffset % Util.LbaSize == 0;
+            var checkFooterDataOffset = _vhdFooter.DataOffset == Util.LbaSize;
+            var checkMaxTableEntries =
+                _dynamicHeader.MaxTableEntries == _vhdFooter.CurrentSize / _dynamicHeader.BlockSize;
+            var checkHeaderValid = Util.CalculateChecksum(_headerBytes, 0x24) ==
+                                   Bytes.FromBigEndianUInt32(_headerBytes, 0x24);
+
+            var checkString = (bool check) => check ? "[green]success[/]" : "[red]fail[/]";
+            
+            logger.Log($"[yellow]Footer cookie check[/]: {checkString(checkFooterCookie)}");
+            logger.Log($"[yellow]Header cookie check[/]: {checkString(checkHeaderCookie)}");
+            logger.Log($"[yellow]Data offset check[/]: {checkString(checkDataOffset)}");
+            logger.Log($"[yellow]BAT size check[/]: {checkString(checkBatSize)}");
+            logger.Log($"[yellow]Footer offset check[/]: {checkString(checkFooterDataOffset)}");
+            logger.Log($"[yellow]Max BAT entries check[/]: {checkString(checkMaxTableEntries)}");
+            logger.Log($"[yellow]Header checksum check[/]: {checkString(checkHeaderValid)}");
+
+            if (_vhdFooter.DiskType == VirtualHardDiskType.Differencing)
+            {
+                logger.Log(new Rule("[green]Parent locator entries[/]").LeftJustified());
+
+                foreach (var locator in _dynamicHeader.GetParentLocatorEntries()
+                             .Select((locator, index) => (locator, index)))
+                {
+                    logger.Log(
+                        $"[magenta]({locator.index}) [/][yellow]Platform code[/]: {(DynamicDiskHeader.ParentLocatorPlatformCode)locator.locator.PlatformCode}");
+                    logger.Log(
+                        $"[magenta]({locator.index}) [/][yellow]Value[/]: {DynamicDiskHeader.ReadParentLocator(_file, locator.locator)}");
+                    logger.Log($"[magenta]({locator.index}) [/][yellow]Offset[/]: {locator.locator.PlatformDataOffset}");
+                    logger.Log($"[magenta]({locator.index}) [/][yellow]Length[/]: {locator.locator.PlatformDataLength}");
+                    logger.Log($"[magenta]({locator.index}) [/][yellow]Space[/]: {locator.locator.PlatformDataSpace}");
+                }
+
+                logger.Log(new Rule("[green]End of parent locator entries[/]").LeftJustified());
+            }
+            else
+            {
+                logger.Log($"[yellow]No parent locator entries check[/]: {checkString(!_dynamicHeader.GetParentLocatorEntries().Any())}");
+                logger.Log(new Rule("[green]End of diagnostics[/]").LeftJustified());
+            }
         }
     }
 }
