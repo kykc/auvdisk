@@ -31,6 +31,25 @@ namespace auvdisk.test.Vhd
         }
 
         [Fact]
+        public void TestDiscUtilsWithFactory()
+        {
+            List<string> paths =
+            [
+                Path.Join(Directory.GetCurrentDirectory(), "testdata", "test_gpt_child.vhd"),
+                Path.Join(".", "testdata", "test_gpt_child.vhd"),
+                Path.Join("testdata", "test_gpt_child.vhd")
+            ];
+
+            var disks = paths.Select(p => DiscUtils.VirtualDisk.OpenDisk(p, "vhd", FileAccess.Read, "", ""));
+
+            foreach (var disk in disks)
+            {
+                CheckChild(disk as DiscUtils.Vhd.Disk);
+            }
+            
+        }
+
+        [Fact]
         public void TestAutomatlLocator()
         {
             var logger = new LogWatcher();

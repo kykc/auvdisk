@@ -5,6 +5,7 @@ namespace auvdisk.test.Vhd
     {
         private readonly string _parentPath = Path.Join(Directory.GetCurrentDirectory(), "testdata", "test_gpt.vhd");
         private readonly string _childPath = Path.Join(Directory.GetCurrentDirectory(), "test_gpt_child_test.vhd");
+        private readonly string _grandchildPath = Path.Join(Directory.GetCurrentDirectory(), "test_gpt_grandchild.vhd");
         
         [Fact]
         public void TestCreateDifferencingVhd()
@@ -21,9 +22,25 @@ namespace auvdisk.test.Vhd
             Assert.True(File.Exists(_childPath));
         }
 
+        [Fact]
+        public void TestTripleLayerVhd()
+        {
+            Assert.False(File.Exists(_grandchildPath));
+            
+            var logger = new LogWatcher();
+            
+            auvdisk.Vhd.Util.CreateDifferentialVhd(Path.Join("testdata", "test_gpt_child.vhd"), _grandchildPath, logger);
+            using var disk = auvdisk.Vhd.Util.OpenDiskWithDu(_grandchildPath, logger);
+
+            Assert.NotNull(disk);
+            Assert.Equal(3, disk.Layers.Count());
+            Assert.True(File.Exists(_grandchildPath));
+        }
+
         public void Dispose()
         {
             File.Delete(_childPath);
+            File.Delete(_grandchildPath);
         }
     }
 }
