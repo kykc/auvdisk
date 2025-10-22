@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using auvdisk.Log;
 using DotNext.Collections.Generic;
 using Spectre.Console;
 
@@ -17,26 +18,27 @@ namespace auvdisk.Convert
     public static class DiskImageConverter
     {
         // TODO: make an option to disable prepending of EFI boot partition
-        public static void ConvertLoopToVhd(string source, string target, Action<String> logger, bool verbose, bool zeroFill = false)
+        public static void ConvertLoopToVhd(string source, string target, Log.ILog logger, bool verbose, bool zeroFill = false)
         {
             var action = () =>
             {
                 var sourceLength = new System.IO.FileInfo(source).Length;
                 ulong efiBootSize = 512 * 1024 * 1024; // 512MiB
 
-                logger("Source file length is " + sourceLength.ToString());
+                logger.Log("Source file length is " + sourceLength.ToString());
 
                 Vhd.Util.CreateBootableFixedVhdLayout(target, efiBootSize, (ulong)sourceLength, logger, zeroFill);
 
-                logger("Opening VHD using DiscUtils");
+                logger.Log("Opening VHD using DiscUtils");
+                // Safe to use DiscUtils constructor as target is guaranteed to be of type fixed
                 using (var disk = new DiscUtils.Vhd.Disk(target, FileAccess.ReadWrite))
                 {
-                    logger("Formatting EFI boot partition into FAT32 and creating EFI/Boot directory");
+                    logger.Log("Formatting EFI boot partition into FAT32 and creating EFI/Boot directory");
                     var fat = FatFileSystem.FormatPartition(disk, 0, "Boot");
                     fat.CreateDirectory(@"EFI");
                     fat.CreateDirectory(@"EFI\Boot");
 
-                    logger("Copying data from loop to VHD. Depending on disk speed and image size this might take a while");
+                    logger.Log("Copying data from loop to VHD. Depending on disk speed and image size this might take a while");
                     using (var sourceStream = File.OpenRead(source))
                     using (var targetStream = disk.Partitions[1].Open())
                     {
@@ -44,7 +46,7 @@ namespace auvdisk.Convert
                     }
                 }
 
-                logger("Closed VHD, done! It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
+                logger.Log("Closed VHD, done! It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
             };
 
             action
@@ -53,13 +55,13 @@ namespace auvdisk.Convert
                 .WithCheckedSourceExists(source, logger)();
         }
 
-        public static void ConvertVhdToLoop(string source, string target, Action<string> logger, bool verbose, int partIdx = -1)
+        public static void ConvertVhdToLoop(string source, string target, Log.ILog logger, bool verbose, int partIdx = -1)
         {
             var action = () =>
             {
-                logger("Opening VHD using DiscUtils");
-
-                using (var disk = new DiscUtils.Vhd.Disk(source, FileAccess.Read))
+                logger.Log("Opening VHD using DiscUtils");
+                
+                using (var disk = Vhd.Util.OpenDiskWithDu(source, logger))
                 {
                     var dynamicOrDifferencing =
                         disk.Layers.Any((l) => l.IsSparse || l.NeedsParent) || disk.Layers.Count() > 1;
@@ -70,10 +72,10 @@ namespace auvdisk.Convert
                         return;
                     }
                     
-                    logger("VHD contains " + disk.Partitions.Count + " partitions:");
+                    logger.Log("VHD contains " + disk.Partitions.Count + " partitions:");
                     var parts = disk.Partitions.Partitions.Select((part, idx) =>
                     {
-                        logger($"Partition {idx} containing {part.SectorCount} LBA Sectors [{part.FirstSector}-{part.LastSector}]");
+                        logger.Log($"Partition {idx} containing {part.SectorCount} LBA Sectors [{part.FirstSector}-{part.LastSector}]");
                         return (idx, part.SectorCount);
                     }).ToList();
 
@@ -83,24 +85,24 @@ namespace auvdisk.Convert
 
                     if (parts.Count == 0)
                     {
-                        logger($"ERROR: partition not found");
+                        logger.Error($"Partition not found");
                         return;
                     }
 
                     var selectedPart = parts.First();
 
-                    logger($"Selecting partition {selectedPart.idx}");
-                    logger("Opening partition using DiscUtils, target file using FileStream");
+                    logger.Log($"Selecting partition {selectedPart.idx}");
+                    logger.Log("Opening partition using DiscUtils, target file using FileStream");
 
                     using (var partStream = disk.Partitions.Partitions[selectedPart.idx].Open())
                     using (var targetStream = new FileStream(target, FileMode.Create))
                     {
-                        logger("Copying data from VHD to loop. Depending on disk speed and image size this might take a while");
+                        logger.Log("Copying data from VHD to loop. Depending on disk speed and image size this might take a while");
                         partStream.CopyTo(targetStream);
                     }
                 }
 
-                logger("Done! It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
+                logger.Log("Done! It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
             };
 
             action
@@ -109,19 +111,19 @@ namespace auvdisk.Convert
                 .WithCheckedSourceExists(source, logger)();
         }
 
-        public static void ConvertImgToVhd(string source, Action<string> logger, bool verbose)
+        public static void ConvertImgToVhd(string source, Log.ILog logger, bool verbose)
         {
             var action = () =>
             {
-                logger("Opening disk image using FileStream");
+                logger.Log("Opening disk image using FileStream");
                 using (var disk = new FileStream(source, FileMode.Open))
                 {
                     long diskSize = disk.Length;
 
-                    logger("Generating VHD footer using DiskAccessLibrary");
+                    logger.Log("Generating VHD footer using DiskAccessLibrary");
                     var vhdFooter = Vhd.Util.CreateVhdFooter((ulong)diskSize);
                     
-                    logger("Appending VHD footer to image file");
+                    logger.Log("Appending VHD footer to image file");
                     disk.Seek(0, SeekOrigin.End);
                     foreach (var bt in vhdFooter.GetBytes())
                     {
@@ -129,7 +131,7 @@ namespace auvdisk.Convert
                     }
                 }
 
-                logger("Done! It's probably a good idea to rename file to *.vhd now");
+                logger.Log("Done! It's probably a good idea to rename file to *.vhd now");
             };
 
             action
@@ -137,20 +139,20 @@ namespace auvdisk.Convert
                 .WithCheckedSourceExists(source, logger)();
         }
 
-        public static void ConvertVhdToImg(string source, Action<string> logger, bool verbose)
+        public static void ConvertVhdToImg(string source, Log.ILog logger, bool verbose)
         {
             var action = () =>
             {
-                logger("Opening disk image using FileStream");
+                logger.Log("Opening disk image using FileStream");
 
                 using (var disk = new FileStream(source, FileMode.Open))
                 {
-                    logger($"Truncating last {Vhd.Util.LbaSize.ToString()} bytes of the file");
+                    logger.Log($"Truncating last {Vhd.Util.LbaSize.ToString()} bytes of the file");
                     long currentSize = disk.Length;
                     disk.SetLength(currentSize - (long)Vhd.Util.LbaSize); // Truncate VHD footer
                 }
 
-                logger("Done! It's probably a good idea to rename file to *.img or something similar now");
+                logger.Log("Done! It's probably a good idea to rename file to *.img or something similar now");
             };
 
             action

@@ -1,10 +1,13 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using DiscUtils.Streams;
 using DiskAccessLibrary.VHD;
 using DiskAccessLibrary;
 using Spectre.Console;
 using System.Text;
 using auvdisk.Log;
+using DiscUtils.Vhd;
+using Disk = DiskAccessLibrary.Disk;
+using System.Text.RegularExpressions;
 
 namespace auvdisk.Vhd
 {
@@ -47,26 +50,26 @@ namespace auvdisk.Vhd
             CreateNonFixedVhd(child, null, parent, logger);
         }
 
-        public static VirtualHardDisk CreateFixedVhd(string path, ulong size, Action<String> logger, bool forceZeroFill = false)
+        public static VirtualHardDisk CreateFixedVhd(string path, ulong size, Log.ILog logger, bool forceZeroFill = false)
         {
             if (size % LbaSize > 0)
             {
                 size = RoundUp(size, LbaSize);
-                logger($"WARNING: VHD size must be a multiple of {LbaSize}, rounded up size to {size}");
+                logger.Warning($"VHD size must be a multiple of {LbaSize}, rounded up size to {size}");
             }
 
             // Faster due to disabled Windows FS security (resulting file contains contents from real disk, potential security issue)
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && CliTools.IsVhdToolPresent() && !forceZeroFill)
             {
-                logger("Found VhdTool, will use it to speed things up. You may receive UAC prompt");
+                logger.Log("Found VhdTool, will use it to speed things up. You may receive UAC prompt");
                 CliTools.CreateWithVhdTool(path, size);
                 
                 return new VirtualHardDisk(path);
             }
             else if (CliTools.IsDdPresent() && !forceZeroFill)
             {
-                logger("Found dd, will allocate VHD using it to speed things up");
-                logger("WARNING: this may result in a sparse file, and Windows doesn't like sparse VHDs");
+                logger.Log("Found dd, will allocate VHD using it to speed things up");
+                logger.Warning("This may result in a sparse file, and Windows doesn't like sparse VHDs");
 
                 CliTools.AllocateWithDd(path, size);
 
@@ -80,9 +83,9 @@ namespace auvdisk.Vhd
             }
             else
             {
-                logger("Using DiskAccessLibrary to create VHD");
-                logger("Will do full-length zeroing which is slow");
-                logger("This is needed to avoid creating a sparse file. Known to happen on Linux when writing to Samba share");
+                logger.Log("Using DiskAccessLibrary to create VHD");
+                logger.Log("Will do full-length zeroing which is slow");
+                logger.Log("This is needed to avoid creating a sparse file. Known to happen on Linux when writing to Samba share");
 
                 byte[] nullSector = Enumerable.Repeat((byte)0x0, (int)LbaSize).ToArray();
                 ulong sectorCount = size / LbaSize;
@@ -101,17 +104,17 @@ namespace auvdisk.Vhd
             }
         }
 
-        public static ulong CreateBootableFixedVhdLayout(string target, ulong bootSizeInBytes, ulong dataSizeInBytes, Action<string> logger, bool zeroFill = false)
+        public static ulong CreateBootableFixedVhdLayout(string target, ulong bootSizeInBytes, ulong dataSizeInBytes, Log.ILog logger, bool zeroFill = false)
         {
-            logger("Creating fixed VHD layout");
+            logger.Log("Creating fixed VHD layout");
             dataSizeInBytes = RoundUp(dataSizeInBytes, LbaSize);
-            logger("Rounded up data partition size is " + dataSizeInBytes.ToString());
+            logger.Log("Rounded up data partition size is " + dataSizeInBytes.ToString());
 
             const ulong offsetLba = 2048UL; // Start first partition from the sector/LBA 2048, this is what Windows does AFAIK
             const ulong overheadSize = 1024UL * 1024UL; // 1MiB for partition table and stuff
 
             ulong totalSize = offsetLba * LbaSize + overheadSize + bootSizeInBytes + dataSizeInBytes;
-            logger("Total size of the image contents is " + totalSize.ToString());
+            logger.Log("Total size of the image contents is " + totalSize.ToString());
             var vdisk = CreateFixedVhd(target, totalSize, logger, zeroFill);
 
             List<GuidPartitionEntry> list = new List<GuidPartitionEntry>();
@@ -132,9 +135,9 @@ namespace auvdisk.Vhd
             dataPartitionEntry.LastLBA = (ulong)(vdisk.TotalSectors - 1 - 16384 / vdisk.BytesPerSector) - 1;
             list.Add(dataPartitionEntry);
 
-            logger("Initializing VHD with GPT partition table");
-            logger("Boot partition space in LBA is from " + bootPartitionEntry.FirstLBA.ToString() + " to " + bootPartitionEntry.LastLBA.ToString());
-            logger("Data partition space in LBA is from " + dataPartitionEntry.FirstLBA.ToString() + " to " + dataPartitionEntry.LastLBA.ToString());
+            logger.Log("Initializing VHD with GPT partition table");
+            logger.Log("Boot partition space in LBA is from " + bootPartitionEntry.FirstLBA.ToString() + " to " + bootPartitionEntry.LastLBA.ToString());
+            logger.Log("Data partition space in LBA is from " + dataPartitionEntry.FirstLBA.ToString() + " to " + dataPartitionEntry.LastLBA.ToString());
             DiskAccessLibrary.GuidPartitionTable.InitializeDisk(vdisk, (long)offsetLba, list);
 
             return dataSizeInBytes;
@@ -151,7 +154,7 @@ namespace auvdisk.Vhd
 
             return numToRound + multiple - remainder;
         }
-
+        
         public static VHDFooter CreateVhdFooter(ulong size)
         {
             VHDFooter vhdFooter = new VHDFooter();
@@ -252,9 +255,8 @@ namespace auvdisk.Vhd
                 
                 size = parentFooter.CurrentSize;
                 var absoluteParentPath = Path.GetFullPath(maybeParentPath);
-                // TODO: perform more experiments on what to write to relative locator to make every consumer happy
-                var relativeParentPath = Path.GetRelativePath(Path.GetDirectoryName(Path.GetFullPath(path)), maybeParentPath);
-                Console.WriteLine(relativeParentPath.Length);
+                
+                var relativeParentPath = NormalizeRelativePathToParent(Path.GetFullPath(path), Path.GetFullPath(maybeParentPath));
 
                 if (absoluteParentPath.Length >= 256 || relativeParentPath.Length >= 256)
                 {
@@ -330,6 +332,178 @@ namespace auvdisk.Vhd
             stream.Seek((long)dynamicHeader.TableOffset, SeekOrigin.Begin);
             stream.Write(bat);
             stream.Write(footerBytes);
+        }
+        
+        // Beware, passing strange things in you will get strange things out
+        // See tests for covered scenarios. I hate this, but I don't have better solution today
+        // This function tries to mimic what Windows does when creating differencing VHDs
+        // It also returns relative paths with \ as directory separator on all platforms to avoid confusing Windows
+        // For supported scenarios this function produces identical results on Windows and Posix systems (hopefully)
+        internal static string NormalizeRelativePathToParent(string c, string p)
+        {
+            Regex isRootedWinPath = new Regex(@"^[\W\w]\:\\.*");
+            Regex isRootedPosixPath = new Regex(@"^\/");
+
+            if (!isRootedPosixPath.IsMatch(p) && !isRootedWinPath.IsMatch(p))
+            {
+                throw new InvalidPathException(p);
+            }
+            else if (!isRootedPosixPath.IsMatch(c) && !isRootedWinPath.IsMatch(c))
+            {
+                throw new InvalidPathException(c);
+            }
+
+            if (isRootedWinPath.IsMatch(p) != isRootedWinPath.IsMatch(c))
+            {
+                throw new InvalidPathException(c);
+            }
+
+            if (isRootedWinPath.IsMatch(p) && isRootedWinPath.IsMatch(c) &&
+                !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                if (c[0].ToString().ToUpper() != p[0].ToString().ToUpper())
+                {
+                    return p;
+                }
+                
+                var posixify = (string s) => "/" + s[0] + s.Substring(2).Replace("\\", "/");
+
+                c = posixify(c);
+                p = posixify(p);
+            }
+            
+            var pDir = Path.GetDirectoryName(p);
+            var cDir = Path.GetDirectoryName(c);
+
+            if (cDir != null && pDir != null && cDir == pDir)
+            {
+                return @".\" + Path.GetFileName(p).Replace('/', '\\');
+            }
+            else if (cDir != null)
+            {
+                var result = Path.GetRelativePath(cDir, p);
+
+                if (!isRootedWinPath.IsMatch(result) && !result.StartsWith('.'))
+                {
+                    return @".\" + result.Replace('/', '\\');
+                }
+                else
+                {
+                    return result.Replace('/', '\\');
+                }
+            }
+            else
+            {
+                return @".\" + Path.GetFileName(p).Replace('/', '\\');
+            }
+        }
+        
+        // This is needed because differencing disk parent locator logic is borked upstream
+        public static DiscUtils.Vhd.Disk? OpenDiskWithDu(string path, Log.ILog logger)
+        {
+            var maybeFooter = Util.ReadVhdFooterSafe(path);
+
+            if (maybeFooter == null)
+            {
+                logger.Error("Failed to read VHD footer");
+                return null;
+            }
+
+            var footer = maybeFooter;
+
+            if (footer.DiskType != VirtualHardDiskType.Differencing)
+            {
+                return new DiscUtils.Vhd.Disk(path, FileAccess.Read);
+            }
+            
+            var findParent = (string? maybeLocator, uint platformCode, string currentDiskPath) =>
+            {
+                if (maybeLocator != null &&
+                    platformCode == (uint)DynamicDiskHeader.ParentLocatorPlatformCode.WindowsUtf16Absolute)
+                {
+                    if (File.Exists(maybeLocator))
+                    {
+                        return maybeLocator;
+                    }
+                }
+                else if (maybeLocator != null &&
+                         platformCode == (uint)DynamicDiskHeader.ParentLocatorPlatformCode.WindowsUtf16Relative)
+                {
+                    var currentDiskDirName = Path.GetDirectoryName(currentDiskPath);
+                    
+                    var targetPath = Path.Combine(currentDiskDirName ?? "", maybeLocator.Replace('\\', Path.DirectorySeparatorChar));
+
+                    if (File.Exists(targetPath))
+                    {
+                        return targetPath;
+                    }
+                }
+
+                return null;
+            };
+            
+            var diskType = footer.DiskType;
+            var diskPath = path;
+
+            List<DiscUtils.Vhd.DiskImageFile> layers = [new DiscUtils.Vhd.DiskImageFile(diskPath, FileAccess.Read)];
+            
+            while (diskType == VirtualHardDiskType.Differencing)
+            {
+                using var diffHandler = new DifferencingVhdHandler(diskPath);
+                var locatorEntries = diffHandler.ReadParentLocators().ToArray();
+                var found = false;
+
+                foreach (var locatorEntry in locatorEntries)
+                {
+                    var maybeLocator = locatorEntry.Item2;
+                    var maybeParentPath = findParent(maybeLocator, locatorEntry.Item1.PlatformCode, diskPath);
+
+                    if (maybeParentPath != null)
+                    {
+                        var layer = new DiskImageFile(maybeParentPath, FileAccess.Read);
+                        layers.Add(layer);
+                        diskType = ConvertVhdTypeFromDuToDal(layer.Information.DiskType);
+                        diskPath = maybeParentPath;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                {
+                    logger.Error("Failed to find parent VHD");
+
+                    foreach (var locator in locatorEntries)
+                    {
+                        logger.Error($"Locator entry: ({(DynamicDiskHeader.ParentLocatorPlatformCode)locator.Item1.PlatformCode}) ({locator.Item2})");
+                    }
+
+                    return null;
+                }
+            }
+
+            return new DiscUtils.Vhd.Disk(layers, Ownership.Dispose);
+        }
+
+        public static FileType ConvertVhdTypeFromDalToDu(VirtualHardDiskType type)
+        {
+            return type switch
+            {
+                VirtualHardDiskType.Differencing => FileType.Differencing,
+                VirtualHardDiskType.Dynamic => FileType.Dynamic,
+                VirtualHardDiskType.Fixed => FileType.Fixed,
+                _ => FileType.None
+            };
+        }
+
+        public static VirtualHardDiskType ConvertVhdTypeFromDuToDal(FileType type)
+        {
+            return type switch
+            {
+                FileType.Differencing => VirtualHardDiskType.Differencing,
+                FileType.Dynamic => VirtualHardDiskType.Dynamic,
+                _ => VirtualHardDiskType.Fixed
+            };
         }
     }
 }

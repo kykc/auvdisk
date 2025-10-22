@@ -10,8 +10,8 @@ public class VhdMergeTest : IDisposable
     public void TestVhdMerge()
     {
         Assert.False(File.Exists("test_gpt_merged.vhd"));
-        
-        var logger = (string s) => { };
+
+        var logger = new LogWatcher();
         
         var fsHandler = (DiscFileSystem fs) =>
         {
@@ -32,14 +32,14 @@ public class VhdMergeTest : IDisposable
             }
         } ;
         
-        var parentPath = Path.Join("testdata", "test_gpt.vhd");
-        var childPath = Path.Join("testdata", "test_gpt_child.vhd");
+        var parentPath = Path.Join(Directory.GetCurrentDirectory(), "testdata", "test_gpt.vhd");
+        var childPath = Path.Join(Directory.GetCurrentDirectory(), "testdata", "test_gpt_child.vhd");
 
         var targetPath = "test_gpt_merged.vhd";
         
         auvdisk.Vhd.Merge.PerformMerge(parentPath, childPath, targetPath, logger, true);
 
-        var probeResult = new DiskProbe(targetPath, fsHandler, logger).Probe();
+        var probeResult = new DiskProbe(targetPath, logger, fsHandler).Probe();
 
         Assert.NotNull(probeResult.Disk);
         Assert.Equal("VHD", probeResult.Disk.ImageType);

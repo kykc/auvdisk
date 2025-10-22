@@ -1,4 +1,4 @@
-﻿namespace auvdisk.test
+namespace auvdisk.test
 {
     [CollectionDefinition("Sequential")]
     public class DatabaseCollection : ICollectionFixture<TestFixture>

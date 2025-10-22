@@ -6,6 +6,8 @@ using System.Text;
 using System.Threading.Tasks;
 using Spectre.Console;
 using auvdisk.Util;
+using DiscUtils.Streams;
+using DiscUtils.Vhd;
 
 namespace auvdisk.Vhd
 {
@@ -149,6 +151,17 @@ namespace auvdisk.Vhd
         public void Dispose()
         {
             _file.Dispose();
+        }
+
+        public IEnumerable<(ParentLocatorEntry, string?)> ReadParentLocators()
+        {
+            var entries = _dynamicHeader.GetParentLocatorEntries();
+
+            return entries.Select(pl =>
+            {
+                var maybeEntry = DynamicDiskHeader.ReadParentLocator(_file, pl);
+                return (pl, maybeEntry);
+            });
         }
 
         public void OutputDiagnosticInfo(Log.ILog logger)

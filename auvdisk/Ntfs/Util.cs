@@ -1,4 +1,4 @@
-﻿using auvdisk.Vhd;
+using auvdisk.Vhd;
 using DiscUtils;
 
 namespace auvdisk.Ntfs
@@ -18,13 +18,13 @@ namespace auvdisk.Ntfs
         private const int AbsoluteVolumeIdOffset = NtfsPbsOffset + NtfsVolumeIdOffsetInPbs;
 
         
-        public static string? ExtractUuid(DiscFileSystem fs, Action<string> logger)
+        public static string? ExtractUuid(DiscFileSystem fs, Log.ILog logger)
         {
             var fsStream = fs.RawStream;
             
             if (fsStream.Length < AbsoluteVolumeIdOffset + VolumeIdLength)
             {
-                logger("ERROR: Image file is too small to contain the NTFS Volume Serial Number.");
+                logger.Error("Image file is too small to contain the NTFS Volume Serial Number.");
                 return null;
             }
 
@@ -47,7 +47,7 @@ namespace auvdisk.Ntfs
             }
             catch (IOException ex)
             {
-                logger($"ERROR: {ex.Message}");
+                logger.Error($"{ex.Message}");
                 return null;
             }
         }

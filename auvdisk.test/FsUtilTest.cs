@@ -1,4 +1,4 @@
-﻿namespace auvdisk.test
+namespace auvdisk.test
 {
     [Collection("Sequential")]
     public class FsUtilTest : IDisposable
@@ -6,7 +6,7 @@
         [Fact]
         public void TestFileSegmentExtract()
         {
-            var logger = (string s) => { };
+            var logger = new LogWatcher();
 
             var sourceLoop = Path.Join("testdata", "ext4.loop");
             var intermediateVhd = "ext4.vhd";
@@ -23,7 +23,7 @@
 
             Assert.True(File.Exists(resultLoop));
 
-            var probeResult = new DiskProbe(resultLoop, null, logger).Probe();
+            var probeResult = new DiskProbe(resultLoop, logger).Probe();
 
             Assert.NotNull(probeResult.Fs);
             Assert.Null(probeResult.Disk);

@@ -1,4 +1,4 @@
-﻿using Spectre.Console;
+using Spectre.Console;
 using Spectre.Console.Rendering;
 
 namespace auvdisk.Log
@@ -9,6 +9,8 @@ namespace auvdisk.Log
         void Log(IRenderable log);
         void Log(string log);
         void Error(string error);
+        void Warning(string warning);
+        Action<string> ToAction();
     }
 
     public class Logger : ILog
@@ -20,7 +22,12 @@ namespace auvdisk.Log
 
         public void Error(string error)
         {
-            AnsiConsole.Markup($"[red]ERROR: {error}[/]");
+            AnsiConsole.MarkupLine($"[red]ERROR: {error}[/]");
+        }
+
+        public void Warning(string warning)
+        {
+            AnsiConsole.MarkupLine($"[yellow]WARNING: {warning}[/]");
         }
 
         public void Log(string s)
@@ -44,6 +51,35 @@ namespace auvdisk.Log
                     AnsiConsole.WriteLine(s);
                 }
             }
+        }
+
+        public Action<string> ToAction()
+        {
+            return Log;
+        }
+    }
+
+    public class NullLogger : ILog
+    {
+        public void Log(IRenderable log)
+        {
+        }
+
+        public void Log(string log)
+        {
+        }
+
+        public void Error(string error)
+        {
+        }
+
+        public void Warning(string warning)
+        {
+        }
+
+        public Action<string> ToAction()
+        {
+            return Log;
         }
     }
 }

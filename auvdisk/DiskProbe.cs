@@ -9,7 +9,7 @@ namespace auvdisk
 {
     public class DiskProbe
     {
-        public Action<string> Logger { get; private set; }
+        public Log.ILog Logger { get; private set; }
         public Action<DiscFileSystem> FsHandler { get; private set; }
         public string Path { get; private set; }
 
@@ -18,20 +18,20 @@ namespace auvdisk
         public record PartitionRecord(long StartLba, long EndLba, long SectorCountLba, Guid? PartGuid, Guid TypeGuid, Optional<FileSystemRecord> FileSystem);
         public record FileSystemRecord(string FsType, string VolumeLabel, long? Size, long? UsedSpace, long? AvailableSpace, long Offset, string? VolumeId);
 
-        public DiskProbe(string path, Action<DiscFileSystem>? fsHandler = null, Action<string>? logger = null)
+        public DiskProbe(string path, Log.ILog logger, Action<DiscFileSystem>? fsHandler = null)
         {
             FsHandler = fsHandler ?? ListFsRoot;
-            Logger = logger ?? ((string s) => Console.WriteLine(s));
+            Logger = logger;
             Path = path;
         }
 
         public ProbeResult Probe()
         {
-            Logger("Starting disk probe");
+            Logger.Log("Starting disk probe");
             
             if (!File.Exists(Path))
             {
-                Logger($"ERROR: source file {Path} does not exist");
+                Logger.Error($"Source file {Path} does not exist");
 
                 return new ProbeResult(null, null);
             }
@@ -43,7 +43,7 @@ namespace auvdisk
             }
             catch (IOException e)
             {
-                Logger($"ERROR: {e.Message}");
+                Logger.Error($"{e.Message}");
                 return new ProbeResult(null, null);
             }
             
@@ -52,33 +52,44 @@ namespace auvdisk
 
             if (maybeVhdFooter?.IsValid ?? false)
             {
-                Logger($"Valid VHD footer with id {maybeVhdFooter.UniqueId} was found, assuming VHD file format");
-                using var vhdDisk = new DiscUtils.Vhd.Disk(Path, FileAccess.Read);
+                Logger.Log($"Valid VHD footer with id [yellow]{maybeVhdFooter.UniqueId}[/] was found, assuming VHD file format");
+                
+                using var vhdDisk = Vhd.Util.OpenDiskWithDu(Path, Logger);
+                //using var vhdDisk = new DiscUtils.Vhd.Disk(Path, FileAccess.Read);
 
-                return new ProbeResult(HandleVirtualDisk(vhdDisk, "VHD", maybeVhdFooter.UniqueId), null);
+                if (vhdDisk != null)
+                {
+                    return new ProbeResult(HandleVirtualDisk(vhdDisk, "VHD", maybeVhdFooter.UniqueId), null);
+                }
+                else  
+                {
+                    // Basically this means that we're unable to locate parent for differencing VHD
+                    // Log will already have all the details
+                    return new ProbeResult(null, null);
+                }
             }
             else if (rawDisk is { IsPartitioned: true, Partitions: DiscUtils.Partitions.GuidPartitionTable} &&
                 rawDisk.Partitions.Partitions.Count > 0)
             {
-                Logger($"Found sensible GPT partition table at offset 0, assuming RAW disk image");
+                Logger.Log($"Found sensible GPT partition table at offset [yellow]0[/], assuming RAW disk image");
                 return new ProbeResult(HandleVirtualDisk(rawDisk, "RAW"), null);
             }
             else if (Extensions.Extensions.SuppressRef<Exception, DiscUtils.VirtualDisk>(() => VirtualDisk.OpenDisk(Path, FileAccess.Read))
                      is { } detectedDisk)
             {
-                Logger("Utilizing DiscUtils heuristics to determine possible disk image type");
+                Logger.Log("Utilizing DiscUtils heuristics to determine possible disk image type");
                 return new ProbeResult(HandleVirtualDisk(detectedDisk, GetDiskType(detectedDisk)), null);
             }
             else if (rawDisk is { IsPartitioned: true, Partitions: DiscUtils.Partitions.BiosPartitionTable } &&
                      rawDisk.Partitions.Partitions.Count > 0)
             {
-                Logger($"Found sensible MBR partition table at offset 0, assuming RAW disk image");
+                Logger.Log($"Found sensible MBR partition table at offset [yellow]0[/], assuming RAW disk image");
                 return new ProbeResult(HandleVirtualDisk(rawDisk, "RAW"), null);
             }
             else
             {
-                Logger(
-                    "WARNING: failed to determine virtual disk format, trying to open file as raw filesystem dump file");
+                Logger.Warning(
+                    "Failed to determine virtual disk format, trying to open file as raw filesystem dump file");
                 using var fsStream = new FileStream(Path, FileMode.Open, FileAccess.Read);
 
                 return new ProbeResult(null, HandleFileSystem(fsStream, 0, FsHandler));
@@ -105,56 +116,56 @@ namespace auvdisk
 
         public void ListFsRoot(DiscFileSystem fs)
         {
-            Logger("Listing filesystem root contents:");
+            Logger.Log("Listing filesystem root contents:");
 
             foreach (var dir in fs.GetDirectories(""))
             {
-                Logger("d   /" + dir.FormatDuPath());
+                Logger.Log("d   /" + dir.FormatDuPath());
             }
 
             foreach (var f in fs.GetFiles(""))
             {
-                Logger("    /" + f.FormatDuPath());
+                Logger.Log("    /" + f.FormatDuPath());
             }
         }
 
-        public static Action<DiscFileSystem> GetListArbitraryDir(string path, Action<string> logger)
+        public static Action<DiscFileSystem> GetListArbitraryDir(string path, Log.ILog logger)
         {
             return (DiscFileSystem fs) =>
             {
                 string prettyPath = "/" + path.FormatDuPath();
                 string searchPath = path.FormatDuPath(false);
 
-                logger("Listing contents of " + prettyPath + ":");
+                logger.Log("Listing contents of " + prettyPath + ":");
 
                 try
                 {
                     foreach (var dir in fs.GetDirectories(searchPath))
                     {
-                        logger("d   /" + dir.FormatDuPath());
+                        logger.Log("d   /" + dir.FormatDuPath());
                     }
 
                     foreach (var f in fs.GetFiles(searchPath))
                     {
-                        logger("    /" + f.FormatDuPath());
+                        logger.Log("    /" + f.FormatDuPath());
                     }
                 }
                 catch (DirectoryNotFoundException ex)
                 {
-                    logger("ERROR: " + ex.Message);
+                    logger.Error(ex.Message);
                 }
                 catch (ArgumentException ex) // Filename too long for FAT throws this
                 {
-                    logger("ERROR: " + ex.Message);
+                    logger.Error(ex.Message);
                 }
                 catch (Exception ex)
                 {
-                    logger("Unexpected Error " + ex.GetType().ToString() + ": " + ex.Message);
+                    logger.Error("Unexpected exception " + ex.GetType().ToString() + ": " + ex.Message);
                 }
             };
         }
 
-        public static Action<DiscFileSystem> GetCatArbitraryFile(string path, Action<string> logger)
+        public static Action<DiscFileSystem> GetCatArbitraryFile(string path, Log.ILog logger)
         {
             return (DiscFileSystem fs) =>
             {
@@ -165,7 +176,7 @@ namespace auvdisk
                 {
                     using (var stream = fs.OpenFile(searchPath, FileMode.Open))
                     {
-                        logger("File " + path + " contents:");
+                        logger.Log("File " + path + " contents:");
 
                         // Mostly to be able to intercept output in tests
                         // we still need to properly stream large files
@@ -173,32 +184,33 @@ namespace auvdisk
                         {
                             var streamReader = new StreamReader(stream);
                             
-                            logger(streamReader.ReadToEnd());
+                            logger.Log(streamReader.ReadToEnd());
                         }
                         else
                         {
+                            // TODO: support streaming in logger?
                             stream.CopyTo(Console.OpenStandardOutput());
                         }
                     }
                 }
                 catch (FileNotFoundException ex)
                 {
-                    logger("ERROR: " + ex.Message);
+                    logger.Error(ex.Message);
                 }
                 catch (ArgumentException ex) // Filename too long for fat throws this
                 {
-                    logger("ERROR: " + ex.Message);
+                    logger.Error(ex.Message);
                 }
                 catch (Exception ex)
                 {
-                    logger("Unexpected Error " + ex.GetType().ToString() + ": " + ex.Message);
+                    logger.Error("Unexpected exception " + ex.GetType().ToString() + ": " + ex.Message);
                 }
             };
         }
 
         private DiskRecord? HandleVirtualDisk(DiscUtils.VirtualDisk vdisk, string imageType, Guid? diskGuid = null)
         {
-            Logger($"Processing virtual disk of type {imageType} with LBA size {vdisk.SectorSize} bytes");
+            Logger.Log($"Processing virtual disk of type [yellow]{imageType}[/] with LBA size [yellow]{vdisk.SectorSize}[/] bytes");
             if (vdisk.IsPartitioned)
             {
                 var diskRecord = new DiskRecord( 
@@ -212,11 +224,11 @@ namespace auvdisk
 
                 if (diskRecord.PartTableGuid != null && diskRecord.PartTableGuid != Guid.Empty)
                 {
-                    Logger($"[green]Found partition table of type {diskRecord.PartitionTableType} with id {diskRecord.PartTableGuid}[/]");
+                    Logger.Log($"[green]Found partition table of type [yellow]{diskRecord.PartitionTableType}[/] with id [yellow]{diskRecord.PartTableGuid}[/][/]");
                 }
                 else
                 {
-                    Logger($"[green]Found partition table of type {diskRecord.PartitionTableType}[/]");
+                    Logger.Log($"[green]Found partition table of type [yellow]{diskRecord.PartitionTableType}[/][/]");
                 }
                 
                 var volumeManager = new VolumeManager(vdisk);
@@ -227,12 +239,12 @@ namespace auvdisk
 
                     if (partition.GuidType != Guid.Empty)
                     {
-                        Logger(
-                            $"[green]Found partition {idx} starting at {partition.FirstSector} LBA, ending at {partition.LastSector} LBA of type {partition.GuidType}[/]");
+                        Logger.Log(
+                            $"[green]Found partition [yellow]{idx}[/] starting at [yellow]{partition.FirstSector}[/] LBA, ending at [yellow]{partition.LastSector}[/] LBA of type [yellow]{partition.GuidType}[/][/]");
                     }
                     else
                     {
-                        Logger($"[green]Found partition {idx} starting at {partition.FirstSector} LBA, ending at {partition.LastSector}[/]");
+                        Logger.Log($"[green]Found partition [yellow]{idx}[/] starting at [yellow]{partition.FirstSector}[/] LBA, ending at [yellow]{partition.LastSector}[/][/]");
                     }
 
                     Guid? partGuid = null;
@@ -240,7 +252,7 @@ namespace auvdisk
                     if (partition is DiscUtils.Partitions.GuidPartitionInfo)
                     {
                         partGuid = (partition as DiscUtils.Partitions.GuidPartitionInfo)!.Identity;
-                        Logger($"[green]Partition ID: {partGuid.ToString()}[/]");
+                        Logger.Log($"[green]Partition ID: [yellow]{partGuid.ToString()}[/][/]");
                     }
                     
                     var maybeFsRecord = HandleFileSystem(partition.Open(), (ulong)partition.FirstSector * (ulong)vdisk.SectorSize, FsHandler, volume);
@@ -279,11 +291,11 @@ namespace auvdisk
 
             void OutputVolumeInfo(FileSystemRecord record)
             {
-                Logger($"[green]Found filesystem of type {record.FsType} at {record.Offset} bytes with length of {stream.Length} bytes[/]");
+                Logger.Log($"[green]Found filesystem of type [yellow]{record.FsType}[/] at [yellow]{record.Offset}[/] bytes with length of [yellow]{stream.Length}[/] bytes[/]");
 
                 if (record.VolumeId != null)
                 {
-                    Logger($"[green]Volume ID: {record.VolumeId}[/]");
+                    Logger.Log($"[green]Volume ID: [yellow]{record.VolumeId}[/][/]");
                 }
             }
             

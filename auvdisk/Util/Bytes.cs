@@ -1,4 +1,4 @@
-﻿namespace auvdisk.Util
+namespace auvdisk.Util
 {
     public class Bytes
     {

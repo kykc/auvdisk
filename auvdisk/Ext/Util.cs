@@ -1,4 +1,4 @@
-﻿using DiscUtils;
+using DiscUtils;
 
 namespace auvdisk.Ext
 {
@@ -12,13 +12,13 @@ namespace auvdisk.Ext
         private const int Ext4MagicOffsetInSuperblock = 56;
         private const int AbsoluteMagicOffset = Ext4SuperblockOffset + Ext4MagicOffsetInSuperblock;
 
-        public static Guid? ExtractUuid(DiscFileSystem fs, Action<string> logger)
+        public static Guid? ExtractUuid(DiscFileSystem fs, Log.ILog logger)
         {
             var fsStream = fs.RawStream;
             
             if (fsStream.Length < AbsoluteUuidOffset + UuidLength)
             {
-                logger("ERROR: Image file is too small to contain the ext4 superblock UUID.");
+                logger.Error("Image file is too small to contain the ext4 superblock UUID.");
                 return null;
             }
 
@@ -31,7 +31,7 @@ namespace auvdisk.Ext
                 // TODO: proper endinnaness check
                 if (!magicBytes.SequenceEqual(Ext4MagicValue) && !magicBytes.Reverse().SequenceEqual(Ext4MagicValue))
                 {
-                    logger($"ERROR: ext4 magic value not found");
+                    logger.Error($"ext4 magic value not found");
                     return null;
                 }
                 
@@ -48,7 +48,7 @@ namespace auvdisk.Ext
             }
             catch (IOException ex)
             {
-                logger($"ERROR: {ex.Message}");
+                logger.Error($"{ex.Message}");
                 return null;
             }
         }

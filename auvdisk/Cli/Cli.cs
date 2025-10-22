@@ -13,6 +13,9 @@ namespace auvdisk.Cli
     {
         [Option('s', "source", Required = true, HelpText = "Path to vdisk image file")]
         public string Source { get; set; } = "";
+
+        [Option('v', "verbose", Required = false, Default = false, HelpText = "Enable verbose output")]
+        public bool Verbose { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]

@@ -8,7 +8,7 @@ public class DiskProbeTest
     [Fact]
     public void TestNoSideEffects()
     {
-        var logger = (string s) => { };
+        var logger = new LogWatcher();
 
         var subjectVhd = Path.Join("testdata", "test_gpt.vhd");
         var subjectLoop = Path.Join("testdata", "ext4.loop");
@@ -16,8 +16,8 @@ public class DiskProbeTest
         var loopHashBefore = TestUtil.CalcSha256Hash(subjectLoop);
         var vhdHashBefore = TestUtil.CalcSha256Hash(subjectVhd);
 
-        var loopProbeResult = new DiskProbe(subjectLoop, null, logger).Probe();
-        var vhdProbeResult = new DiskProbe(subjectVhd, null, logger).Probe();
+        var loopProbeResult = new DiskProbe(subjectLoop, logger).Probe();
+        var vhdProbeResult = new DiskProbe(subjectVhd, logger).Probe();
         
         var loopHashAfter = TestUtil.CalcSha256Hash(subjectLoop);
         var vhdHashAfter = TestUtil.CalcSha256Hash(subjectVhd);
@@ -29,9 +29,9 @@ public class DiskProbeTest
     [Fact]
     public void TestDifferencingVhd()
     {
-        var logger = (string s) => { };
+        var logger = new LogWatcher();
         
-        var subjectVhd = Path.Join("testdata", "test_gpt_child.vhd");
+        var subjectVhd = Path.Join(Directory.GetCurrentDirectory(), "testdata", "test_gpt_child.vhd");
 
         var fsHandler = (DiscFileSystem fs) =>
         {
@@ -43,7 +43,7 @@ public class DiskProbeTest
             }
         };
         
-        var probeResult = new DiskProbe(subjectVhd, fsHandler, logger).Probe();
+        var probeResult = new DiskProbe(subjectVhd, logger, fsHandler).Probe();
         
         Assert.NotNull(probeResult.Disk);
         Assert.Equal("VHD", probeResult.Disk.ImageType);
@@ -56,11 +56,11 @@ public class DiskProbeTest
     [Fact]
     public void TestDynamicVhd()
     {
-        var logger = (string s) => { };
+        var logger = new LogWatcher();
         
         var subjectVhd = Path.Join("testdata", "dynamic_fat32.vhd");
         
-        var probeResult = new DiskProbe(subjectVhd, null, logger).Probe();
+        var probeResult = new DiskProbe(subjectVhd, logger).Probe();
         
         Assert.NotNull(probeResult.Disk);
         Assert.Equal(2, probeResult.Disk.Partitions.Count);
@@ -72,10 +72,10 @@ public class DiskProbeTest
     [Fact]
     public void TestExtLoop()
     {
-        var logger = (string s) => { };
+        var logger = new LogWatcher();
         var subjectLoop = Path.Join("testdata", "ext4.loop");
         
-        var probeResult =  new DiskProbe(subjectLoop, null, logger).Probe();
+        var probeResult =  new DiskProbe(subjectLoop, logger).Probe();
         
         Assert.NotNull(probeResult.Fs);
         Assert.Equal("EXT", probeResult.Fs.FsType);
@@ -85,18 +85,17 @@ public class DiskProbeTest
     [Fact]
     public void TestListDirectory()
     {
-        string log = "";
-        var logger = (string s) => { log += $"{s}\n"; };
+        var logger = new LogWatcher();
         var subjectVhd = Path.Join("testdata", "test_gpt.vhd");
 
         var fsHandler = DiskProbe.GetListArbitraryDir(@"\test_dir", logger);
 
-        var probeResult = new DiskProbe(subjectVhd, fsHandler, logger).Probe();
+        var probeResult = new DiskProbe(subjectVhd, logger, fsHandler).Probe();
         
         Assert.NotNull(probeResult.Disk);
 
         // I hate this but there's not much else I can do w/o rather intensive refactoring
-        var indexedLogLines = log.Split("\n").Select((line, idx) => (line, idx)).ToList();
+        var indexedLogLines = logger.GetAll().Select((line, idx) => (line, idx)).ToList();
         var line = indexedLogLines.First(x => x.line.StartsWith("Listing contents"));
 
         var remainder = indexedLogLines.Where(x => x.idx > line.idx);
@@ -108,17 +107,16 @@ public class DiskProbeTest
     [Fact]
     public void TestCatFile()
     {
-        string log = "";
-        var logger = (string s) => { log += $"{s}\n"; };
+        var logger = new LogWatcher();
         var subjectVhd = Path.Join("testdata", "test_gpt.vhd");
 
         var fsHandler = DiskProbe.GetCatArbitraryFile(@"\test_text.txt", logger);
 
-        var probeResult = new DiskProbe(subjectVhd, fsHandler, logger).Probe();
+        var probeResult = new DiskProbe(subjectVhd, logger, fsHandler).Probe();
         
         Assert.NotNull(probeResult.Disk);
 
         // I hate this but there's not much else I can do w/o rather intensive refactoring
-        Assert.Contains("test_text", log.Split("\n"));
+        Assert.Contains("test_text", logger.GetAll());
     }
 }

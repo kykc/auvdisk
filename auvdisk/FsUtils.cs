@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace auvdisk
@@ -25,7 +26,7 @@ namespace auvdisk
         }
 #pragma warning restore CA1416
 
-        public static string? ExtractUuid(DiscUtils.DiscFileSystem fs, Action<string> logger)
+        public static string? ExtractUuid(DiscUtils.DiscFileSystem fs, Log.ILog logger)
         {
             if (fs is DiscUtils.Ntfs.NtfsFileSystem)
             {

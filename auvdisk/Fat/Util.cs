@@ -1,11 +1,11 @@
-﻿using DiscUtils;
+using DiscUtils;
 using System;
 
 namespace auvdisk.Fat
 {
     public static class Util
     {
-        public static string? ExtractUuid(DiscFileSystem fs, Action<string> logger)
+        public static string? ExtractUuid(DiscFileSystem fs, Log.ILog logger)
         {
             var id = fs.VolumeId;
             // TODO: proper endianness

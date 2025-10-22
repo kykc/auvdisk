@@ -1,4 +1,4 @@
-﻿namespace auvdisk
+namespace auvdisk
 {
     public class SegmentStream : Stream
     {

@@ -66,11 +66,11 @@ namespace auvdisk.Extensions
             }
         }
 
-        public static Action WithCheckedVhdType(this Action action, string source, VirtualHardDiskType diskType, Action<string> logger)
+        public static Action WithCheckedVhdType(this Action action, string source, VirtualHardDiskType diskType, Log.ILog logger)
         {
             return () =>
             {
-                logger($"Checking that source VHD file is of type {diskType}");
+                logger.Log($"Checking that source VHD file is of type {diskType}");
 
                 var vhdFooter = Vhd.Util.ReadVhdFooterSafe(source);
 
@@ -80,34 +80,34 @@ namespace auvdisk.Extensions
                 }
                 else if (vhdFooter is { IsValid: false })
                 {
-                    logger($"ERROR: invalid VHD footer format");
+                    logger.Error($"Invalid VHD footer format");
                 }
                 else if (vhdFooter != null)
                 {
-                    logger($"ERROR: expected VHD of type {diskType}, got {vhdFooter.DiskType}");
+                    logger.Error($"Expected VHD of type {diskType}, got {vhdFooter.DiskType}");
                 }
                 else
                 {
-                    logger($"ERROR: failed to read VHD header");
+                    logger.Error($"Failed to read VHD header");
                 }
             };
         }
 
-        public static Action WithCheckedDiskType(this Action action, string diskType, string source, Action<string> logger, bool verbose)
+        public static Action WithCheckedDiskType(this Action action, string diskType, string source, Log.ILog logger, bool verbose)
         {
             return () =>
             {
-                logger($"Checking that source file contains valid {(diskType == "" ? "disk" : diskType)} image");
-
-                var probeResult = new DiskProbe(source, (DiscFileSystem) => { }, verbose ? logger : (string s) => { }).Probe();
+                logger.Log($"Checking that source file contains valid {(diskType == "" ? "disk" : diskType)} image");
+                
+                var probeResult = new DiskProbe(source, verbose ? logger : new Log.NullLogger(), system => { }).Probe();
 
                 if (probeResult.Disk == null)
                 {
-                    logger($"ERROR: no {diskType} footer and/or partition table found, exiting");
+                    logger.Error($"Mo {diskType} footer and/or partition table found, exiting");
                 }
                 else if (probeResult.Disk.ImageType != diskType && diskType != "")
                 {
-                    logger($"ERROR: expected {diskType} image file got {probeResult.Disk.ImageType}, exiting");
+                    logger.Error($"Expected {diskType} image file got {probeResult.Disk.ImageType}, exiting");
                 }
                 else
                 {
@@ -116,21 +116,21 @@ namespace auvdisk.Extensions
             };
         }
 
-        public static Action WithCheckedFsType(this Action action, string fsType, string source, Action<string> logger, bool verbose)
+        public static Action WithCheckedFsType(this Action action, string fsType, string source, Log.ILog logger, bool verbose)
         {
             return () =>
             {
-                logger($"Checking that source file contains valid {(fsType == "" ? "filesystem" : fsType)} image");
-
-                var probeResult = new DiskProbe(source, (DiscFileSystem) => { }, verbose ? logger : (string s) => { }).Probe();
+                logger.Log($"Checking that source file contains valid {(fsType == "" ? "filesystem" : fsType)} image");
+                
+                var probeResult = new DiskProbe(source, verbose ? logger : new Log.NullLogger(), system => { }).Probe();
 
                 if (probeResult.Fs == null)
                 {
-                    logger("ERROR: no filesystem found, exiting");
+                    logger.Error("No filesystem found, exiting");
                 }
                 else if (probeResult.Fs.FsType != fsType && fsType != "")
                 {
-                    logger($"ERROR: expected {fsType} filesystem, got {probeResult.Fs.FsType}, exiting");
+                    logger.Error($"Expected {fsType} filesystem, got {probeResult.Fs.FsType}, exiting");
                 }
                 else
                 {
@@ -139,15 +139,15 @@ namespace auvdisk.Extensions
             };
         }
 
-        public static Action WithCheckedSourceExists(this Action action, string source, Action<string> logger)
+        public static Action WithCheckedSourceExists(this Action action, string source, Log.ILog logger)
         {
             return () =>
             {
-                logger("Checking that source file exists");
+                logger.Log("Checking that source file exists");
 
                 if (!File.Exists(source))
                 {
-                    logger($"ERROR: source file {source} does not exist");
+                    logger.Error($"Source file {source} does not exist");
                 }
                 else
                 {
@@ -157,19 +157,19 @@ namespace auvdisk.Extensions
         }
 
         public static Action WithCheckedStreamBoundaries(this Action action, string path, 
-            ulong offset, ulong length, Action<string> logger)
+            ulong offset, ulong length, Log.ILog logger)
         {
             return () =>
             {
                 using var fileStream = new FileStream(path, FileMode.Open, FileAccess.Read);
                 
-                logger("Checking file stream boundaries");
+                logger.Log("Checking file stream boundaries");
 
                 ulong readBoundary = offset + length;
 
                 if (readBoundary > (ulong)fileStream.Length)
                 {
-                    logger($"ERROR: requested operation exceeds file length");
+                    logger.Error($"Requested operation exceeds file length");
                 }
                 else
                 {
@@ -178,15 +178,15 @@ namespace auvdisk.Extensions
             };
         }
 
-        public static Action WithCheckedTargetAvailable(this Action action, string target, Action<string> logger)
+        public static Action WithCheckedTargetAvailable(this Action action, string target, Log.ILog logger)
         {
             return () =>
             {
-                logger("Checking that target file doesn't exists");
+                logger.Log("Checking that target file doesn't exists");
 
                 if (File.Exists(target))
                 {
-                    logger($"ERROR: {target} already exists");
+                    logger.Error($"{target} already exists");
                 }
                 else
                 {

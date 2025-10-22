@@ -11,7 +11,7 @@ public class DiskImageConverterTest : IDisposable
     [Fact]
     public void TestLoopToVhdAndBack()
     {
-        var logger = (string s) => { };
+        var logger = new LogWatcher();
 
         var sep = Path.DirectorySeparatorChar;
         
@@ -50,7 +50,7 @@ public class DiskImageConverterTest : IDisposable
         
         auvdisk.Convert.DiskImageConverter.ConvertLoopToVhd(Path.Join("testdata", "ext4.loop"), "ext4.vhd", logger, false, true);
         
-        var probeResult = new DiskProbe("ext4.vhd", fsHandler, logger).Probe();
+        var probeResult = new DiskProbe("ext4.vhd", logger, fsHandler).Probe();
         
         Assert.NotNull(probeResult.Disk);
         Assert.Equal(2, probeResult.Disk.Partitions.Count);
@@ -63,7 +63,7 @@ public class DiskImageConverterTest : IDisposable
         
         auvdisk.Convert.DiskImageConverter.ConvertVhdToLoop("ext4.vhd", "ext4.loop", logger, false);
         
-        probeResult = new DiskProbe("ext4.loop", fsHandler, logger).Probe();
+        probeResult = new DiskProbe("ext4.loop", logger, fsHandler).Probe();
 
         Assert.NotNull(probeResult.Fs);
         Assert.Equal("FAT", probeResult.Fs.FsType);
@@ -71,7 +71,7 @@ public class DiskImageConverterTest : IDisposable
         File.Delete("ext4.loop");
         
         auvdisk.Convert.DiskImageConverter.ConvertVhdToLoop("ext4.vhd", "ext4.loop", logger, false, 1);
-        probeResult = new DiskProbe("ext4.loop", fsHandler, logger).Probe();
+        probeResult = new DiskProbe("ext4.loop", logger, fsHandler).Probe();
 
         Assert.NotNull(probeResult.Fs);
         Assert.Equal("EXT", probeResult.Fs.FsType);
@@ -82,8 +82,8 @@ public class DiskImageConverterTest : IDisposable
     {
         string original = Path.Join("testdata", "test_gpt.vhd");
         string subject = "test_gpt_subject.vhd";
-        
-        var logger = (string s) => { };
+
+        var logger = new LogWatcher();
 
         var fsHandler = (DiscFileSystem fs) =>
         {
@@ -121,7 +121,7 @@ public class DiskImageConverterTest : IDisposable
         
         auvdisk.Convert.DiskImageConverter.ConvertVhdToImg(subject, logger, false);
         
-        var probe = new DiskProbe(subject, fsHandler, logger);
+        var probe = new DiskProbe(subject, logger, fsHandler);
         probeResultHandler(probe.Probe(), "RAW");
         
         auvdisk.Convert.DiskImageConverter.ConvertImgToVhd(subject, logger, false);
