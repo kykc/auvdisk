@@ -1,4 +1,4 @@
-using System.Net;
+using auvdisk.DiskImage;
 using DiscUtils;
 
 namespace auvdisk.test;
@@ -37,7 +37,7 @@ public class VhdMergeTest : IDisposable
 
         var targetPath = "test_gpt_merged.vhd";
         
-        auvdisk.Vhd.Merge.PerformMerge(parentPath, childPath, targetPath, logger, true);
+        DiskImage.Vhd.Merge.PerformMerge(parentPath, childPath, targetPath, logger, true);
 
         var probeResult = new DiskProbe(targetPath, logger, fsHandler).Probe();
 

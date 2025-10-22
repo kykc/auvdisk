@@ -1,6 +1,6 @@
-namespace auvdisk.Util
+namespace auvdisk.Bytes
 {
-    public class Bytes
+    public class Util
     {
         public static void WriteBytes(byte[] bytes, byte[] sub, int offset)
         {

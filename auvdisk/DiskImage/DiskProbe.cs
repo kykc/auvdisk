@@ -5,7 +5,7 @@ using DiskAccessLibrary.FileSystems.NTFS;
 using DotNext;
 using DiskAccessLibrary.VHD;
 
-namespace auvdisk
+namespace auvdisk.DiskImage
 {
     public class DiskProbe
     {
@@ -74,7 +74,7 @@ namespace auvdisk
                 Logger.Log($"Found sensible GPT partition table at offset [yellow]0[/], assuming RAW disk image");
                 return new ProbeResult(HandleVirtualDisk(rawDisk, "RAW"), null);
             }
-            else if (Extensions.Extensions.SuppressRef<Exception, DiscUtils.VirtualDisk>(() => VirtualDisk.OpenDisk(Path, FileAccess.Read))
+            else if (Flow.SuppressRef<Exception, DiscUtils.VirtualDisk>(() => VirtualDisk.OpenDisk(Path, FileAccess.Read))
                      is { } detectedDisk)
             {
                 Logger.Log("Utilizing DiscUtils heuristics to determine possible disk image type");
@@ -282,9 +282,9 @@ namespace auvdisk
                 return new FileSystemRecord(
                     FsType: fsInfo.Name.ToUpper(), 
                     VolumeLabel: fs.VolumeLabel, 
-                    Size: Extensions.Extensions.SuppressVal<NotSupportedException, long>(() => fs.Size),
-                    AvailableSpace: Extensions.Extensions.SuppressVal<NotSupportedException, long>(() => fs.AvailableSpace),
-                    UsedSpace: Extensions.Extensions.SuppressVal<NotSupportedException, long>(() => fs.UsedSpace),
+                    Size: Flow.SuppressVal<NotSupportedException, long>(() => fs.Size),
+                    AvailableSpace: Flow.SuppressVal<NotSupportedException, long>(() => fs.AvailableSpace),
+                    UsedSpace: Flow.SuppressVal<NotSupportedException, long>(() => fs.UsedSpace),
                     VolumeId: volumeId, 
                     Offset: (long)offset);
             }
@@ -308,7 +308,7 @@ namespace auvdisk
                 return fsList.Select((fsInfo) =>
                 {
                     using var fs = fsInfo.Open(stream);
-                    var record = FillFsRecord(fsInfo, fs, FsUtils.ExtractUuid(fs, Logger));
+                    var record = FillFsRecord(fsInfo, fs, Fs.Util.ExtractUuid(fs, Logger));
                     OutputVolumeInfo(record);
                     impl(fs);
 

@@ -1,4 +1,5 @@
 using DiscUtils;
+using auvdisk.DiskImage;
 
 namespace auvdisk.test;
 

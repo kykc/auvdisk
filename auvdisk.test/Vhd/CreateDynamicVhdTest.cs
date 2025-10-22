@@ -12,8 +12,8 @@ namespace auvdisk.test.Vhd
             
             Assert.False(File.Exists(_targetPath));
             
-            auvdisk.Vhd.Util.CreateDynamicVhd(_targetPath, 1024 * 1024 * 1024, logger);
-            using var disk = auvdisk.Vhd.Util.OpenDiskWithDu(_targetPath, logger);
+            DiskImage.Vhd.Util.CreateDynamicVhd(_targetPath, 1024 * 1024 * 1024, logger);
+            using var disk = DiskImage.Vhd.Util.OpenDiskWithDu(_targetPath, logger);
             
             Assert.NotNull(disk);
             Assert.Single(disk.Layers);

@@ -1,9 +1,9 @@
 using DiscUtils;
 using System;
 
-namespace auvdisk.Fat
+namespace auvdisk.Fs.Fat
 {
-    public static class Util
+    public static class UuidExtractor
     {
         public static string? ExtractUuid(DiscFileSystem fs, Log.ILog logger)
         {

@@ -1,9 +1,8 @@
-using auvdisk.Vhd;
 using DiscUtils;
 
-namespace auvdisk.Ntfs
+namespace auvdisk.Fs.Ntfs
 {
-    public static class Util
+    public static class UuidExtractor
     {
         // Constants for the NTFS Partition Boot Sector (PBS)
         // The PBS starts at offset 0 of the partition/image.

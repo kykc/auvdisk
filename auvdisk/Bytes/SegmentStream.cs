@@ -1,4 +1,4 @@
-namespace auvdisk
+namespace auvdisk.Bytes
 {
     public class SegmentStream : Stream
     {

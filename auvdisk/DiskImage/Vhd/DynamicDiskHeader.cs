@@ -1,9 +1,7 @@
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using DiskAccessLibrary.VHD;
-using auvdisk.Util;
 
-namespace auvdisk.Vhd
+namespace auvdisk.DiskImage.Vhd
 {
     public class DynamicDiskHeader : DiskAccessLibrary.VHD.DynamicDiskHeader
     {
@@ -54,11 +52,11 @@ namespace auvdisk.Vhd
             // Recalculate checksum. We need it because upstream is plagued with bug which
             // sums only first 512 bytes. Also, I'm not sure about the ParentUnicodeName.
             // We're only swapping bytes, so it shouldn't affect the sum. IDK
-            Bytes.WriteBytes(bytes, new byte[4], 0x24);
+            Bytes.Util.WriteBytes(bytes, new byte[4], 0x24);
 
             var checksum = Util.CalculateChecksum(bytes, 0x24);
             
-            Bytes.WriteBytes(bytes, Bytes.ToBigEndian(checksum), 0x24);
+            Bytes.Util.WriteBytes(bytes, Bytes.Util.ToBigEndian(checksum), 0x24);
             
             return bytes;
         }

@@ -1,16 +1,11 @@
 #if WINDOWS
 using auvdisk.Interop;
 #endif
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
+using auvdisk.Bytes;
 
-namespace auvdisk
+namespace auvdisk.Fs
 {
-    public class FsUtils
+    public class Util
     {
 #pragma warning disable CA1416
         public static void CreateFileFastUnsafe(string target, ulong size)
@@ -30,15 +25,15 @@ namespace auvdisk
         {
             if (fs is DiscUtils.Ntfs.NtfsFileSystem)
             {
-                return Ntfs.Util.ExtractUuid(fs, logger);
+                return Ntfs.UuidExtractor.ExtractUuid(fs, logger);
             }
             else if (fs is DiscUtils.Fat.FatFileSystem)
             {
-                return Fat.Util.ExtractUuid(fs, logger);
+                return Fat.UuidExtractor.ExtractUuid(fs, logger);
             }
             else if (fs is DiscUtils.Ext.ExtFileSystem)
             {
-                return Ext.Util.ExtractUuid(fs, logger).ToString();
+                return Ext.UuidExtractor.ExtractUuid(fs, logger).ToString();
             }
             else
             {

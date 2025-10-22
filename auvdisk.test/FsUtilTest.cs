@@ -1,3 +1,5 @@
+using auvdisk.DiskImage;
+
 namespace auvdisk.test
 {
     [Collection("Sequential")]
@@ -15,11 +17,11 @@ namespace auvdisk.test
             Assert.False(File.Exists(intermediateVhd));
             Assert.False(File.Exists(resultLoop));
             
-            auvdisk.Convert.DiskImageConverter.ConvertLoopToVhd(sourceLoop, intermediateVhd, logger, false, true);
+            DiskImageConverter.ConvertLoopToVhd(sourceLoop, intermediateVhd, logger, false, true);
             
             Assert.True(File.Exists(intermediateVhd));
             
-            auvdisk.FsUtils.ExtractFileSegment(intermediateVhd, resultLoop,  537919488, 6274560);
+            Fs.Util.ExtractFileSegment(intermediateVhd, resultLoop,  537919488, 6274560);
 
             Assert.True(File.Exists(resultLoop));
 

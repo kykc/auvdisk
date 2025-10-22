@@ -14,8 +14,8 @@ namespace auvdisk.test.Vhd
             
             var logger = new LogWatcher();
             
-            auvdisk.Vhd.Util.CreateDifferentialVhd(_parentPath, _childPath, logger);
-            using var disk = auvdisk.Vhd.Util.OpenDiskWithDu(_childPath, logger);
+            DiskImage.Vhd.Util.CreateDifferentialVhd(_parentPath, _childPath, logger);
+            using var disk = DiskImage.Vhd.Util.OpenDiskWithDu(_childPath, logger);
             
             Assert.NotNull(disk);
             Assert.Equal(2, disk.Layers.Count());
@@ -29,8 +29,8 @@ namespace auvdisk.test.Vhd
             
             var logger = new LogWatcher();
             
-            auvdisk.Vhd.Util.CreateDifferentialVhd(Path.Join("testdata", "test_gpt_child.vhd"), _grandchildPath, logger);
-            using var disk = auvdisk.Vhd.Util.OpenDiskWithDu(_grandchildPath, logger);
+            DiskImage.Vhd.Util.CreateDifferentialVhd(Path.Join("testdata", "test_gpt_child.vhd"), _grandchildPath, logger);
+            using var disk = DiskImage.Vhd.Util.OpenDiskWithDu(_grandchildPath, logger);
 
             Assert.NotNull(disk);
             Assert.Equal(3, disk.Layers.Count());

@@ -54,9 +54,9 @@ namespace auvdisk.test.Vhd
         {
             var logger = new LogWatcher();
 
-            CheckChild(auvdisk.Vhd.Util.OpenDiskWithDu(Path.Join(".", "testdata", "test_gpt_child.vhd"), logger));
-            CheckChild(auvdisk.Vhd.Util.OpenDiskWithDu(Path.Join("testdata", "test_gpt_child.vhd"), logger));
-            CheckChild(auvdisk.Vhd.Util.OpenDiskWithDu(Path.Join(Directory.GetCurrentDirectory(), "testdata", "test_gpt_child.vhd"), logger));
+            CheckChild(DiskImage.Vhd.Util.OpenDiskWithDu(Path.Join(".", "testdata", "test_gpt_child.vhd"), logger));
+            CheckChild(DiskImage.Vhd.Util.OpenDiskWithDu(Path.Join("testdata", "test_gpt_child.vhd"), logger));
+            CheckChild(DiskImage.Vhd.Util.OpenDiskWithDu(Path.Join(Directory.GetCurrentDirectory(), "testdata", "test_gpt_child.vhd"), logger));
         }
 
         private static void CheckChild(DiscUtils.Vhd.Disk? disk)

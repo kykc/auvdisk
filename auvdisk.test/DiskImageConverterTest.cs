@@ -2,6 +2,7 @@ using DiscUtils;
 using DiscUtils.Ext;
 using DiscUtils.Fat;
 using DiskAccessLibrary.VHD;
+using auvdisk.DiskImage;
 
 namespace auvdisk.test;
 
@@ -48,7 +49,7 @@ public class DiskImageConverterTest : IDisposable
         Assert.False(File.Exists(@"ext4.vhd"));
         Assert.False(File.Exists(@"ext4.loop"));
         
-        auvdisk.Convert.DiskImageConverter.ConvertLoopToVhd(Path.Join("testdata", "ext4.loop"), "ext4.vhd", logger, false, true);
+        DiskImageConverter.ConvertLoopToVhd(Path.Join("testdata", "ext4.loop"), "ext4.vhd", logger, false, true);
         
         var probeResult = new DiskProbe("ext4.vhd", logger, fsHandler).Probe();
         
@@ -61,7 +62,7 @@ public class DiskImageConverterTest : IDisposable
         Assert.True(probeResult.Disk.Partitions[1].FileSystem.HasValue);
         Assert.Equal("EXT", probeResult.Disk.Partitions[1].FileSystem.Value.FsType);
         
-        auvdisk.Convert.DiskImageConverter.ConvertVhdToLoop("ext4.vhd", "ext4.loop", logger, false);
+        DiskImageConverter.ConvertVhdToLoop("ext4.vhd", "ext4.loop", logger, false);
         
         probeResult = new DiskProbe("ext4.loop", logger, fsHandler).Probe();
 
@@ -70,7 +71,7 @@ public class DiskImageConverterTest : IDisposable
 
         File.Delete("ext4.loop");
         
-        auvdisk.Convert.DiskImageConverter.ConvertVhdToLoop("ext4.vhd", "ext4.loop", logger, false, 1);
+        DiskImageConverter.ConvertVhdToLoop("ext4.vhd", "ext4.loop", logger, false, 1);
         probeResult = new DiskProbe("ext4.loop", logger, fsHandler).Probe();
 
         Assert.NotNull(probeResult.Fs);
@@ -118,13 +119,13 @@ public class DiskImageConverterTest : IDisposable
         
         // As this operation is in place, always copy file to have the clean one untouched
         File.Copy(original, subject);
-        
-        auvdisk.Convert.DiskImageConverter.ConvertVhdToImg(subject, logger, false);
+
+        DiskImageConverter.ConvertVhdToImg(subject, logger, false);
         
         var probe = new DiskProbe(subject, logger, fsHandler);
         probeResultHandler(probe.Probe(), "RAW");
-        
-        auvdisk.Convert.DiskImageConverter.ConvertImgToVhd(subject, logger, false);
+
+        DiskImageConverter.ConvertImgToVhd(subject, logger, false);
         probeResultHandler(probe.Probe(), "VHD");
 
         Assert.Equal(new FileInfo(original).Length, new FileInfo(subject).Length);

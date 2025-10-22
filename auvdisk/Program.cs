@@ -1,11 +1,6 @@
 using auvdisk.Extensions;
 using CommandLine;
-using System;
-using System.IO;
-using System.Net.Security;
-using System.Runtime.InteropServices;
-using auvdisk.Log;
-using Spectre.Console;
+using auvdisk.DiskImage;
 
 namespace auvdisk
 {
@@ -32,7 +27,7 @@ namespace auvdisk
 
                     if (result.Disk?.ImageType == "VHD" && opts.Verbose)
                     {
-                        Vhd.Util.OutputDiagnosticInfo(opts.Source, logger);
+                        DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Source, logger);
                     }
 
                     return 0;
@@ -53,25 +48,25 @@ namespace auvdisk
                 },
                 (Cli.LoopToVhd opts) =>
                 {
-                    Convert.DiskImageConverter.ConvertLoopToVhd(opts.Source, opts.Target, logger, opts.Verbose, opts.ZeroFill);
+                    DiskImageConverter.ConvertLoopToVhd(opts.Source, opts.Target, logger, opts.Verbose, opts.ZeroFill);
 
                     return 0;
                 },
                 (Cli.VhdToLoop opts) =>
                 {
-                    Convert.DiskImageConverter.ConvertVhdToLoop(opts.Source, opts.Target, logger, opts.Verbose, opts.PartIndex);
+                    DiskImageConverter.ConvertVhdToLoop(opts.Source, opts.Target, logger, opts.Verbose, opts.PartIndex);
 
                     return 0;
                 },
                 (Cli.ImgToVhd opts) =>
                 {
-                    Convert.DiskImageConverter.ConvertImgToVhd(opts.Source, logger, opts.Verbose);
+                    DiskImageConverter.ConvertImgToVhd(opts.Source, logger, opts.Verbose);
 
                     return 0;
                 },
                 (Cli.VhdToImg opts) =>
                 {
-                    Convert.DiskImageConverter.ConvertVhdToImg(opts.Source, logger, opts.Verbose);
+                    DiskImageConverter.ConvertVhdToImg(opts.Source, logger, opts.Verbose);
 
                     return 0;
                 },
@@ -79,8 +74,8 @@ namespace auvdisk
                 {
                     var action = () =>
                     {
-                        Vhd.Util.CreateDifferentialVhd(opts.Parent, opts.Child, logger);
-                        Vhd.Util.OutputDiagnosticInfo(opts.Child, logger);
+                        DiskImage.Vhd.Util.CreateDifferentialVhd(opts.Parent, opts.Child, logger);
+                        DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Child, logger);
                         new DiskProbe(opts.Child, logger).Probe();
                         logger.Log("Done!");
                     };
@@ -96,7 +91,7 @@ namespace auvdisk
                 {
                     var action = () =>
                     {
-                        Vhd.Util.CreateFixedVhd(opts.Target, opts.Size, logger, opts.ZeroFill);
+                        DiskImage.Vhd.Util.CreateFixedVhd(opts.Target, opts.Size, logger, opts.ZeroFill);
                     };
 
                     action
@@ -106,7 +101,7 @@ namespace auvdisk
                 },
                 (Cli.MergeVhd opts) =>
                 {
-                    Vhd.Merge.PerformMerge(opts.Parent, opts.Child, opts.Target, logger);
+                    DiskImage.Vhd.Merge.PerformMerge(opts.Parent, opts.Child, opts.Target, logger);
 
                     return 0;
                 },
@@ -114,8 +109,8 @@ namespace auvdisk
                 {
                     var action = () =>
                     {
-                        Vhd.Util.CreateDynamicVhd(opts.Target, opts.Size, logger);
-                        Vhd.Util.OutputDiagnosticInfo(opts.Target, logger);
+                        DiskImage.Vhd.Util.CreateDynamicVhd(opts.Target, opts.Size, logger);
+                        DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Target, logger);
                         new DiskProbe(opts.Target, logger).Probe();
                         logger.Log("Done!");
                     };
@@ -126,7 +121,7 @@ namespace auvdisk
                 },
                 (Cli.ExtractFile opts) =>
                 {
-                    var action = () => FsUtils.ExtractFileSegment(opts.Source, opts.Target, opts.Offset, opts.Length);
+                    var action = () => Fs.Util.ExtractFileSegment(opts.Source, opts.Target, opts.Offset, opts.Length);
                     
                     action
                         .WithCheckedStreamBoundaries(opts.Source, opts.Offset, opts.Length, logger)
@@ -137,7 +132,7 @@ namespace auvdisk
                 },
                 (Cli.DiagVhd opts) =>
                 {
-                    var action = () => Vhd.Util.OutputDiagnosticInfo(opts.Source, logger);
+                    var action = () => DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Source, logger);
 
                     action
                         .WithCheckedSourceExists(opts.Source, logger)();

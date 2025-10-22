@@ -1,15 +1,7 @@
 using DiskAccessLibrary.VHD;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Spectre.Console;
-using auvdisk.Util;
-using DiscUtils.Streams;
-using DiscUtils.Vhd;
 
-namespace auvdisk.Vhd
+namespace auvdisk.DiskImage.Vhd
 {
     class DifferencingVhdHandler : IDisposable
     {
@@ -53,7 +45,7 @@ namespace auvdisk.Vhd
                 _batEntries = new uint[maxTableEntries];
                 for (int i = 0; i < maxTableEntries; i++)
                 {
-                    _batEntries[i] = Bytes.FromBigEndianUInt32(batBytes, i * 4);
+                    _batEntries[i] = Bytes.Util.FromBigEndianUInt32(batBytes, i * 4);
                 }
             }
             else
@@ -202,7 +194,7 @@ namespace auvdisk.Vhd
             var checkMaxTableEntries =
                 _dynamicHeader.MaxTableEntries == _vhdFooter.CurrentSize / _dynamicHeader.BlockSize;
             var checkHeaderValid = Util.CalculateChecksum(_headerBytes, 0x24) ==
-                                   Bytes.FromBigEndianUInt32(_headerBytes, 0x24);
+                                   Bytes.Util.FromBigEndianUInt32(_headerBytes, 0x24);
 
             var checkString = (bool check) => check ? "[green]success[/]" : "[red]fail[/]";
             

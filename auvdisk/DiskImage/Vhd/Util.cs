@@ -4,12 +4,11 @@ using DiskAccessLibrary.VHD;
 using DiskAccessLibrary;
 using Spectre.Console;
 using System.Text;
-using auvdisk.Log;
 using DiscUtils.Vhd;
-using Disk = DiskAccessLibrary.Disk;
 using System.Text.RegularExpressions;
+using auvdisk.Cli;
 
-namespace auvdisk.Vhd
+namespace auvdisk.DiskImage.Vhd
 {
     public static class Util
     {

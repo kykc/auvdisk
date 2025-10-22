@@ -13,7 +13,7 @@ using auvdisk.Log;
 using DotNext.Collections.Generic;
 using Spectre.Console;
 
-namespace auvdisk.Convert
+namespace auvdisk.DiskImage
 {
     public static class DiskImageConverter
     {
@@ -63,6 +63,12 @@ namespace auvdisk.Convert
                 
                 using (var disk = Vhd.Util.OpenDiskWithDu(source, logger))
                 {
+                    if (disk == null)
+                    {
+                        // Logger already has all the details
+                        return;
+                    }
+
                     var dynamicOrDifferencing =
                         disk.Layers.Any((l) => l.IsSparse || l.NeedsParent) || disk.Layers.Count() > 1;
                     

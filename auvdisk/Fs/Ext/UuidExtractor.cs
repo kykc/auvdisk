@@ -1,8 +1,8 @@
 using DiscUtils;
 
-namespace auvdisk.Ext
+namespace auvdisk.Fs.Ext
 {
-    public static class Util
+    public static class UuidExtractor
     {
         private const int Ext4SuperblockOffset = 1024;
         private const int Ext4UuidOffsetInSuperblock = 104;

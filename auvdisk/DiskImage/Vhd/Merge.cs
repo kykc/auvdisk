@@ -1,12 +1,6 @@
-using DiskAccessLibrary;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Spectre.Console;
 
-namespace auvdisk.Vhd
+namespace auvdisk.DiskImage.Vhd
 {
     public static class Merge
     {
@@ -27,6 +21,12 @@ namespace auvdisk.Vhd
             
             using (var childDisk = Vhd.Util.OpenDiskWithDu(child, logger))
             {
+                if (childDisk == null)
+                {
+                    // Logger already has all the details
+                    return;
+                }
+
                 var layers = childDisk.Layers.ToList();
 
                 if (layers.Count != 2)

@@ -1,16 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
+using auvdisk.DiskImage;
 using DiskAccessLibrary.VHD;
 
 namespace auvdisk.Extensions
 {
-    internal static class Extensions
+    internal static class Flow
     {
-        public static TResult? SuppressRef<TException, TResult>(Func<TResult> func) 
+        public static TResult? SuppressRef<TException, TResult>(Func<TResult> func, Log.ILog? logger = null)
             where TException : Exception
             where TResult : class
         {
@@ -18,13 +13,15 @@ namespace auvdisk.Extensions
             {
                 return func();
             }
-            catch (TException)
+            catch (TException e)
             {
+                logger?.Warning(e.Message);
+
                 return null;
             }
         }
 
-        public static TResult? SuppressVal<TException, TResult>(Func<TResult> func)
+        public static TResult? SuppressVal<TException, TResult>(Func<TResult> func, Log.ILog? logger = null)
             where TException : Exception
             where TResult : struct
         {
@@ -32,21 +29,11 @@ namespace auvdisk.Extensions
             {
                 return func();
             }
-            catch (TException)
+            catch (TException e)
             {
-                return null;
-            }
-        }
+                logger?.Warning(e.Message);
 
-        public static string FormatDuPath(this string path, bool pretty = true)
-        {
-            if (pretty)
-            {
-                return path.TrimStart(new char[] { '\\', '/' }).Replace("\\", "/");
-            }
-            else
-            {
-                return path.TrimStart(new char[] { '\\', '/' }).Replace("/", "\\");
+                return null;
             }
         }
 
@@ -72,7 +59,7 @@ namespace auvdisk.Extensions
             {
                 logger.Log($"Checking that source VHD file is of type {diskType}");
 
-                var vhdFooter = Vhd.Util.ReadVhdFooterSafe(source);
+                var vhdFooter = DiskImage.Vhd.Util.ReadVhdFooterSafe(source);
 
                 if (vhdFooter != null && vhdFooter.DiskType == diskType && vhdFooter.IsValid)
                 {
