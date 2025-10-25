@@ -8,18 +8,23 @@ namespace auvdisk.Fs
     public class Util
     {
 #pragma warning disable CA1416
-        public static void CreateFileFastUnsafe(string target, ulong size)
+        public static bool ResizeFileFastUnsafe(string target, ulong size, Log.ILog logger)
         {
 #if WINDOWS
-            Win32.CreateFileFastUnsafe(target, size);
+            return auvdisk.Interop.Win32.ResizeFileFastUnsafe(target, size, logger).IsSuccess;
 #else
-            var stream = new FileStream(target, FileMode.CreateNew);
-            stream.Seek((long)size - 1, SeekOrigin.Begin);
-            stream.WriteByte(0);
-            stream.Close();
+            throw new PlatformNotSupportedException();
 #endif
         }
 #pragma warning restore CA1416
+
+        public static void ResizeFile(string target, ulong size, Log.ILog logger)
+        {
+            var stream = new FileStream(target, FileMode.OpenOrCreate);
+            stream.Seek((long)size - 1, SeekOrigin.Begin);
+            stream.WriteByte(0);
+            stream.Close();
+        }
 
         public static string? ExtractUuid(DiscUtils.DiscFileSystem fs, Log.ILog logger)
         {

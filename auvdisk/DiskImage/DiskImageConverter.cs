@@ -18,7 +18,7 @@ namespace auvdisk.DiskImage
     public static class DiskImageConverter
     {
         // TODO: make an option to disable prepending of EFI boot partition
-        public static void ConvertLoopToVhd(string source, string target, Log.ILog logger, bool verbose, bool zeroFill = false)
+        public static Flow<DiskProbe.ProbeResult> ConvertLoopToVhd(string source, string target, Log.ILog logger, bool verbose, bool zeroFill = false)
         {
             var action = () =>
             {
@@ -49,13 +49,14 @@ namespace auvdisk.DiskImage
                 logger.Log("Closed VHD, done! It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
             };
 
-            action
-                .WithCheckedTargetAvailable(target, logger)
-                .WithCheckedFsType("", source, logger, verbose) // this will effectively check that filesystem was recognized and will accept any type of FS
-                .WithCheckedSourceExists(source, logger)();
+            return Flow<None>.Ok(None.Value, logger)
+                .WithCheckedSourceExists(source)
+                .WithCheckedFsType("", source, verbose) // this will effectively check that filesystem was recognized and will accept any type of FS
+                .WithCheckedTargetAvailable(target)
+                .WithSideEffect(action);
         }
 
-        public static void ConvertVhdToLoop(string source, string target, Log.ILog logger, bool verbose, int partIdx = -1)
+        public static Flow<DiskProbe.ProbeResult> ConvertVhdToLoop(string source, string target, Log.ILog logger, bool verbose, int partIdx = -1)
         {
             var action = () =>
             {
@@ -111,13 +112,14 @@ namespace auvdisk.DiskImage
                 logger.Log("Done! It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
             };
 
-            action
-                .WithCheckedTargetAvailable(target, logger)
-                .WithCheckedDiskType("VHD", source, logger, verbose)
-                .WithCheckedSourceExists(source, logger)();
+            return Flow<None>.Ok(None.Value, logger)
+                .WithCheckedSourceExists(source)
+                .WithCheckedDiskType("VHD", source, verbose)
+                .WithCheckedTargetAvailable(target)
+                .WithSideEffect(action);
         }
 
-        public static void ConvertImgToVhd(string source, Log.ILog logger, bool verbose)
+        public static Flow<DiskProbe.ProbeResult> ConvertImgToVhd(string source, Log.ILog logger, bool verbose)
         {
             var action = () =>
             {
@@ -140,12 +142,14 @@ namespace auvdisk.DiskImage
                 logger.Log("Done! It's probably a good idea to rename file to *.vhd now");
             };
 
-            action
-                .WithCheckedDiskType("RAW", source, logger, verbose)
-                .WithCheckedSourceExists(source, logger)();
+            return Flow<None>.Ok(None.Value, logger)
+                .WithCheckedSourceExists(source)
+                .WithCheckedDiskType("RAW", source, verbose)
+                .WithSideEffect(action);
+
         }
 
-        public static void ConvertVhdToImg(string source, Log.ILog logger, bool verbose)
+        public static Flow<VHDFooter> ConvertVhdToImg(string source, Log.ILog logger, bool verbose)
         {
             var action = () =>
             {
@@ -161,10 +165,11 @@ namespace auvdisk.DiskImage
                 logger.Log("Done! It's probably a good idea to rename file to *.img or something similar now");
             };
 
-            action
-                .WithCheckedVhdType(source, VirtualHardDiskType.Fixed, logger)
-                .WithCheckedDiskType("VHD", source, logger, verbose)
-                .WithCheckedSourceExists(source, logger)();
+            return Flow<None>.Ok(None.Value, logger)
+                .WithCheckedSourceExists(source)
+                .WithCheckedDiskType("VHD", source, verbose)
+                .WithCheckedVhdType(source, VirtualHardDiskType.Fixed)
+                .WithSideEffect(action);
         }
     }
 }

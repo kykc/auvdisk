@@ -74,7 +74,7 @@ namespace auvdisk.DiskImage
                 Logger.Log($"Found sensible GPT partition table at offset [yellow]0[/], assuming RAW disk image");
                 return new ProbeResult(HandleVirtualDisk(rawDisk, "RAW"), null);
             }
-            else if (Flow.SuppressRef<Exception, DiscUtils.VirtualDisk>(() => VirtualDisk.OpenDisk(Path, FileAccess.Read))
+            else if (Utils.SuppressRef<Exception, DiscUtils.VirtualDisk>(() => VirtualDisk.OpenDisk(Path, FileAccess.Read))
                      is { } detectedDisk)
             {
                 Logger.Log("Utilizing DiscUtils heuristics to determine possible disk image type");
@@ -282,9 +282,9 @@ namespace auvdisk.DiskImage
                 return new FileSystemRecord(
                     FsType: fsInfo.Name.ToUpper(), 
                     VolumeLabel: fs.VolumeLabel, 
-                    Size: Flow.SuppressVal<NotSupportedException, long>(() => fs.Size),
-                    AvailableSpace: Flow.SuppressVal<NotSupportedException, long>(() => fs.AvailableSpace),
-                    UsedSpace: Flow.SuppressVal<NotSupportedException, long>(() => fs.UsedSpace),
+                    Size: Utils.SuppressVal<NotSupportedException, long>(() => fs.Size),
+                    AvailableSpace: Utils.SuppressVal<NotSupportedException, long>(() => fs.AvailableSpace),
+                    UsedSpace: Utils.SuppressVal<NotSupportedException, long>(() => fs.UsedSpace),
                     VolumeId: volumeId, 
                     Offset: (long)offset);
             }

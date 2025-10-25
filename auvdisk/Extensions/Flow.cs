@@ -1,185 +1,258 @@
-using auvdisk.DiskImage;
-using DiskAccessLibrary.VHD;
+using System.Net.WebSockets;
 
 namespace auvdisk.Extensions
 {
-    internal static class Flow
+    public class Value<TSubj>
+        where TSubj : struct
     {
-        public static TResult? SuppressRef<TException, TResult>(Func<TResult> func, Log.ILog? logger = null)
-            where TException : Exception
-            where TResult : class
+        private Value()
         {
-            try
-            {
-                return func();
-            }
-            catch (TException e)
-            {
-                logger?.Warning(e.Message);
-
-                return null;
-            }
         }
 
-        public static TResult? SuppressVal<TException, TResult>(Func<TResult> func, Log.ILog? logger = null)
-            where TException : Exception
-            where TResult : struct
+        public Value(TSubj value)
         {
-            try
-            {
-                return func();
-            }
-            catch (TException e)
-            {
-                logger?.Warning(e.Message);
-
-                return null;
-            }
+            Val = value;
         }
 
-        public static string ToReadableString(this DiscUtils.Partitions.PartitionTable partitionTable)
+        public static Value<TSubj> Some(TSubj value)
         {
-            if (partitionTable is DiscUtils.Partitions.GuidPartitionTable)
+            return new Value<TSubj>(value);
+        }
+
+        public TSubj Val { get; private set; }
+    }
+
+    public class None
+    {
+        private None()
+        {
+        }
+
+        public static readonly None Value = new();
+    }
+
+    public class Flow<TSubj> : IDisposable
+        where TSubj : class
+    {
+        private TSubj? Value { get; }
+        private string? Error { get; }
+        public Log.ILog Logger { get; }
+
+        private Flow(Log.ILog logger, TSubj? value, string? error)
+        {
+            Value = value;
+            Error = error;
+            Logger = logger;
+        }
+
+        private Flow(Log.ILog logger, string error)
+        {
+            Error = error;
+            Logger = logger;
+        }
+
+        public static Flow<TSubj> Ok(TSubj value, Log.ILog logger)
+        {
+            return new Flow<TSubj>(logger, value, null);
+        }
+
+        public static Flow<TSubj> Err(string error, Log.ILog logger)
+        {
+            return new Flow<TSubj>(logger, error);
+        }
+
+        public Flow<TRes> MapOr<TRes>(Func<TSubj, TRes?> mapper, string error)
+            where TRes : class
+        {
+            if (HasValue() && mapper(Value!) is { } newValue)
             {
-                return "GPT";
-            }
-            else if (partitionTable is DiscUtils.Partitions.BiosPartitionTable)
-            {
-                return "MBR";
+                return new Flow<TRes>(Logger, newValue, null);
             }
             else
             {
-                return partitionTable.GetType().ToString();
+                return new Flow<TRes>(Logger, Error ?? error);
             }
         }
 
-        public static Action WithCheckedVhdType(this Action action, string source, VirtualHardDiskType diskType, Log.ILog logger)
+        public Flow<TRes> Map<TRes>(Func<TSubj, TRes> mapper)
+            where TRes : class
         {
-            return () =>
-            {
-                logger.Log($"Checking that source VHD file is of type {diskType}");
-
-                var vhdFooter = DiskImage.Vhd.Util.ReadVhdFooterSafe(source);
-
-                if (vhdFooter != null && vhdFooter.DiskType == diskType && vhdFooter.IsValid)
-                {
-                    action();
-                }
-                else if (vhdFooter is { IsValid: false })
-                {
-                    logger.Error($"Invalid VHD footer format");
-                }
-                else if (vhdFooter != null)
-                {
-                    logger.Error($"Expected VHD of type {diskType}, got {vhdFooter.DiskType}");
-                }
-                else
-                {
-                    logger.Error($"Failed to read VHD header");
-                }
-            };
+            return HasValue()
+                ? new Flow<TRes>(Logger, mapper(Value!), null)
+                : new Flow<TRes>(Logger, Error ?? "Unexpected error");
         }
 
-        public static Action WithCheckedDiskType(this Action action, string diskType, string source, Log.ILog logger, bool verbose)
+        public Flow<TSubj> WithSideEffect(Action action)
         {
-            return () =>
+            if (HasValue())
             {
-                logger.Log($"Checking that source file contains valid {(diskType == "" ? "disk" : diskType)} image");
-                
-                var probeResult = new DiskProbe(source, verbose ? logger : new Log.NullLogger(), system => { }).Probe();
+                action();
+            }
 
-                if (probeResult.Disk == null)
-                {
-                    logger.Error($"Mo {diskType} footer and/or partition table found, exiting");
-                }
-                else if (probeResult.Disk.ImageType != diskType && diskType != "")
-                {
-                    logger.Error($"Expected {diskType} image file got {probeResult.Disk.ImageType}, exiting");
-                }
-                else
-                {
-                    action();
-                }
-            };
+            return this;
         }
 
-        public static Action WithCheckedFsType(this Action action, string fsType, string source, Log.ILog logger, bool verbose)
+        public Flow<TSubj> WithSideEffect(Action action, Func<bool> condition)
         {
-            return () =>
+            if (HasValue() && condition())
             {
-                logger.Log($"Checking that source file contains valid {(fsType == "" ? "filesystem" : fsType)} image");
-                
-                var probeResult = new DiskProbe(source, verbose ? logger : new Log.NullLogger(), system => { }).Probe();
+                action();
+            }
 
-                if (probeResult.Fs == null)
-                {
-                    logger.Error("No filesystem found, exiting");
-                }
-                else if (probeResult.Fs.FsType != fsType && fsType != "")
-                {
-                    logger.Error($"Expected {fsType} filesystem, got {probeResult.Fs.FsType}, exiting");
-                }
-                else
-                {
-                    action();
-                }
-            };
+            return this;
         }
 
-        public static Action WithCheckedSourceExists(this Action action, string source, Log.ILog logger)
+        public Flow<TRes> MapDispose<TRes>(Func<TSubj, TRes> mapper)
+            where TRes : class
         {
-            return () =>
+            if (HasValue())
             {
-                logger.Log("Checking that source file exists");
+                var val = mapper(Value!);
 
-                if (!File.Exists(source))
+                if (Value is IDisposable disposable)
                 {
-                    logger.Error($"Source file {source} does not exist");
+                    disposable.Dispose();
                 }
-                else
-                {
-                    action();
-                }
-            };
+
+                return new Flow<TRes>(Logger, val, null);
+            }
+            else
+            {
+                return new Flow<TRes>(Logger, Error ?? "Unexpected error");
+            }
         }
 
-        public static Action WithCheckedStreamBoundaries(this Action action, string path, 
-            ulong offset, ulong length, Log.ILog logger)
+        public Flow<TRes> MapDisposeOr<TRes>(Func<TSubj, TRes?> mapper, string error)
+            where TRes : class
         {
-            return () =>
+            var result = new Flow<TRes>(Logger, null, Error ?? error);
+
+            if (HasValue())
             {
-                using var fileStream = new FileStream(path, FileMode.Open, FileAccess.Read);
-                
-                logger.Log("Checking file stream boundaries");
-
-                ulong readBoundary = offset + length;
-
-                if (readBoundary > (ulong)fileStream.Length)
+                if (mapper(Value!) is { } newValue)
                 {
-                    logger.Error($"Requested operation exceeds file length");
+                    result = new Flow<TRes>(Logger, newValue, null);
                 }
-                else
+
+                if (Value is IDisposable disposable)
                 {
-                    action();
+                    disposable.Dispose();
                 }
-            };
+            }
+
+            return result;
         }
 
-        public static Action WithCheckedTargetAvailable(this Action action, string target, Log.ILog logger)
+        public Flow<TRes> Bind<TRes>(Func<TSubj, Flow<TRes>> binder)
+            where TRes : class
         {
-            return () =>
+            if (HasValue())
             {
-                logger.Log("Checking that target file doesn't exists");
+                return binder(Value!);
+            }
+            else
+            {
+                return new Flow<TRes>(Logger, Error ?? "Unexpected error");
+            }
+        }
 
-                if (File.Exists(target))
+        public Flow<TRes> TryMap<TRes, TE1>(Func<TSubj, TRes> mapper)
+            where TRes : class
+            where TE1 : Exception
+        {
+            try
+            {
+                return HasValue()
+                    ? new Flow<TRes>(Logger, mapper(Value!), null)
+                    : new Flow<TRes>(Logger, Error ?? "Unexpected error");
+            }
+            catch (TE1 ex)
+            {
+                return new Flow<TRes>(Logger, ex.Message);
+            }
+        }
+
+        public Flow<TSubj> Log(string msg)
+        {
+            if (HasValue())
+            {
+                Logger.Log(msg);
+            }
+
+            return this;
+        }
+
+        public Flow<TSubj> Check(Func<TSubj, bool> predicate, Func<TSubj, string> error)
+        {
+            if (HasValue())
+            {
+                if (predicate(Value!))
                 {
-                    logger.Error($"{target} already exists");
+                    return this;
                 }
                 else
                 {
-                    action();
+                    return new Flow<TSubj>(Logger, Error ?? error(Value!));
                 }
-            };
+            }
+            else
+            {
+                return this;
+            }
+        }
+
+        public TSubj Unwrap()
+        {
+            if (HasValue())
+            {
+                return Value!;
+            }
+            else
+            {
+                throw new NullReferenceException();
+            }
+        }
+
+        public string UnwrapErr()
+        {
+            if (Error != null)
+            {
+                return Error;
+            }
+            else
+            {
+                throw new NullReferenceException();
+            }
+        }
+
+        public bool LogErrorIfAny()
+        {
+            if (Error != null)
+            {
+                Logger.Error(Error);
+
+                return true;
+            }
+
+            return false;
+        }
+
+        public void Dispose()
+        {
+            if (Value is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+        }
+
+        public bool IsError()
+        {
+            return Error != null;
+        }
+
+        public bool HasValue()
+        {
+            return Value != null;
         }
     }
 }

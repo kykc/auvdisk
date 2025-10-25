@@ -27,21 +27,24 @@ packages directly from this repo (see `.gitea/workflows` for some examples on pa
 
 `auvdisk --help` output:
 
-|Command           |Description                                                                                      |
-|------------------|-------------------------------------------------------------------------------------------------|
-|probe-vdisk       |Probe disk image, try to guess the format, existing partitions and filesystems                   |
-|ls-vdisk          |Try to list specific directory in all filesystems that were found                                |
-|cat-vdisk         |Try to cat specific file in all filesystems that were found                                      |
-|conv-loop-to-vhd  |Wrap raw filesystem loop image into GPT VHD with prepended EFI boot partition                    |
-|conv-vhd-to-loop  |Unwrap VHD and create raw filesystem loop                                                        |
-|conv-img-to-vhd   |Append VHD footer to RAW image file (in-place)                                                   |
-|conv-vhd-to-img   |Delete VHD footer from image, effectively converting it to RAW image (in-place)                  |
-|create-diff-vhd   |Create differencing VHD image                                                                    |
-|create-fixed-vhd  |Create fixed size VHD image                                                                      |
-|merge-vhd         |Merge differencing VHD into parent. Only fixed parent and a single direct child pair is supported|
-|create-dynamic-vhd|Create dynamic VHD image                                                                         |
-|help              |Display more information on a specific command.                                                  |
-|version           |Display version information.                                                                     |
+| Command            | Description                                                                                         |
+|--------------------|-----------------------------------------------------------------------------------------------------|
+| probe-vdisk        | Probe disk image, try to guess the format, existing partitions and filesystems                      |
+| ls-vdisk           | Try to list specific directory in all filesystems that were found                                   |
+| cat-vdisk          | Try to cat specific file in all filesystems that were found                                         |
+| conv-loop-to-vhd   | Wrap raw filesystem loop image into GPT VHD with prepended EFI boot partition, formatted into FAT32 |
+| conv-vhd-to-loop   | Extract raw filesystem image from one of the partitions present in the source VHD image             |
+| conv-img-to-vhd    | Append VHD footer to RAW image file (in-place)                                                      |
+| conv-vhd-to-img    | Delete VHD footer from image, effectively converting it to RAW image (in-place)                     |
+| create-diff-vhd    | Create differencing VHD image                                                                       |
+| create-fixed-vhd   | Create fixed size VHD image                                                                         |
+| create-dynamic-vhd | Create dynamic VHD image                                                                            |
+| merge-vhd          | Merge differencing VHD into parent. Only fixed parent and a single direct child pair is supported   |
+| extract-file       | Extract file using offset and length in bytes                                                       |
+| diag-vhd           | Output VHD diagnostics info                                                                         |
+| resize-fixed-vhd   | Resize fixed VHD image                                                                              |
+| help               | Display more information on a specific command.                                                     |
+| version            | Display version information.                                                                        |
 
 ## Unit tests
 

@@ -8,7 +8,7 @@ namespace auvdisk.Fs.Ext
         private const int Ext4UuidOffsetInSuperblock = 104;
         private const int UuidLength = 16;
         private const int AbsoluteUuidOffset = Ext4SuperblockOffset + Ext4UuidOffsetInSuperblock;
-        private static readonly byte[] Ext4MagicValue = [0xEF, 0x53];
+        private static readonly byte[] Ext4MagicValue = [0x53, 0xEF];
         private const int Ext4MagicOffsetInSuperblock = 56;
         private const int AbsoluteMagicOffset = Ext4SuperblockOffset + Ext4MagicOffsetInSuperblock;
 
@@ -27,9 +27,8 @@ namespace auvdisk.Fs.Ext
                 fsStream.Seek(AbsoluteMagicOffset, SeekOrigin.Begin);
                 var magicBytes = new byte[sizeof(UInt16)];
                 fsStream.ReadExactly(magicBytes);
-                
-                // TODO: proper endinnaness check
-                if (!magicBytes.SequenceEqual(Ext4MagicValue) && !magicBytes.Reverse().SequenceEqual(Ext4MagicValue))
+
+                if (!magicBytes.SequenceEqual(Ext4MagicValue))
                 {
                     logger.Error($"ext4 magic value not found");
                     return null;
@@ -41,7 +40,6 @@ namespace auvdisk.Fs.Ext
                 
                 fsStream.ReadExactly(uuidBytes);
 
-                // TODO: proper endianness check
                 var uuid = new Guid(uuidBytes, true);
 
                 return uuid;

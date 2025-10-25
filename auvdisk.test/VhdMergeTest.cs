@@ -37,14 +37,37 @@ public class VhdMergeTest : IDisposable
 
         var targetPath = "test_gpt_merged.vhd";
         
-        DiskImage.Vhd.Merge.PerformMerge(parentPath, childPath, targetPath, logger, true);
+        using (var result = DiskImage.Vhd.Merge.PerformMerge(parentPath, childPath, targetPath, logger, true))
+        {
+            var resultDisk = result.Unwrap();
 
-        var probeResult = new DiskProbe(targetPath, logger, fsHandler).Probe();
+            Assert.Single(resultDisk.Layers);
 
-        Assert.NotNull(probeResult.Disk);
-        Assert.Equal("VHD", probeResult.Disk.ImageType);
-        Assert.Equal("GPT", probeResult.Disk.PartitionTableType);
-        Assert.Single(probeResult.Disk.Partitions);
+            var probeResult = new DiskProbe(targetPath, logger, fsHandler).Probe();
+
+            Assert.NotNull(probeResult.Disk);
+            Assert.Equal("VHD", probeResult.Disk.ImageType);
+            Assert.Equal("GPT", probeResult.Disk.PartitionTableType);
+            Assert.Single(probeResult.Disk.Partitions);
+        }
+
+        using (var result = DiskImage.Vhd.Merge.PerformMerge(parentPath, childPath, targetPath, logger, true))
+        {
+            Assert.Throws<NullReferenceException>(() => result.Unwrap());
+            Assert.Equal($"Target image {targetPath} already exists", result.UnwrapErr());
+        }
+
+        using (var result = DiskImage.Vhd.Merge.PerformMerge(parentPath + "bork", childPath, targetPath, logger, true))
+        {
+            Assert.Throws<NullReferenceException>(() => result.Unwrap());
+            Assert.Equal($"{parentPath}bork does not exist", result.UnwrapErr());
+        }
+
+        using (var result = DiskImage.Vhd.Merge.PerformMerge(parentPath, childPath + "bork", targetPath, logger, true))
+        {
+            Assert.Throws<NullReferenceException>(() => result.Unwrap());
+            Assert.Equal($"{childPath}bork does not exist", result.UnwrapErr());
+        }
     }
 
     public void Dispose()

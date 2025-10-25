@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using auvdisk.Extensions;
 using CommandLine;
 using auvdisk.DiskImage;
@@ -9,15 +10,27 @@ namespace auvdisk
     {
         static int Main(string[] args)
         {
+            var logger = new Log.Logger();
+
+            // Special case for launching self with Admin privileges to create large file fast.
+            // Somewhat hacky, we don't populate those CLI arguments in help as they're
+            // for internal use only
+            if (HandleResizeFileUnsafe(args, logger))
+            {
+                return 0;
+            }
+            else if (HandleMarkdownHelp(args, logger))
+            {
+                return 0;
+            }
+
             DiscUtils.Complete.SetupHelper.SetupComplete();
+
             var cliResult = Parser.Default.ParseArguments<
                 Cli.VdiskProbe, Cli.VdiskList, Cli.VdiskCat, Cli.LoopToVhd, 
                 Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg, Cli.CreateDiffVhd, 
                 Cli.CreateFixedVhd, Cli.MergeVhd, Cli.CreateDynamicVhd, Cli.ExtractFile,
-                Cli.DiagVhd>(args);
-
-            var logger = new Log.Logger();
-            var legacyLogger = logger.ToAction();
+                Cli.DiagVhd, Cli.ResizeFixedVhd>(args);
 
             var exitCode = cliResult.MapResult(
                 (Cli.VdiskProbe opts) =>
@@ -48,27 +61,27 @@ namespace auvdisk
                 },
                 (Cli.LoopToVhd opts) =>
                 {
-                    DiskImageConverter.ConvertLoopToVhd(opts.Source, opts.Target, logger, opts.Verbose, opts.ZeroFill);
+                    var result = DiskImageConverter.ConvertLoopToVhd(opts.Source, opts.Target, logger, opts.Verbose, opts.ZeroFill);
 
-                    return 0;
+                    return result.LogErrorIfAny() ? 1 : 0;
                 },
                 (Cli.VhdToLoop opts) =>
                 {
-                    DiskImageConverter.ConvertVhdToLoop(opts.Source, opts.Target, logger, opts.Verbose, opts.PartIndex);
+                    var result = DiskImageConverter.ConvertVhdToLoop(opts.Source, opts.Target, logger, opts.Verbose, opts.PartIndex);
 
-                    return 0;
+                    return result.LogErrorIfAny() ? 1 : 0;
                 },
                 (Cli.ImgToVhd opts) =>
                 {
-                    DiskImageConverter.ConvertImgToVhd(opts.Source, logger, opts.Verbose);
+                    var result = DiskImageConverter.ConvertImgToVhd(opts.Source, logger, opts.Verbose);
 
-                    return 0;
+                    return result.LogErrorIfAny() ? 1 : 0;
                 },
                 (Cli.VhdToImg opts) =>
                 {
-                    DiskImageConverter.ConvertVhdToImg(opts.Source, logger, opts.Verbose);
+                    var result = DiskImageConverter.ConvertVhdToImg(opts.Source, logger, opts.Verbose);
 
-                    return 0;
+                    return result.LogErrorIfAny() ?  1 : 0;
                 },
                 (Cli.CreateDiffVhd opts) =>
                 {
@@ -77,15 +90,16 @@ namespace auvdisk
                         DiskImage.Vhd.Util.CreateDifferentialVhd(opts.Parent, opts.Child, logger);
                         DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Child, logger);
                         new DiskProbe(opts.Child, logger).Probe();
-                        logger.Log("Done!");
                     };
 
-                    action
-                        .WithCheckedDiskType("VHD", opts.Parent, logger, opts.Verbose)
-                        .WithCheckedSourceExists(opts.Parent, logger)
-                        .WithCheckedTargetAvailable(opts.Child, logger)();
+                    var result = Flow<None>.Ok(None.Value, logger)
+                        .WithCheckedTargetAvailable(opts.Child)
+                        .WithCheckedSourceExists(opts.Parent)
+                        .WithCheckedDiskType("VHD", opts.Parent, opts.Verbose)
+                        .WithSideEffect(action)
+                        .Log("Done.");
 
-                    return 0;
+                    return result.LogErrorIfAny() ? 1 : 0;
                 },
                 (Cli.CreateFixedVhd opts) =>
                 {
@@ -94,16 +108,17 @@ namespace auvdisk
                         DiskImage.Vhd.Util.CreateFixedVhd(opts.Target, opts.Size, logger, opts.ZeroFill);
                     };
 
-                    action
-                            .WithCheckedTargetAvailable(opts.Target, logger)();
+                    var result = Flow<None>.Ok(None.Value, logger)
+                        .WithCheckedTargetAvailable(opts.Target)
+                        .WithSideEffect(action);
 
-                    return 0;
+                    return result.LogErrorIfAny() ? 1 : 0;
                 },
                 (Cli.MergeVhd opts) =>
                 {
-                    DiskImage.Vhd.Merge.PerformMerge(opts.Parent, opts.Child, opts.Target, logger);
+                    using var result = DiskImage.Vhd.Merge.PerformMerge(opts.Parent, opts.Child, opts.Target, logger);
 
-                    return 0;
+                    return result.LogErrorIfAny() ? 1 : 0;
                 },
                 (Cli.CreateDynamicVhd opts) =>
                 {
@@ -112,37 +127,115 @@ namespace auvdisk
                         DiskImage.Vhd.Util.CreateDynamicVhd(opts.Target, opts.Size, logger);
                         DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Target, logger);
                         new DiskProbe(opts.Target, logger).Probe();
-                        logger.Log("Done!");
                     };
-                    
-                    action.WithCheckedTargetAvailable(opts.Target, logger)();
-                    
-                    return 0;
+
+                    var result = Flow<None>.Ok(None.Value, logger)
+                        .WithCheckedTargetAvailable(opts.Target)
+                        .WithSideEffect(action)
+                        .Log("Done.");
+
+                    return result.LogErrorIfAny() ? 1 : 0;
                 },
                 (Cli.ExtractFile opts) =>
                 {
                     var action = () => Fs.Util.ExtractFileSegment(opts.Source, opts.Target, opts.Offset, opts.Length);
-                    
-                    action
-                        .WithCheckedStreamBoundaries(opts.Source, opts.Offset, opts.Length, logger)
-                        .WithCheckedTargetAvailable(opts.Target, logger)
-                        .WithCheckedSourceExists(opts.Source, logger)();
 
-                    return 0;
+                    var result = Flow<None>.Ok(None.Value, logger)
+                        .WithCheckedSourceExists(opts.Source)
+                        .WithCheckedTargetAvailable(opts.Target)
+                        .WithCheckedStreamBoundaries(opts.Source, opts.Offset, opts.Length)
+                        .WithSideEffect(action);
+
+                    return result.LogErrorIfAny() ? 1 : 0;
                 },
                 (Cli.DiagVhd opts) =>
                 {
                     var action = () => DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Source, logger);
 
-                    action
-                        .WithCheckedSourceExists(opts.Source, logger)();
+                    var result = Flow<None>.Ok(None.Value, logger)
+                        .WithCheckedSourceExists(opts.Source)
+                        .WithSideEffect(action);
                     
-                    return 0;
+                    return result.LogErrorIfAny() ? 1 : 0;
+                },
+                (Cli.ResizeFixedVhd opts) =>
+                {
+                    Action action = () => DiskImage.Vhd.Util.ResizeFixedVhd(opts.Target, opts.Size, logger);
+
+                    var result = Flow<None>.Ok(None.Value, logger)
+                        .WithCheckedSourceExists(opts.Target)
+                        .WithSideEffect(action);
+
+                    return result.LogErrorIfAny() ? 1 : 0;
                 },
                 _ => 1
             );
 
             return exitCode;
+        }
+
+        public static bool HandleMarkdownHelp(string[] args, Log.ILog logger)
+        {
+            if (args is ["markdown-help"])
+            {
+                var types = Cli.Util.GetTypesWithAttribute<VerbAttribute>()
+                    .Select(t => t.CustomAttributes.FirstOrDefault(a => a.AttributeType == typeof(VerbAttribute)))
+                    .Select(v => new
+                    {
+                        VerbName = v!.ConstructorArguments.First().Value,
+                        HelpText = v.NamedArguments.Where(x => x.MemberName == "HelpText")!.First().TypedValue.Value
+                    });
+
+                Console.WriteLine(auvdisk.Text.MarkdownGenerator.ToMarkdownTable(types, logger));
+
+                return true;
+            }
+
+            return false;
+        }
+
+        public static bool HandleResizeFileUnsafe(string[] args, Log.ILog logger)
+        {
+            if (args is ["resize-file-unsafe", _, _])
+            {
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    bool success = false;
+
+                    try
+                    {
+                        logger.Log($"Administrator privileges: {Environment.IsPrivilegedProcess}");
+                        var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+                        using var privilege =
+                            new Win32.TokenPrivileges.AdjustPrivilege(Win32.TokenPrivileges.PrivilegeName.SeManageVolumePrivilege);
+
+                        bool canManagerVolume = Win32.TokenPrivileges.PrivilegeProvider.HasPrivilege(null,
+                            currentProcess, Win32.TokenPrivileges.PrivilegeName.SeManageVolumePrivilege);
+
+                        logger.Log($"SeManageVolumePrivilege: {canManagerVolume}");
+
+                        success = Fs.Util.ResizeFileFastUnsafe(args[1], ulong.Parse(args[2]), logger);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.Error(Spectre.Console.Markup.Escape(ex.Message));
+                    }
+
+                    if (!success)
+                    {
+                        logger.Log("Falling back to slow mode");
+                        Fs.Util.ResizeFile(args[1], ulong.Parse(args[2]), logger);
+                    }
+                }
+                else
+                {
+                    Fs.Util.ResizeFile(args[1], ulong.Parse(args[2]), logger);
+                }
+
+                return true;
+            }
+
+            return false;
         }
     }
 }

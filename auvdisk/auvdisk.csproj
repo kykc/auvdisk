@@ -5,10 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>auvdisk</AssemblyName>
-    <Version>1.6.0</Version>
+    <Version>1.7.0</Version>
     <Authors>Alexander Automatl</Authors>
     <Company>Tomatl Inc</Company>
     <IsWindows Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Windows)))' == 'true'">true</IsWindows>
+    <NoWarn>NETSDK1206</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,6 +22,9 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Spectre.Console" Version="0.52.0" />
+    <PackageReference Include="Win32.TokenPrivileges" Version="1.0.19073.2">
+        <NoWarn>NU1701</NoWarn>
+    </PackageReference>
   </ItemGroup>
   <Target Name="PackChoco" DependsOnTargets="Publish">
      <Message Importance="High" Text="Packing $(PublishDir), generating nuspec:" />

@@ -41,7 +41,7 @@ namespace auvdisk.Fs.Ntfs
                 var part2 = BitConverter.ToUInt32(volumeIdBytes, 4);
                 
                 // Format as a standard 8-hex-digit-per-part string (e.g., 1A2B3C4D5E6F7081)
-                // TODO: proper endianness
+                // TODO: not sure if endianness check is needed here
                 return $"{part2:X8}{part1:X8}";
             }
             catch (IOException ex)

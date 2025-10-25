@@ -57,7 +57,7 @@ namespace auvdisk.DiskImage.Vhd
         public ulong MergeChangedSectorsIntoFixedParent(FileStream target)
         {
             ulong sectorsPerBlock = _dynamicHeader.BlockSize / BytesPerDiskSector;
-            int blockBitmapSectorCount = (int)Math.Ceiling((double)sectorsPerBlock / (BytesPerDiskSector * 8)); // TODO: verify
+            int blockBitmapSectorCount = (int)Math.Ceiling((double)sectorsPerBlock / (BytesPerDiskSector * 8));
             byte[] bitmap = new byte[blockBitmapSectorCount * BytesPerDiskSector];
             byte[] sector = new byte[BytesPerDiskSector];
 
@@ -116,7 +116,7 @@ namespace auvdisk.DiskImage.Vhd
 
             byte mask = (byte)(1 << (7 - (int)sectorInBlock % 8));
 
-            int blockBitmapSectorCount = (int)Math.Ceiling((double)sectorsPerBlock / (BytesPerDiskSector * 8)); // TODO: verify
+            int blockBitmapSectorCount = (int)Math.Ceiling((double)sectorsPerBlock / (BytesPerDiskSector * 8));
 
             byte[] bitmap = new byte[blockBitmapSectorCount * BytesPerDiskSector];
 

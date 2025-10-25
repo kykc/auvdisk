@@ -3,13 +3,13 @@ namespace auvdisk.Cli
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     internal static class CliTools
     {
-        public static void CreateWithVhdTool(string filename, ulong size)
+        public static void ResizeFileUnsafe(string filename, ulong size)
         {
             var config = new CommandExecutorConfig
             {
-                Executable = "vhdtool.exe",
+                Executable = System.Diagnostics.Process.GetCurrentProcess().MainModule!.FileName,
                 RequiresElevation = true,
-                Arguments = new List<string> { "/create", "\"" + filename + "\"", size.ToString() }, // TODO: proper shell escaping
+                Arguments = ["resize-file-unsafe", filename.Replace(" ", "\\ "), size.ToString()], // TODO: proper shell escaping
                 WaitForExit = true,
             };
 
@@ -22,27 +22,12 @@ namespace auvdisk.Cli
             {
                 Executable = "dd",
                 RequiresElevation = false,
-                Arguments = new List<string> { "if=/dev/zero", $"of={filename.Replace(" ", "\\ ")} ", "bs=1", "count=0", $"seek={size.ToString()}" }, // TODO: proper shell escaping
+                Arguments =
+                    ["if=/dev/zero", $"of={filename.Replace(" ", "\\ ")} ", "bs=1", "count=0", $"seek={size.ToString()}"], // TODO: proper shell escaping
                 WaitForExit = true
             };
 
             CommandExecutor.Execute(config);
-        }
-
-        // TODO: search in the executable path as well?
-        public static bool IsVhdToolPresent()
-        {
-            string path = Environment.GetEnvironmentVariable("PATH")!;
-            
-            foreach (var dir in path.Split(';'))
-            {
-                if (File.Exists(Path.Join(dir, "vhdtool.exe")))
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         public static bool IsDdPresent()

@@ -18,22 +18,22 @@ namespace auvdisk.DiskImage.Vhd
         {
             try
             {
-                using (var stream = new FileStream(source, FileMode.Open, FileAccess.Read))
+                using var stream = new FileStream(source, FileMode.Open, FileAccess.Read);
+
+                if (stream.Length > (long)LbaSize)
                 {
-                    if (stream.Length > (long)LbaSize)
-                    {
-                        byte[] footerBytes = new byte[LbaSize];
-                        stream.Seek(-(long)LbaSize, SeekOrigin.End);
-                        stream.ReadExactly(footerBytes);
+                    byte[] footerBytes = new byte[LbaSize];
+                    stream.Seek(-(long)LbaSize, SeekOrigin.End);
+                    stream.ReadExactly(footerBytes);
 
-                        var header = new VHDFooter(footerBytes);
+                    var header = new VHDFooter(footerBytes);
 
-                        return header.IsValid ? header : null;
-                    }
+                    return header.IsValid ? header : null;
                 }
             }
             catch (Exception)
             {
+                // ignored
             }
 
             return null;
@@ -49,6 +49,65 @@ namespace auvdisk.DiskImage.Vhd
             CreateNonFixedVhd(child, null, parent, logger);
         }
 
+        public static VirtualHardDisk? ResizeFixedVhd(string path, ulong size, Log.ILog logger, bool zeroFill = false)
+        {
+            if (size % LbaSize > 0)
+            {
+                size = RoundUp(size, LbaSize);
+                logger.Warning($"VHD size must be a multiple of {LbaSize}, rounded up size to {size}");
+            }
+
+            var maybeFooter = ReadVhdFooterSafe(path);
+
+            if (maybeFooter == null)
+            {
+                logger.Error($"Failed to read VHD footer of file {path}");
+                return null;
+            }
+
+            if (size <= maybeFooter.CurrentSize)
+            {
+                logger.Error($"Provided size is less or equal to the current VHD size");
+                return null;
+            }
+
+            if (maybeFooter.DiskType != VirtualHardDiskType.Fixed)
+            {
+                logger.Error($"Provided disk is not a fixed VHD file");
+                return null;
+            }
+
+            HandleResizeFile();
+
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Write);
+            fs.Seek(0, SeekOrigin.End);
+            var footer = CreateVhdFooter(size);
+            fs.Write(footer.GetBytes());
+            fs.Close();
+
+            logger.Log("Done.");
+            return new VirtualHardDisk(path);
+
+            void HandleResizeFile()
+            {
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !zeroFill)
+                {
+                    if (!Environment.IsPrivilegedProcess)
+                    {
+                        CliTools.ResizeFileUnsafe(path, size);
+                    }
+                    else
+                    {
+                        Program.HandleResizeFileUnsafe(["resize-file-unsafe", path, size.ToString()], logger);
+                    }
+                }
+                else
+                {
+                    Fs.Util.ResizeFile(path, size, logger);
+                }
+            }
+        }
+
         public static VirtualHardDisk CreateFixedVhd(string path, ulong size, Log.ILog logger, bool forceZeroFill = false)
         {
             if (size % LbaSize > 0)
@@ -58,10 +117,24 @@ namespace auvdisk.DiskImage.Vhd
             }
 
             // Faster due to disabled Windows FS security (resulting file contains contents from real disk, potential security issue)
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && CliTools.IsVhdToolPresent() && !forceZeroFill)
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !forceZeroFill)
             {
-                logger.Log("Found VhdTool, will use it to speed things up. You may receive UAC prompt");
-                CliTools.CreateWithVhdTool(path, size);
+                logger.Log("Zero-fill was not requested, will try to speed things up. You may receive UAC prompt");
+
+                if (!Environment.IsPrivilegedProcess)
+                {
+                    CliTools.ResizeFileUnsafe(path, size);
+                }
+                else
+                {
+                    Program.HandleResizeFileUnsafe(["resize-file-unsafe", path, size.ToString()], logger);
+                }
+
+                using var fs = new FileStream(path, FileMode.Open, FileAccess.Write);
+                fs.Seek(0, SeekOrigin.End);
+                var footer = CreateVhdFooter(size);
+                fs.Write(footer.GetBytes());
+                fs.Close();
                 
                 return new VirtualHardDisk(path);
             }

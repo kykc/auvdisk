@@ -162,4 +162,16 @@ namespace auvdisk.Cli
         [Option('s', "source", Required = true, HelpText = "Source VHD file path")]
         public string Source { get; set; } = "";
     }
+
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("resize-fixed-vhd", HelpText = "Resize fixed VHD image")]
+    class ResizeFixedVhd
+    {
+        [Option('t', "target", Required = true, HelpText = "Target VHD path")]
+        public string Target { get; set; } = "";
+        [Option('s', "size", Required = true, HelpText = "Target VHD size in bytes. Actual file will be 512 bytes longer, as it needs to contain VHD footer. Needs to be > current size")]
+        public ulong Size { get; set; } = 0;
+        [Option('z', "zero-fill", Required = false, Default = false, HelpText = "Zero-fill added space in resized VHD. May help avoiding creation of sparse file")]
+        public bool ZeroFill { get; set; } = false;
+    }
 }

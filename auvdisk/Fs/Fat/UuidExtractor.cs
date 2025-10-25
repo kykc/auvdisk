@@ -8,8 +8,13 @@ namespace auvdisk.Fs.Fat
         public static string? ExtractUuid(DiscFileSystem fs, Log.ILog logger)
         {
             var id = fs.VolumeId;
-            // TODO: proper endianness
-            var bytes = BitConverter.GetBytes(id).Reverse().ToArray();
+
+            var bytes = BitConverter.GetBytes(id);
+
+            if (BitConverter.IsLittleEndian)
+            {
+                bytes = bytes.Reverse().ToArray();
+            }
 
             var firstPart = bytes.Take(2).ToArray();
             var secondPart = bytes.Skip(2).ToArray();
