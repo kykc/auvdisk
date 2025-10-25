@@ -5,7 +5,7 @@ namespace auvdisk.test
 {
     public class FlowTest
     {
-        private ILog Logger { get; } = new LogWatcher();
+        private LogWatcher Logger { get; } = new LogWatcher();
 
         [Fact]
         public void TestMap()
@@ -40,11 +40,35 @@ namespace auvdisk.test
         public void TestMapDispose()
         {
             var disposable = new DisposableDummy();
+            bool sideEffectWasExecuted = false;
 
             var result = Flow<DisposableDummy>.Ok(disposable, Logger).MapDispose(x => x.DummyMember.Some());
             Assert.True(result.HasValue());
             Assert.Equal(42, result.Unwrap().Val);
             Assert.True(disposable.Disposed);
+
+            result = Flow<Value<int>>.Ok(42.Some(), Logger).MapDispose(x => (x.Val * 2).Some());
+            Assert.True(result.HasValue());
+            Assert.Equal(42 * 2, result.Unwrap().Val);
+            Assert.Throws<NullReferenceException>(() => result.UnwrapErr());
+            Assert.False(result.IsError());
+            result.WithSideEffect(() => sideEffectWasExecuted = true, () => false);
+            Assert.False(sideEffectWasExecuted);
+            result.WithSideEffect(() => sideEffectWasExecuted = true, () => true);
+            Assert.True(sideEffectWasExecuted);
+            result.LogErrorIfAny();
+            Assert.Empty(Logger.GetError());
+
+            result = Flow<Value<int>>.Err("Divide by zero", Logger).MapDispose<Value<int>>(x => throw new InvalidOperationException());
+            Assert.False(result.HasValue());
+            Assert.Throws<NullReferenceException>(() => result.Unwrap());
+            Assert.Equal("Divide by zero", result.UnwrapErr());
+            Assert.True(result.IsError());
+            result.WithSideEffect(() => sideEffectWasExecuted = false);
+            Assert.True(sideEffectWasExecuted);
+            result.LogErrorIfAny();
+            Assert.Single(Logger.GetError());
+            Assert.Equal("Divide by zero", Logger.GetError().First());
         }
 
         [Fact]
@@ -56,6 +80,39 @@ namespace auvdisk.test
             Assert.True(result.HasValue());
             Assert.Equal(42, result.Unwrap().Val);
             Assert.True(disposable.Disposed);
+        }
+
+        [Fact]
+        public void TestTryMap()
+        {
+            var result = Flow<Value<int>>.Ok(42.Some(), Logger)
+                .TryMap<string, InvalidOperationException>((_) => throw new InvalidOperationException());
+
+            Assert.False(result.HasValue());
+            Assert.Throws<DivideByZeroException>(() =>
+                Flow<Value<int>>.Ok(42.Some(), Logger)
+                    .TryMap<string, InvalidOperationException>((_) => throw new DivideByZeroException()));
+
+            result = Flow<string>.Err("Divide by zero", Logger)
+                .TryMap<string, NullReferenceException>(_ => throw new InvalidOperationException());
+
+            Assert.False(result.HasValue());
+        }
+
+        [Fact]
+        public void TestBind()
+        {
+            var result = Flow<Value<int>>.Ok(42.Some(), Logger).Bind((x) => Flow<string>.Ok(x.Val.ToString(), Logger));
+
+            Assert.True(result.HasValue());
+            Assert.Equal("42", result.Unwrap());
+
+            result = Flow<Value<int>>.Ok(42.Some(), Logger).Bind((x) => Flow<string>.Err("Divide by zero", Logger));
+            Assert.False(result.HasValue());
+            Assert.Throws<NullReferenceException>(() => result.Unwrap());
+
+            result = result.Bind<string>((x) => throw new NullReferenceException());
+            Assert.Equal("Divide by zero", result.UnwrapErr());
         }
     }
 }

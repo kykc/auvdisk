@@ -13,6 +13,7 @@ namespace auvdisk.Log
         Action<string> ToAction();
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     public class Logger : ILog
     {
         public void Log(IRenderable log)
@@ -59,6 +60,7 @@ namespace auvdisk.Log
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     public class NullLogger : ILog
     {
         public void Log(IRenderable log)

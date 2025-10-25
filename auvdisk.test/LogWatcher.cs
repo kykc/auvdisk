@@ -41,5 +41,10 @@ namespace auvdisk.test
         {
             return _all;
         }
+
+        public IEnumerable<string> GetError()
+        {
+            return _error;
+        }
     }
 }

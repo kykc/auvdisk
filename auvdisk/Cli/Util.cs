@@ -7,6 +7,7 @@ namespace auvdisk.Cli
 {
     public static class Util
     {
+        [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
         public static List<Type> GetTypesWithAttribute<TAttribute>() where TAttribute : Attribute
         {
             var foundTypes = new List<Type>();

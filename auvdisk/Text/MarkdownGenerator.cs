@@ -3,6 +3,7 @@ using System.Text;
 
 namespace auvdisk.Text
 {
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     public static class MarkdownGenerator
     {
         public static string? ToMarkdownTable<T>(IEnumerable<T> data, Log.ILog logger)
