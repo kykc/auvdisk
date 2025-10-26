@@ -92,13 +92,11 @@ public class DiskImageConverterTest : IDisposable
             Assert.Contains(fs.GetDirectories(@""), x => x == "test_dir");
             Assert.Single(fs.GetFiles(""));
 
-            using (var stream = fs.OpenFile(@"\test_text.txt", FileMode.Open, FileAccess.Read))
-            {
-                var reader = new StreamReader(stream);
-                var text = reader.ReadToEnd();
+            using var stream = fs.OpenFile(@"\test_text.txt", FileMode.Open, FileAccess.Read);
+            var reader = new StreamReader(stream);
+            var text = reader.ReadToEnd();
                 
-                Assert.Equal("test_text", text);
-            }
+            Assert.Equal("test_text", text);
         };
 
         var probeResultHandler = (DiskProbe.ProbeResult probeResult, string imageType) =>
@@ -140,10 +138,61 @@ public class DiskImageConverterTest : IDisposable
         Assert.Equal(originalVhdFooter.OriginalSize, resultVhdFooter.OriginalSize);
     }
 
+    [Fact]
+    public void TestVhdToVhdxAndBack()
+    {
+        string original = Path.Join("testdata", "test_gpt.vhd");
+        string target = Path.Join(Directory.GetCurrentDirectory(), "test_gpt.vhdx");
+        string targetBack = Path.Join(Directory.GetCurrentDirectory(), "test_gpt_back.vhd");
+
+        Assert.False(File.Exists(target));
+        Assert.False(File.Exists(targetBack));
+
+        var logger = new LogWatcher();
+
+        var fsHandler = (DiscFileSystem fs) =>
+        {
+            Assert.Single(fs.GetDirectories(@""));
+            Assert.Contains(fs.GetDirectories(@""), x => x == "test_dir");
+            Assert.Single(fs.GetFiles(""));
+
+            using var stream = fs.OpenFile(@"\test_text.txt", FileMode.Open, FileAccess.Read);
+            var reader = new StreamReader(stream);
+            var text = reader.ReadToEnd();
+
+            Assert.Equal("test_text", text);
+        };
+
+        var result = DiskImageConverter.ConvertVhdToFixedVhdx(original, target, logger, false);
+        Assert.True(result.HasValue());
+
+        var probeResult = new DiskProbe(target, logger, fsHandler).Probe();
+
+        Assert.NotNull(probeResult.Disk);
+        Assert.Equal("VHDX", probeResult.Disk.ImageType);
+        Assert.Single(probeResult.Disk.Partitions);
+
+        var resultBack = DiskImageConverter.ConvertVhdxToFixedVhd(target, targetBack, logger, false);
+        Assert.True(resultBack.HasValue());
+
+        var probeResultBack = new DiskProbe(targetBack, logger, fsHandler).Probe();
+
+        Assert.NotNull(probeResult.Disk);
+        Assert.Equal("VHD", probeResultBack.Disk!.ImageType);
+        Assert.Single(probeResultBack.Disk.Partitions);
+
+        using var initialVhd = DiscUtils.VirtualDisk.OpenDisk(original, "vhd", FileAccess.Read, "", "");
+        using var resultVhd = DiscUtils.VirtualDisk.OpenDisk(targetBack, "vhd", FileAccess.Read, "", "");
+
+        Assert.Equal(TestUtil.CalcSha256Hash(initialVhd.Content), TestUtil.CalcSha256Hash(resultVhd.Content));
+    }
+
     public void Dispose()
     {
         File.Delete("test_gpt_subject.vhd");
         File.Delete("ext4.vhd");
         File.Delete("ext4.loop");
+        File.Delete("test_gpt.vhdx");
+        File.Delete("test_gpt_back.vhd");
     }
 }

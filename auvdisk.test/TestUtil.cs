@@ -27,11 +27,15 @@ public class TestUtil
     
     public static string CalcSha256Hash(string file)
     {
-        using (FileStream stream = File.OpenRead(file))
-        {
-            var sha = SHA256.Create();
-            byte[] checksum = sha.ComputeHash(stream);
-            return BitConverter.ToString(checksum).Replace("-", String.Empty);
-        }
+        using FileStream stream = File.OpenRead(file);
+
+        return CalcSha256Hash(stream);
+    }
+
+    public static string CalcSha256Hash(Stream stream)
+    {
+        var sha = SHA256.Create();
+        byte[] checksum = sha.ComputeHash(stream);
+        return BitConverter.ToString(checksum).Replace("-", String.Empty);
     }
 }

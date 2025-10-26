@@ -268,6 +268,19 @@ namespace auvdisk.DiskImage.Vhd
                 logger.Log($"[yellow]Timestamp[/]: {maybeFooter.TimeStamp}");
                 logger.Log($"[yellow]Data offset in bytes[/]: {dataOffsetStr}");
                 logger.Log($"[yellow]Footer validation[/]: {(maybeFooter.IsValid ? "[green]valid[/]": "[red]invalid[/]")}");
+
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    var isSparse = Fs.Util.IsSparseFile(path, logger);
+                    string isSparseString = isSparse switch
+                    {
+                        true => "[red]yes[/]",
+                        false => "[green]no[/]",
+                        _ => "[red]error[/]"
+                    };
+
+                    logger.Log($"[yellow]Is sparse[/]: {isSparseString}");
+                }
                 
                 if (dynamicTypes.Contains(diskType))
                 {

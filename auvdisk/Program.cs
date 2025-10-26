@@ -2,6 +2,8 @@ using System.Runtime.InteropServices;
 using auvdisk.Extensions;
 using CommandLine;
 using auvdisk.DiskImage;
+using auvdisk.Cli;
+using DiscUtils.Streams;
 
 namespace auvdisk
 {
@@ -30,7 +32,8 @@ namespace auvdisk
                 Cli.VdiskProbe, Cli.VdiskList, Cli.VdiskCat, Cli.LoopToVhd, 
                 Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg, Cli.CreateDiffVhd, 
                 Cli.CreateFixedVhd, Cli.MergeVhd, Cli.CreateDynamicVhd, Cli.ExtractFile,
-                Cli.DiagVhd, Cli.ResizeFixedVhd>(args);
+                Cli.DiagVhd, Cli.ResizeFixedVhd, Cli.CheckIsSparse, Cli.VhdToVhdx,
+                Cli.VhdxToVhd>(args);
 
             var exitCode = cliResult.MapResult(
                 (Cli.VdiskProbe opts) =>
@@ -168,7 +171,31 @@ namespace auvdisk
 
                     return result.LogErrorIfAny() ? 1 : 0;
                 },
-                _ => 1
+                (Cli.CheckIsSparse opts) =>
+                {
+                    var result = Fs.Util.IsSparseFile(opts.Target, logger);
+
+                    if (result != null)
+                    {
+                        logger.Log($"Is sparse file: {result}");
+                    }
+
+                    return result == null ? 1 : 0;
+                },
+                (Cli.VhdToVhdx opts) =>
+                {
+                    var result =
+                        DiskImageConverter.ConvertVhdToFixedVhdx(opts.Source, opts.Target, logger, opts.Verbose);
+
+                    return result.LogErrorIfAny() ? 1 : 0;
+                },
+                (Cli.VhdxToVhd opts) =>
+                {
+                    var result = DiskImageConverter.ConvertVhdxToFixedVhd(opts.Source, opts.Target, logger, opts.Verbose);
+
+                    return result.LogErrorIfAny() ? 1 : 0;
+                },
+                _ => 2
             );
 
             return exitCode;

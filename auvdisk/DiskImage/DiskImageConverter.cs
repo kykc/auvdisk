@@ -119,6 +119,57 @@ namespace auvdisk.DiskImage
                 .WithSideEffect(action);
         }
 
+        public static Flow<DiskProbe.ProbeResult> ConvertVhdToFixedVhdx(string source, string target, ILog logger,
+            bool verbose)
+        {
+            var action = () =>
+            {
+                // DU is very brittle if VHD constructor is used directly, need to use factory
+                // See auvdisk.test/Vhd/ParentLocatorTest for details
+                using var vhd = VirtualDisk.OpenDisk(source, "vhd", FileAccess.Read, "", "")!;
+
+                using var targetStream =
+                    new FileStream(target, FileMode.Create, FileAccess.ReadWrite);
+                using var vhdx = DiscUtils.Vhdx.Disk.InitializeFixed(targetStream, DiscUtils.Streams.Ownership.None, vhd.Capacity)!;
+
+                vhd.Content.CopyTo(vhdx.Content);
+                targetStream.Flush();
+                logger.Log("Done.");
+            };
+
+            return Flow<None>.Ok(None.Value, logger)
+                .WithCheckedSourceExists(source)
+                .WithCheckedDiskType("VHD", source, verbose)
+                .WithCheckedTargetAvailable(target)
+                .WithSideEffect(action);
+        }
+
+        public static Flow<DiskProbe.ProbeResult> ConvertVhdxToFixedVhd(string source, string target, ILog logger,
+            bool verbose)
+        {
+            var action = () =>
+            {
+                // DU is very brittle if VHD constructor is used directly, need to use factory
+                // See auvdisk.test/Vhd/ParentLocatorTest for details
+                using var vhdx = VirtualDisk.OpenDisk(source, "vhdx", FileAccess.Read, "", "");
+
+                using var targetStream =
+                    new FileStream(target, FileMode.Create, FileAccess.ReadWrite);
+                using var vhd =
+                    DiscUtils.Vhd.Disk.InitializeFixed(targetStream, DiscUtils.Streams.Ownership.None, vhdx.Capacity);
+
+                vhdx.Content.CopyTo(vhd.Content);
+                targetStream.Flush();
+                logger.Log("Done.");
+            };
+
+            return Flow<None>.Ok(None.Value, logger)
+                .WithCheckedSourceExists(source)
+                .WithCheckedDiskType("VHDX", source, verbose)
+                .WithCheckedTargetAvailable(target)
+                .WithSideEffect(action);
+        }
+
         public static Flow<DiskProbe.ProbeResult> ConvertImgToVhd(string source, Log.ILog logger, bool verbose)
         {
             var action = () =>

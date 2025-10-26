@@ -78,7 +78,10 @@ namespace auvdisk.DiskImage
                      is { } detectedDisk)
             {
                 Logger.Log("Utilizing DiscUtils heuristics to determine possible disk image type");
-                return new ProbeResult(HandleVirtualDisk(detectedDisk, GetDiskType(detectedDisk)), null);
+                var result = new ProbeResult(HandleVirtualDisk(detectedDisk, GetDiskType(detectedDisk)), null);
+                detectedDisk.Dispose();
+
+                return result;
             }
             else if (rawDisk is { IsPartitioned: true, Partitions: DiscUtils.Partitions.BiosPartitionTable } &&
                      rawDisk.Partitions.Partitions.Count > 0)
@@ -101,7 +104,8 @@ namespace auvdisk.DiskImage
             var knownTypes = new Dictionary<Type, string>
             {
                 {typeof(DiscUtils.Raw.Disk), "RAW"},
-                {typeof(DiscUtils.Vhd.Disk), "VHD"} 
+                {typeof(DiscUtils.Vhd.Disk), "VHD"},
+                {typeof(DiscUtils.Vhdx.Disk), "VHDX"}
             };
 
             if (knownTypes.ContainsKey(disk.GetType()))
@@ -110,7 +114,7 @@ namespace auvdisk.DiskImage
             }
             else
             {
-                return disk.GetType().Name;
+                return disk.GetType().FullName ?? disk.GetType().Name;
             }
         }
 

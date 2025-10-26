@@ -79,9 +79,31 @@ namespace auvdisk.Interop
             }
         }
 
-        public static bool IsSparseFile(string target)
+        [SupportedOSPlatform("windows5.1.2600")]
+        public static bool? IsSparseFile(string target, Log.ILog logger)
         {
-            throw new NotImplementedException();
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                logger.Error("This call is supported only on Windows");
+                return null;
+            }
+
+            uint attributes = PInvoke.GetFileAttributes(target);
+
+            if (attributes == 0xFFFFFFFF)
+            {
+                try
+                {
+                    Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
+                }
+                catch (Exception e)
+                {
+                    logger.Error(e.Message);
+                    return null;
+                }
+            }
+
+            return (attributes & (uint)FILE_FLAGS_AND_ATTRIBUTES.FILE_ATTRIBUTE_SPARSE_FILE) != 0;
         }
     }
 }

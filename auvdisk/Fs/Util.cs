@@ -2,6 +2,7 @@
 using auvdisk.Interop;
 #endif
 using auvdisk.Bytes;
+using auvdisk.Extensions;
 
 namespace auvdisk.Fs
 {
@@ -13,9 +14,21 @@ namespace auvdisk.Fs
 #if WINDOWS
             return auvdisk.Interop.Win32.ResizeFileFastUnsafe(target, size, logger).IsSuccess;
 #else
-            throw new PlatformNotSupportedException();
+            logger.Error("This operation is not supported on this platform");
+            return false;
 #endif
         }
+
+        public static bool? IsSparseFile(string target, Log.ILog logger)
+        {
+#if WINDOWS
+            return auvdisk.Interop.Win32.IsSparseFile(target, logger);
+#else
+            logger.Error("This operation is not supported on this platform");
+            return null;
+#endif
+        }
+
 #pragma warning restore CA1416
 
         public static void ResizeFile(string target, ulong size, Log.ILog logger)

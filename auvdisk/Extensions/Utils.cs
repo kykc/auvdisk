@@ -1,5 +1,6 @@
 using System.Numerics;
 using auvdisk.DiskImage;
+using CommandLine;
 using DiskAccessLibrary.VHD;
 
 namespace auvdisk.Extensions
@@ -103,7 +104,7 @@ namespace auvdisk.Extensions
 
         public static Flow<TSubj> WithCheckedTargetAvailable<TSubj>(this Flow<TSubj> action, string target) where TSubj : class
         {
-            return action .Log("Checking that target file doesn't exists")
+            return action.Log("Checking that target file doesn't exists")
                 .Check((_) => !File.Exists(target), (_) => $"{target} already exists");
         }
 
