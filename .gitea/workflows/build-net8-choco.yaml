@@ -5,7 +5,7 @@ on: [push]
 jobs:
   build-choco:
     runs-on: automatl-net8-ubuntu2204
-    if: gitea.ref == 'refs/heads/main'
+    if: gitea.ref == 'refs/heads/none'
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
