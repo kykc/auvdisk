@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.TestPlatform.TestHost;
 
 namespace auvdisk.test;
 
-public class TestUtil
+public static class TestUtil
 {
     public static VHDFooter? ReadVhdFooter(string path)
     {

@@ -3,6 +3,8 @@ using auvdisk.Extensions;
 using CommandLine;
 using auvdisk.DiskImage;
 using auvdisk.Cli;
+using DiscUtils.BootConfig;
+using DiscUtils.Registry;
 using DiscUtils.Streams;
 
 namespace auvdisk
@@ -12,6 +14,8 @@ namespace auvdisk
     {
         static int Main(string[] args)
         {
+            DiscUtils.Complete.SetupHelper.SetupComplete();
+
             var logger = new Log.Logger();
 
             // Special case for launching self with Admin privileges to create large file fast.
@@ -25,8 +29,6 @@ namespace auvdisk
             {
                 return 0;
             }
-
-            DiscUtils.Complete.SetupHelper.SetupComplete();
 
             var cliResult = Parser.Default.ParseArguments<
                 Cli.VdiskProbe, Cli.VdiskList, Cli.VdiskCat, Cli.LoopToVhd, 
@@ -228,7 +230,7 @@ namespace auvdisk
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
                     bool success = false;
-
+#if WINDOWS
                     try
                     {
                         logger.Log($"Administrator privileges: {Environment.IsPrivilegedProcess}");
@@ -247,7 +249,7 @@ namespace auvdisk
                     {
                         logger.Error(Spectre.Console.Markup.Escape(ex.Message));
                     }
-
+#endif
                     if (!success)
                     {
                         logger.Log("Falling back to slow mode");
