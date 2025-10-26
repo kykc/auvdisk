@@ -1,6 +1,9 @@
+using System.Reflection.Metadata;
 using auvdisk.Extensions;
 using DiscUtils;
+using DiscUtils.Iso9660;
 using DiscUtils.Ntfs;
+using DiscUtils.Wim;
 using DiskAccessLibrary.FileSystems.NTFS;
 using DotNext;
 using DiskAccessLibrary.VHD;
@@ -39,7 +42,7 @@ namespace auvdisk.DiskImage
             // Checking for file access issues
             try
             {
-                using var fs = new FileStream(Path, FileMode.Open, FileAccess.Read);
+                using var _ = new FileStream(Path, FileMode.Open, FileAccess.Read);
             }
             catch (IOException e)
             {
@@ -50,7 +53,30 @@ namespace auvdisk.DiskImage
             using var rawDisk = new DiscUtils.Raw.Disk(Path, FileAccess.Read);
             VHDFooter? maybeVhdFooter = Vhd.Util.ReadVhdFooterSafe(Path);
 
-            if (maybeVhdFooter?.IsValid ?? false)
+            using var stream = new FileStream(Path, FileMode.Open, FileAccess.Read);
+            var wimFile = Utils.SuppressRef<Exception, WimFile>(() => new WimFile(stream));
+
+            using var duDetected = Utils.SuppressRef<Exception, VirtualDisk>(() => VirtualDisk.OpenDisk(Path, FileAccess.Read));
+
+            if (wimFile != null)
+            {
+                Logger.Log("WIM file detected");
+                List<PartitionRecord> parts = [];
+
+                for (int imgIdx = 0; imgIdx < wimFile.ImageCount; ++imgIdx)
+                {
+                    var wimImage = wimFile.GetImage(imgIdx);
+                    Logger.Log($"Found image with index [yellow]{imgIdx + 1}[/], label [yellow]{wimImage.VolumeLabel}[/]");
+                    var fs = new FileSystemRecord("WIM", wimImage.VolumeLabel, null, null, null, 0,
+                        wimImage.VolumeId.ToString());
+                    var part = new PartitionRecord(0, 0, 0, Guid.Empty, Guid.Empty, fs);
+                    parts.Add(part);
+                    FsHandler(wimImage);
+                }
+
+                return new ProbeResult(new DiskRecord("WIM", parts, "WIM", 512, null, null), null);
+            }
+            else if (maybeVhdFooter?.IsValid ?? false)
             {
                 Logger.Log($"Valid VHD footer with id [yellow]{maybeVhdFooter.UniqueId}[/] was found, assuming VHD file format");
                 
@@ -74,14 +100,17 @@ namespace auvdisk.DiskImage
                 Logger.Log($"Found sensible GPT partition table at offset [yellow]0[/], assuming RAW disk image");
                 return new ProbeResult(HandleVirtualDisk(rawDisk, "RAW"), null);
             }
-            else if (Utils.SuppressRef<Exception, DiscUtils.VirtualDisk>(() => VirtualDisk.OpenDisk(Path, FileAccess.Read))
-                     is { } detectedDisk)
+            else if (duDetected is DiscUtils.OpticalDisk.Disc)
             {
                 Logger.Log("Utilizing DiscUtils heuristics to determine possible disk image type");
-                var result = new ProbeResult(HandleVirtualDisk(detectedDisk, GetDiskType(detectedDisk)), null);
-                detectedDisk.Dispose();
-
-                return result;
+                Logger.Log("Processing file as [yellow]ISO[/] image");
+                using var cd = new CDReader(duDetected.Content, true);
+                return new ProbeResult(null, HandleFileSystem(cd.RawStream, 0, FsHandler, null));
+            }
+            else if (duDetected != null)
+            {
+                Logger.Log("Utilizing DiscUtils heuristics to determine possible disk image type");
+                return new ProbeResult(HandleVirtualDisk(duDetected, GetDiskType(duDetected)), null);
             }
             else if (rawDisk is { IsPartitioned: true, Partitions: DiscUtils.Partitions.BiosPartitionTable } &&
                      rawDisk.Partitions.Partitions.Count > 0)
@@ -215,6 +244,7 @@ namespace auvdisk.DiskImage
         private DiskRecord? HandleVirtualDisk(DiscUtils.VirtualDisk vdisk, string imageType, Guid? diskGuid = null)
         {
             Logger.Log($"Processing virtual disk of type [yellow]{imageType}[/] with LBA size [yellow]{vdisk.SectorSize}[/] bytes");
+
             if (vdisk.IsPartitioned)
             {
                 var diskRecord = new DiskRecord( 
