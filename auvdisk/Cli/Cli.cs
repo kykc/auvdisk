@@ -9,15 +9,15 @@ namespace auvdisk.Cli
 {
     static class Extensions
     {
-        public static ParserResult<object> ParseArguments<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17>(this Parser parser, IEnumerable<string> args)
+        public static ParserResult<object> ParseArguments<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18>(this Parser parser, IEnumerable<string> args)
         {
             if (parser == null) throw new ArgumentNullException("parser");
 
             return parser.ParseArguments(args, new[] { typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6), typeof(T7), typeof(T8),
-                typeof(T9), typeof(T10), typeof(T11), typeof(T12), typeof(T13), typeof(T14), typeof(T15), typeof(T16), typeof(T17) });
+                typeof(T9), typeof(T10), typeof(T11), typeof(T12), typeof(T13), typeof(T14), typeof(T15), typeof(T16), typeof(T17), typeof(T18) });
         }
 
-        public static TResult MapResult<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, TResult>(this ParserResult<object> result,
+        public static TResult MapResult<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, TResult>(this ParserResult<object> result,
             Func<T1, TResult> parsedFunc1,
             Func<T2, TResult> parsedFunc2,
             Func<T3, TResult> parsedFunc3,
@@ -35,6 +35,7 @@ namespace auvdisk.Cli
             Func<T15, TResult> parsedFunc15,
             Func<T16, TResult> parsedFunc16,
             Func<T17, TResult> parsedFunc17,
+            Func<T18, TResult> parsedFunc18,
             Func<IEnumerable<Error>, TResult> notParsedFunc)
         {
             var parsed = result as Parsed<object>;
@@ -104,10 +105,13 @@ namespace auvdisk.Cli
                 {
                     return parsedFunc16((T16)parsed.Value);
                 }
-
                 if (parsed.Value is T17)
                 {
                     return parsedFunc17((T17)parsed.Value);
+                }
+                if (parsed.Value is T18)
+                {
+                    return parsedFunc18((T18)parsed.Value);
                 }
                 throw new InvalidOperationException();
             }
@@ -313,5 +317,13 @@ namespace auvdisk.Cli
         public string Target { get; set; } = "";
         [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
         public bool Verbose { get; set; } = false;
+    }
+
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("gen-vmdk-wrapper", HelpText = "Generate VMDK wrapper for a RAW image")]
+    class GenVmdkWrapper
+    {
+        [Option('s', "source", Required = true, HelpText = "Source imagefile path")]
+        public string Source { get; set; } = "";
     }
 }

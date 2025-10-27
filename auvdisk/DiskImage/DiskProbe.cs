@@ -60,7 +60,7 @@ namespace auvdisk.DiskImage
 
             if (wimFile != null)
             {
-                Logger.Log("WIM file detected");
+                Logger.Log("[yellow]WIM[/] file detected");
                 List<PartitionRecord> parts = [];
 
                 for (int imgIdx = 0; imgIdx < wimFile.ImageCount; ++imgIdx)

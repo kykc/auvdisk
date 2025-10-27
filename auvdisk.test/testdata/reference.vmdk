@@ -1,0 +1,20 @@
+# Disk DescriptorFile
+version=1
+encoding="UTF-8"
+CID=4363dd6b
+parentCID=ffffffff
+createType="monolithicFlat"
+
+# Extent description
+RW 209715200 FLAT "ubuntu2204.img" 0
+
+# The Disk Data Base
+#DDB
+
+ddb.adapterType = "lsilogic"
+ddb.geometry.cylinders = "13054"
+ddb.geometry.heads = "255"
+ddb.geometry.sectors = "63"
+ddb.longContentID = "51a1f41312ec3ab670076aca4363dd6b"
+ddb.toolsInstallType = "4"
+ddb.toolsVersion = "12325"

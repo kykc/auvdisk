@@ -200,7 +200,7 @@ namespace auvdisk.DiskImage
 
         }
 
-        public static Flow<VHDFooter> ConvertVhdToImg(string source, Log.ILog logger, bool verbose)
+        public static Flow<DiskProbe.ProbeResult> ConvertVhdToImg(string source, Log.ILog logger, bool verbose)
         {
             var action = () =>
             {

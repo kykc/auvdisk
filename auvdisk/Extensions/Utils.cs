@@ -1,5 +1,6 @@
 using System.Numerics;
 using auvdisk.DiskImage;
+using auvdisk.Log;
 using CommandLine;
 using DiskAccessLibrary.VHD;
 
@@ -55,13 +56,14 @@ namespace auvdisk.Extensions
             }
         }
 
-        public static Flow<VHDFooter> WithCheckedVhdType<TSubj>(this Flow<TSubj> action, string source, VirtualHardDiskType diskType)
+        public static Flow<DiskProbe.ProbeResult> WithCheckedVhdType<TSubj>(this Flow<TSubj> action, string source, VirtualHardDiskType diskType)
             where TSubj : class
         {
             return action.Log($"Checking that source VHD file is of type {diskType}")
                 .MapOr((_) => DiskImage.Vhd.Util.ReadVhdFooterSafe(source), "Failed to read Vhd footer")
                 .Check((footer) => footer.IsValid, (_) => "Invalid VHD footer format")
-                .Check((footer) => footer.DiskType == diskType, (footer) => $"Expected VHD of type {diskType}, got {footer.DiskType}");
+                .Check((footer) => footer.DiskType == diskType, (footer) => $"Expected VHD of type {diskType}, got {footer.DiskType}")
+                .Map((footer) => new DiskProbe(source, new NullLogger()).Probe());
         }
 
         public static Flow<DiskProbe.ProbeResult> WithCheckedDiskType<TSubj>(this Flow<TSubj> action, string diskType, string source, bool verbose)

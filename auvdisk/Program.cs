@@ -3,9 +3,12 @@ using auvdisk.Extensions;
 using CommandLine;
 using auvdisk.DiskImage;
 using auvdisk.Cli;
+using auvdisk.Log;
+using DiscUtils;
 using DiscUtils.BootConfig;
 using DiscUtils.Registry;
 using DiscUtils.Streams;
+using Spectre.Console;
 
 namespace auvdisk
 {
@@ -35,7 +38,7 @@ namespace auvdisk
                 Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg, Cli.CreateDiffVhd, 
                 Cli.CreateFixedVhd, Cli.MergeVhd, Cli.CreateDynamicVhd, Cli.ExtractFile,
                 Cli.DiagVhd, Cli.ResizeFixedVhd, Cli.CheckIsSparse, Cli.VhdToVhdx,
-                Cli.VhdxToVhd>(args);
+                Cli.VhdxToVhd, Cli.GenVmdkWrapper>(args);
 
             var exitCode = cliResult.MapResult(
                 (Cli.VdiskProbe opts) =>
@@ -196,6 +199,33 @@ namespace auvdisk
                     var result = DiskImageConverter.ConvertVhdxToFixedVhd(opts.Source, opts.Target, logger, opts.Verbose);
 
                     return result.LogErrorIfAny() ? 1 : 0;
+                },
+                (Cli.GenVmdkWrapper opts) =>
+                {
+                    bool success = false;
+
+                    var action = () =>
+                    {
+                        var vmdk = DiskImage.Vmdk.VmdkFlatWrapper.Create(opts.Source, logger);
+
+                        if (vmdk != null)
+                        {
+                            // Using Console (not logger) here on purpose. I'm afraid something might break Spectre.Console markup handling at some moment
+                            logger.Log(new Rule("[green]Resulting VMDK[/]").LeftJustified());
+                            Console.WriteLine(vmdk.ToString()); // On error logger will contain the reason already
+                            logger.Log(new Rule("[green]End of VMDK[/]").LeftJustified());
+                            logger.Log("Put that into a file, place it into the same folder as the source image and you're good to go");
+                        }
+
+                        success = vmdk != null;
+                    };
+
+                    var result = Flow<None>.Ok(None.Value, logger)
+                        .WithCheckedSourceExists(opts.Source)
+                        .WithCheckedDiskType("RAW", opts.Source, false)
+                        .WithSideEffect(action);
+
+                    return result.LogErrorIfAny() && success ? 1 : 0;
                 },
                 _ => 2
             );

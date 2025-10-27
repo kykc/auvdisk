@@ -46,6 +46,7 @@ packages directly from this repo (see `.gitea/workflows` for some examples on pa
 | check-is-sparse    | Check if file is a sparse file (Windows and NTFS only)                                              |
 | conv-vhd-to-vhdx   | Convert any VHD image to fixed VHDX image                                                           |
 | conv-vhdx-to-vhd   | Convert any VHDX image to fixed VHD image                                                           |
+| gen-vmdk-wrapper   | Generate VMDK wrapper for a RAW image                                                               |
 | help               | Display more information on a specific command.                                                     |
 | version            | Display version information.                                                                        |
 
