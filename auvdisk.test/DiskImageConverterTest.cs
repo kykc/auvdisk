@@ -187,6 +187,36 @@ public class DiskImageConverterTest : IDisposable
         Assert.Equal(TestUtil.CalcSha256Hash(initialVhd.Content), TestUtil.CalcSha256Hash(resultVhd.Content));
     }
 
+    [Fact]
+    public void TestQcow2ToRaw()
+    {
+        var logger = new LogWatcher();
+
+        string sourcePath = Path.Join("testdata", "test_gpt.qcow2");
+        string targetPath = Path.Join(Directory.GetCurrentDirectory(), "test_gpt_from_qcow2.img");
+        string referencePath = Path.Join("testdata", "test_gpt.vhd");
+
+        Assert.False(File.Exists(targetPath));
+
+        var result = DiskImageConverter.ConvertQcow2ToRaw(sourcePath, targetPath, logger, false);
+
+        Assert.True(result.HasValue());
+        Assert.NotNull(result.Unwrap().Disk);
+        Assert.Equal("qcow2", result.Unwrap().Disk!.ImageType);
+
+        using var reference = DiscUtils.VirtualDisk.OpenDisk(referencePath, FileAccess.Read);
+        using var resultDisk = DiscUtils.VirtualDisk.OpenDisk(targetPath, FileAccess.Read);
+
+        reference.Content.Seek(0, SeekOrigin.Begin);
+        resultDisk.Content.Seek(0, SeekOrigin.Begin);
+
+        var referenceHash = TestUtil.CalcSha256Hash(reference.Content);
+        var resultHash = TestUtil.CalcSha256Hash(resultDisk.Content);
+
+        Assert.Equal(reference.Content.Length, resultDisk.Content.Length);
+        Assert.Equal(referenceHash, resultHash);
+    }
+
     public void Dispose()
     {
         File.Delete("test_gpt_subject.vhd");
@@ -194,5 +224,6 @@ public class DiskImageConverterTest : IDisposable
         File.Delete("ext4.loop");
         File.Delete("test_gpt.vhdx");
         File.Delete("test_gpt_back.vhd");
+        File.Delete("test_gpt_from_qcow2.img");
     }
 }

@@ -10,6 +10,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using auvdisk.Log;
+using DiscUtils.Streams;
 using DotNext.Collections.Generic;
 using Spectre.Console;
 
@@ -166,6 +167,29 @@ namespace auvdisk.DiskImage
             return Flow<None>.Ok(None.Value, logger)
                 .WithCheckedSourceExists(source)
                 .WithCheckedDiskType("VHDX", source, verbose)
+                .WithCheckedTargetAvailable(target)
+                .WithSideEffect(action);
+        }
+
+        public static Flow<DiskProbe.ProbeResult> ConvertQcow2ToRaw(string source, string target, ILog logger,
+            bool verbose)
+        {
+            var action = () =>
+            {
+                logger.Log("Opening source as a qcow2 image");
+                using var fs = File.OpenRead(source);
+                var qcow2Stream = new Bytes.Qcow2Stream(fs);
+                logger.Log("Preparing target for writing");
+                using var targetStream = File.Open(target, FileMode.Create, FileAccess.ReadWrite);
+                logger.Log("Copying data, this might take a while depending on disk speed and image size...");
+                qcow2Stream.CopyTo(targetStream);
+                targetStream.Flush();
+                logger.Log("Done.");
+            };
+
+            return Flow<None>.Ok(None.Value, logger)
+                .WithCheckedSourceExists(source)
+                .WithCheckedDiskType("qcow2", source, verbose)
                 .WithCheckedTargetAvailable(target)
                 .WithSideEffect(action);
         }
