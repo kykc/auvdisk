@@ -3,6 +3,7 @@ using auvdisk.Extensions;
 using DiscUtils;
 using DiscUtils.Iso9660;
 using DiscUtils.Ntfs;
+using DiscUtils.Streams;
 using DiscUtils.Wim;
 using DiskAccessLibrary.FileSystems.NTFS;
 using DotNext;
@@ -55,10 +56,19 @@ namespace auvdisk.DiskImage
 
             using var stream = new FileStream(Path, FileMode.Open, FileAccess.Read);
             var wimFile = Utils.SuppressRef<Exception, WimFile>(() => new WimFile(stream));
+            var qCowStream = Utils.SuppressRef<Exception, Bytes.Qcow2Stream>(() => new Bytes.Qcow2Stream(stream));
 
             using var duDetected = Utils.SuppressRef<Exception, VirtualDisk>(() => VirtualDisk.OpenDisk(Path, FileAccess.Read));
 
-            if (wimFile != null)
+            if (qCowStream != null)
+            {
+                var qcowWrapped = new DiscUtils.Raw.Disk(qCowStream, Ownership.None);
+
+                var diskRecord = HandleVirtualDisk(qcowWrapped, "qcow2", null);
+
+                return new ProbeResult(diskRecord, null);
+            }
+            else if (wimFile != null)
             {
                 Logger.Log("[yellow]WIM[/] file detected");
                 List<PartitionRecord> parts = [];
@@ -339,15 +349,27 @@ namespace auvdisk.DiskImage
             
             if (fsList.Count > 0)
             {
-                return fsList.Select((fsInfo) =>
-                {
-                    using var fs = fsInfo.Open(stream);
-                    var record = FillFsRecord(fsInfo, fs, Fs.Util.ExtractUuid(fs, Logger));
-                    OutputVolumeInfo(record);
-                    impl(fs);
+                var fsRecords = new List<FileSystemRecord>();
 
-                    return record;
-                }).First(); // TODO: modify record to support multiple filesystems per volume?
+                // TODO: modify record to support multiple filesystems per volume?
+                foreach (var fsInfo in fsList)
+                {
+                    try
+                    {
+                        using var fs = fsInfo.Open(stream);
+                        var record = FillFsRecord(fsInfo, fs, Fs.Util.ExtractUuid(fs, Logger));
+                        OutputVolumeInfo(record);
+                        impl(fs);
+
+                        fsRecords.Add(record);
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.Error($"Failed to read {fsInfo.Name}: {e.Message}");
+                    }
+                }
+
+                return fsRecords.Count == 0 ? null : fsRecords.First();
             }
 
             return null;
