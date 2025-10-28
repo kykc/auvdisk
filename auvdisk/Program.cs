@@ -19,6 +19,8 @@ namespace auvdisk
         {
             DiscUtils.Complete.SetupHelper.SetupComplete();
 
+            Patches.PatchManager.ApplyPatches();
+
             var logger = new Log.Logger();
 
             // Special case for launching self with Admin privileges to create large file fast.
