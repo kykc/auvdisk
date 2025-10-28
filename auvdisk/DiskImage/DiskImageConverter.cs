@@ -11,7 +11,6 @@ using System.Text;
 using System.Threading.Tasks;
 using auvdisk.Log;
 using DiscUtils.Streams;
-using DotNext.Collections.Generic;
 using Spectre.Console;
 
 namespace auvdisk.DiskImage

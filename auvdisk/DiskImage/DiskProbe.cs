@@ -6,8 +6,8 @@ using DiscUtils.Ntfs;
 using DiscUtils.Streams;
 using DiscUtils.Wim;
 using DiskAccessLibrary.FileSystems.NTFS;
-using DotNext;
 using DiskAccessLibrary.VHD;
+using DotNext;
 
 namespace auvdisk.DiskImage
 {

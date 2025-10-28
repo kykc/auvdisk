@@ -11,7 +11,7 @@ jobs:
         uses: actions/checkout@v4
       - name: build deb
         run: |
-          dotnet deb install && dotnet publish -c Release -r linux-x64 --self-contained -t:CreateDeb
+          dotnet deb install && dotnet publish -c Release -r linux-x64 -f net8.0 --self-contained -t:CreateDeb
       - name: rename deb
         run: |
           mv auvdisk/bin/Release/net8.0/linux-x64/auvdisk*.deb auvdisk.deb
