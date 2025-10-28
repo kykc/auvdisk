@@ -16,17 +16,19 @@ namespace auvdisk.DiskImage
         public Log.ILog Logger { get; private set; }
         public Action<DiscFileSystem> FsHandler { get; private set; }
         public string Path { get; private set; }
+        public int PartIdx { get; private set; }
 
         public record ProbeResult(DiskRecord? Disk, FileSystemRecord? Fs);
         public record DiskRecord(string PartitionTableType, List<PartitionRecord> Partitions, string ImageType, ulong SectorSize, Guid? PartTableGuid, Guid? DiskGuid);
         public record PartitionRecord(long StartLba, long EndLba, long SectorCountLba, Guid? PartGuid, Guid TypeGuid, Optional<FileSystemRecord> FileSystem);
         public record FileSystemRecord(string FsType, string VolumeLabel, long? Size, long? UsedSpace, long? AvailableSpace, long Offset, string? VolumeId);
 
-        public DiskProbe(string path, Log.ILog logger, Action<DiscFileSystem>? fsHandler = null)
+        public DiskProbe(string path, Log.ILog logger, Action<DiscFileSystem>? fsHandler = null, int partIdx = -1)
         {
             FsHandler = fsHandler ?? ListFsRoot;
             Logger = logger;
             Path = path;
+            PartIdx = partIdx;
         }
 
         public ProbeResult Probe()
@@ -172,14 +174,17 @@ namespace auvdisk.DiskImage
             }
         }
 
-        public static Action<DiscFileSystem> GetListArbitraryDir(string path, Log.ILog logger)
+        public static Action<DiscFileSystem> GetListArbitraryDir(string path, Log.ILog logger, bool silent)
         {
             return (DiscFileSystem fs) =>
             {
                 string prettyPath = "/" + path.FormatDuPath();
                 string searchPath = path.FormatDuPath(false);
 
-                logger.Log("Listing contents of " + prettyPath + ":");
+                if (!silent)
+                {
+                    logger.Log($"Listing contents of [yellow]{prettyPath}[/]:");
+                }
 
                 try
                 {
@@ -208,33 +213,23 @@ namespace auvdisk.DiskImage
             };
         }
 
-        public static Action<DiscFileSystem> GetCatArbitraryFile(string path, Log.ILog logger)
+        public static Action<DiscFileSystem> GetCatArbitraryFile(string path, Log.ILog logger, bool silent)
         {
             return (DiscFileSystem fs) =>
             {
-                string prettyPath = "/" + path.FormatDuPath();
                 string searchPath = path.FormatDuPath(false);
 
                 try
                 {
-                    using (var stream = fs.OpenFile(searchPath, FileMode.Open))
-                    {
-                        logger.Log("File " + path + " contents:");
+                    using var stream = fs.OpenFile(searchPath, FileMode.Open, FileAccess.Read);
+                    using var logStream = logger.ToStream();
 
-                        // Mostly to be able to intercept output in tests
-                        // we still need to properly stream large files
-                        if (stream.Length < 1024)
-                        {
-                            var streamReader = new StreamReader(stream);
-                            
-                            logger.Log(streamReader.ReadToEnd());
-                        }
-                        else
-                        {
-                            // TODO: support streaming in logger?
-                            stream.CopyTo(Console.OpenStandardOutput());
-                        }
+                    if (!silent)
+                    {
+                        logger.Log($"File [yellow]{path}[/] contents:");
                     }
+
+                    stream.CopyTo(logStream);
                 }
                 catch (FileNotFoundException ex)
                 {
@@ -276,8 +271,11 @@ namespace auvdisk.DiskImage
                 }
                 
                 var volumeManager = new VolumeManager(vdisk);
+                var volumes = volumeManager.GetPhysicalVolumes()
+                    .Select((volume, idx) => (volume, idx))
+                    .Where(x => x.idx == PartIdx || PartIdx < 0);
                 
-                foreach (var (volume, idx) in volumeManager.GetPhysicalVolumes().Select((volume, idx) => (volume, idx)))
+                foreach (var (volume, idx) in volumes)
                 {
                     var partition = volume.Partition;
 

@@ -11,6 +11,7 @@ namespace auvdisk.Log
         void Error(string error);
         void Warning(string warning);
         Action<string> ToAction();
+        Stream ToStream();
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
@@ -23,23 +24,23 @@ namespace auvdisk.Log
 
         public void Error(string error)
         {
-            AnsiConsole.MarkupLine($"[red]ERROR: {error}[/]");
+            AnsiConsole.MarkupLine($"[red]ERROR: {error.EscapeMarkup()}[/]");
         }
 
         public void Warning(string warning)
         {
-            AnsiConsole.MarkupLine($"[yellow]WARNING: {warning}[/]");
+            AnsiConsole.MarkupLine($"[yellow]WARNING: {warning.EscapeMarkup()}[/]");
         }
 
         public void Log(string s)
         {
             if (s.StartsWith("ERROR"))
             {
-                AnsiConsole.MarkupLine($"[red]{s}[/]");
+                AnsiConsole.MarkupLine($"[red]{s.EscapeMarkup()}[/]");
             }
             else if (s.StartsWith("WARNING"))
             {
-                AnsiConsole.MarkupLine($"[yellow]{s}[/]");
+                AnsiConsole.MarkupLine($"[yellow]{s.EscapeMarkup()}[/]");
             }
             else
             {
@@ -49,6 +50,7 @@ namespace auvdisk.Log
                 }
                 catch (InvalidOperationException)
                 {
+                    Warning("Failed to parse CLI markup for the following message, ignoring markup");
                     AnsiConsole.WriteLine(s);
                 }
             }
@@ -57,6 +59,11 @@ namespace auvdisk.Log
         public Action<string> ToAction()
         {
             return Log;
+        }
+
+        public Stream ToStream()
+        {
+            return Console.OpenStandardOutput();
         }
     }
 
@@ -82,6 +89,11 @@ namespace auvdisk.Log
         public Action<string> ToAction()
         {
             return Log;
+        }
+
+        public Stream ToStream()
+        {
+            return Stream.Null;
         }
     }
 }

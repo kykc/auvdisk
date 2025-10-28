@@ -133,6 +133,8 @@ namespace auvdisk.Cli
 
         [Option('v', "verbose", Required = false, Default = false, HelpText = "Enable verbose output")]
         public bool Verbose { get; set; } = false;
+        [Option('p', "part-idx", Required = false, Default = -1, HelpText = "Execute FS handler only on partition with specified index")]
+        public int PartIdx { get; set; } = -1;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
@@ -147,6 +149,10 @@ namespace auvdisk.Cli
         public string Source { get; set; } = "";
         [Option('t', "target", Required = true, HelpText = "Target search path")]
         public string Target { get; set; } = "";
+        [Option('p', "part-idx", Required = false, Default = -1, HelpText = "Execute FS handler only on partition with specified index")]
+        public int PartIdx { get; set; } = -1;
+        [Option("silent", Required = false, Default = false, HelpText = "Suppress all output except FS handler")]
+        public bool Silent { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
@@ -161,6 +167,10 @@ namespace auvdisk.Cli
         public string Source { get; set; } = "";
         [Option('t', "target", Required = true, HelpText = "Target file path")]
         public string Target { get; set; } = "";
+        [Option('p', "part-idx", Required = false, Default = -1, HelpText = "Execute FS handler only on partition with specified index")]
+        public int PartIdx { get; set; } = -1;
+        [Option("silent", Required = false, Default = false, HelpText = "Suppress all output except FS handler")]
+        public bool Silent { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]

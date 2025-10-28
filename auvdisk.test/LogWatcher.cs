@@ -1,3 +1,4 @@
+using Spectre.Console;
 using Spectre.Console.Rendering;
 
 namespace auvdisk.test
@@ -11,7 +12,9 @@ namespace auvdisk.test
         
         public void Log(IRenderable log)
         {
-            // TODO: figure out implementation
+            // Crude, but we shouldn't lose any text this way
+            var line = log.GetSegments(AnsiConsole.Console).Select(x => x.Text).Aggregate((x, y) => x + " " + y);
+            _all.Add(line);
         }
 
         public void Log(string log)
@@ -35,6 +38,11 @@ namespace auvdisk.test
         public Action<string> ToAction()
         {
             return Log;
+        }
+
+        public Stream ToStream()
+        {
+            return new ListStringWriterStream(_all);
         }
 
         public IEnumerable<string> GetAll()

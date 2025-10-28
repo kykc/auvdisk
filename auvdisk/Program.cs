@@ -4,10 +4,6 @@ using CommandLine;
 using auvdisk.DiskImage;
 using auvdisk.Cli;
 using auvdisk.Log;
-using DiscUtils;
-using DiscUtils.BootConfig;
-using DiscUtils.Registry;
-using DiscUtils.Streams;
 using Spectre.Console;
 
 namespace auvdisk
@@ -45,7 +41,7 @@ namespace auvdisk
             var exitCode = cliResult.MapResult(
                 (Cli.VdiskProbe opts) =>
                 {
-                    var probe = new DiskProbe(opts.Source, logger);
+                    var probe = new DiskProbe(opts.Source, logger, null, opts.PartIdx);
                     var result = probe.Probe();
 
                     if (result.Disk?.ImageType == "VHD" && opts.Verbose)
@@ -57,14 +53,16 @@ namespace auvdisk
                 },
                 (Cli.VdiskList opts) =>
                 {
-                    var probe = new DiskProbe(opts.Source, logger, DiskProbe.GetListArbitraryDir(opts.Target, logger));
+                    ILog probeLogger = opts.Silent ? new NullLogger() : logger;
+                    var probe = new DiskProbe(opts.Source, probeLogger, DiskProbe.GetListArbitraryDir(opts.Target, logger, opts.Silent), opts.PartIdx);
                     probe.Probe();
 
                     return 0;
                 },
                 (Cli.VdiskCat opts) =>
                 {
-                    var probe = new DiskProbe(opts.Source, logger, DiskProbe.GetCatArbitraryFile(opts.Target, logger));
+                    ILog probeLogger = opts.Silent ? new NullLogger() : logger;
+                    var probe = new DiskProbe(opts.Source, probeLogger, DiskProbe.GetCatArbitraryFile(opts.Target, logger, opts.Silent), opts.PartIdx);
                     probe.Probe();
 
                     return 0;

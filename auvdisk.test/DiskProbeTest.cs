@@ -89,7 +89,7 @@ public class DiskProbeTest
         var logger = new LogWatcher();
         var subjectVhd = Path.Join("testdata", "test_gpt.vhd");
 
-        var fsHandler = DiskProbe.GetListArbitraryDir(@"\test_dir", logger);
+        var fsHandler = DiskProbe.GetListArbitraryDir(@"\test_dir", logger, false);
 
         var probeResult = new DiskProbe(subjectVhd, logger, fsHandler).Probe();
         
@@ -111,7 +111,7 @@ public class DiskProbeTest
         var logger = new LogWatcher();
         var subjectVhd = Path.Join("testdata", "test_gpt.vhd");
 
-        var fsHandler = DiskProbe.GetCatArbitraryFile(@"\test_text.txt", logger);
+        var fsHandler = DiskProbe.GetCatArbitraryFile(@"\test_text.txt", logger, false);
 
         var probeResult = new DiskProbe(subjectVhd, logger, fsHandler).Probe();
         
