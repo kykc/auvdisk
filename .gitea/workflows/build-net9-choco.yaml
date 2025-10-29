@@ -4,14 +4,14 @@ on: [push]
 
 jobs:
   build-choco:
-    runs-on: automatl-net8-ubuntu2204
-    if: gitea.ref == 'refs/heads/none'
+    runs-on: automatl-net9-ubuntu2404
+    if: gitea.ref == 'refs/heads/main'
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
       - name: build with dotnet
         run: |
-          pushd auvdisk && dotnet publish -c Release -r win-x64 -f net8.0 --self-contained -t:PackChoco && popd
+          pushd auvdisk && dotnet publish -c Release -r win-x64 -f net9.0 --self-contained -t:PackChoco /p:IsWindows=true && popd
       - name: rename nupkg
         run: |
           mv auvdisk/auvdisk.portable*.nupkg auvdisk.portable.nupkg
