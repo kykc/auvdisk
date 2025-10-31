@@ -56,6 +56,18 @@ namespace auvdisk.Extensions
             }
         }
 
+        public static bool If(Action action, Func<bool> condition)
+        {
+            if (condition())
+            {
+                action();
+
+                return true;
+            }
+
+            return false;
+        }
+
         public static Flow<DiskProbe.ProbeResult> WithCheckedVhdType<TSubj>(this Flow<TSubj> action, string source, VirtualHardDiskType diskType)
             where TSubj : class
         {

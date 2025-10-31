@@ -87,22 +87,17 @@ public class DiskProbeTest
     public void TestListDirectory()
     {
         var logger = new LogWatcher();
+        var fsLogger = new LogWatcher();
         var subjectVhd = Path.Join("testdata", "test_gpt.vhd");
 
-        var fsHandler = DiskProbe.GetListArbitraryDir(@"\test_dir", logger, false);
+        var fsHandler = DiskProbe.GetListArbitraryDir(@"\test_dir", fsLogger, true);
 
         var probeResult = new DiskProbe(subjectVhd, logger, fsHandler).Probe();
         
         Assert.NotNull(probeResult.Disk);
 
-        // I hate this but there's not much else I can do w/o rather intensive refactoring
-        var indexedLogLines = logger.GetAll().Select((line, idx) => (line, idx)).ToList();
-        var line = indexedLogLines.First(x => x.line.StartsWith("Listing contents"));
-
-        var remainder = indexedLogLines.Where(x => x.idx > line.idx);
-        
-        // Basically this checks that there were no errors after listing attempt
-        Assert.DoesNotContain(remainder, x => x.line.StartsWith("ERROR"));
+        // test_dir is empty
+        Assert.Empty(fsLogger.GetAll());
     }
 
     [Fact]
@@ -110,14 +105,15 @@ public class DiskProbeTest
     {
         var logger = new LogWatcher();
         var subjectVhd = Path.Join("testdata", "test_gpt.vhd");
+        var fsLogger = new LogWatcher();
 
-        var fsHandler = DiskProbe.GetCatArbitraryFile(@"\test_text.txt", logger, false);
+        var fsHandler = DiskProbe.GetCatArbitraryFile(@"\test_text.txt", fsLogger, true);
 
         var probeResult = new DiskProbe(subjectVhd, logger, fsHandler).Probe();
         
         Assert.NotNull(probeResult.Disk);
-
-        // I hate this but there's not much else I can do w/o rather intensive refactoring
-        Assert.Contains("test_text", logger.GetAll());
+        var fsLog = fsLogger.GetAll().ToList();
+        Assert.Single(fsLog);
+        Assert.Equal("test_text", fsLog.First());
     }
 }

@@ -340,6 +340,8 @@ namespace auvdisk.Cli
     {
         [Option('s', "source", Required = true, HelpText = "Source imagefile path")]
         public string Source { get; set; } = "";
+        [Option("silent", Required = false, Default = false, HelpText = "Suppress all output except VMDK contents")]
+        public bool Silent { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]

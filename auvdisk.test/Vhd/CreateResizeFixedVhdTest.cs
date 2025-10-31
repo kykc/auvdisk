@@ -81,7 +81,7 @@ namespace auvdisk.test.Vhd
                 PartitionGuid = Guid.NewGuid(),
                 PartitionTypeGuid = GPTPartition.BasicDataPartititionTypeGuid,
                 FirstLBA = offsetLba,
-                LastLBA = size / auvdisk.DiskImage.Vhd.Util.LbaSize,
+                LastLBA = size / auvdisk.DiskImage.Vhd.Util.LbaSize - 1,
                 PartitionName = "Boot"
             };
 

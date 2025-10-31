@@ -8,7 +8,7 @@ namespace auvdisk.Patches
         {
             var harmony = new Harmony("com.automatl.auvdisk");
 
-            DuDmgPatch.ApplyDmgPatch(harmony);
+            //DuDmgPatch.ApplyDmgPatch(harmony);
         }
     }
 }

@@ -211,10 +211,10 @@ namespace auvdisk
                         if (vmdk != null)
                         {
                             // Using Console (not logger) here on purpose. I'm afraid something might break Spectre.Console markup handling at some moment
-                            logger.Log(new Rule("[green]Resulting VMDK[/]").LeftJustified());
-                            Console.WriteLine(vmdk.ToString()); // On error logger will contain the reason already
-                            logger.Log(new Rule("[green]End of VMDK[/]").LeftJustified());
-                            logger.Log("Put that into a file, place it into the same folder as the source image and you're good to go");
+                            Utils.If(() => logger.Log(new Rule("[green]Resulting VMDK[/]").LeftJustified()), () => !opts.Silent);
+                            Console.WriteLine(vmdk?.ToString() ?? ""); // On error logger will contain the reason already
+                            Utils.If(() => logger.Log(new Rule("[green]End of VMDK[/]").LeftJustified()), () => !opts.Silent);
+                            Utils.If(() => logger.Log("Put that into a file, place it into the same folder as the source image and you're good to go"), () => !opts.Silent);
                         }
 
                         success = vmdk != null;
@@ -235,6 +235,9 @@ namespace auvdisk
                 },
                 _ => 2
             );
+
+            Console.Out.Flush();
+            Console.Error.Flush();
 
             return exitCode;
         }
