@@ -41,7 +41,10 @@ namespace auvdisk
             var exitCode = cliResult.MapResult(
                 (Cli.VdiskProbe opts) =>
                 {
-                    var probe = new DiskProbe(opts.Source, logger, null, opts.PartIdx);
+                    var recursiveHandler =
+                        DiskProbe.GetWalkFsRecursive((fs, f) => logger.Log("/" + f.FormatDuPath()));
+
+                    var probe = new DiskProbe(opts.Source, logger, opts.Recursive ? recursiveHandler : null, opts.PartIdx);
                     var result = probe.Probe();
 
                     if (result.Disk?.ImageType == "VHD" && opts.Verbose)

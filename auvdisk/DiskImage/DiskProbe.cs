@@ -174,6 +174,28 @@ namespace auvdisk.DiskImage
             }
         }
 
+        public static Action<DiscFileSystem> GetWalkFsRecursive(
+            Action<DiscFileSystem, string>? fileHandler = null,
+            Action<DiscFileSystem, string>? directoryHandler = null,
+            string path = "\\")
+        {
+            void RecursiveHandler(DiscFileSystem fs, string currentPath)
+            {
+                foreach (var dir in fs.GetDirectories(currentPath))
+                {
+                    directoryHandler?.Invoke(fs, dir);
+                    RecursiveHandler(fs, dir);
+                }
+
+                foreach (var f in fs.GetFiles(currentPath))
+                {
+                    fileHandler?.Invoke(fs, f);
+                }
+            }
+
+            return (fs) => RecursiveHandler(fs, path);
+        }
+
         public static Action<DiscFileSystem> GetListArbitraryDir(string path, Log.ILog logger, bool silent)
         {
             return (DiscFileSystem fs) =>

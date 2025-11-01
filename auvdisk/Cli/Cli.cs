@@ -135,6 +135,8 @@ namespace auvdisk.Cli
         public bool Verbose { get; set; } = false;
         [Option('p', "part-idx", Required = false, Default = -1, HelpText = "Execute FS handler only on partition with specified index")]
         public int PartIdx { get; set; } = -1;
+        [Option('r', "recursive", Required = false, Default = false, HelpText = "List filesystem(s) recursively")]
+        public bool Recursive { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
