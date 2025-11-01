@@ -1,3 +1,4 @@
+using auvdisk.Extensions;
 using DiskAccessLibrary.VHD;
 using Spectre.Console;
 
@@ -156,9 +157,15 @@ namespace auvdisk.DiskImage.Vhd
             });
         }
 
-        public void OutputDiagnosticInfo(Log.ILog logger)
+        public bool OutputDiagnosticInfo(Log.ILog logger)
         {
+            var result = true;
             var dataOffsetBytes = BitConverter.GetBytes(_dynamicHeader.DataOffset);
+            var checkString = (bool check) =>
+            {
+                result = result && check;
+                return check ? "[green]success[/]" : "[red]fail[/]";
+            };
             
             logger.Log(new Rule("[green]VHD Dynamic Header[/]").LeftJustified());
             
@@ -192,11 +199,12 @@ namespace auvdisk.DiskImage.Vhd
             var checkBatSize = _dynamicHeader.TableOffset % Util.LbaSize == 0;
             var checkFooterDataOffset = _vhdFooter.DataOffset == Util.LbaSize;
             var checkMaxTableEntries =
-                _dynamicHeader.MaxTableEntries == _vhdFooter.CurrentSize / _dynamicHeader.BlockSize;
+                _dynamicHeader.MaxTableEntries == _vhdFooter.CurrentSize.DivideAndCeil(_dynamicHeader.BlockSize);
             var checkHeaderValid = Util.CalculateChecksum(_headerBytes, 0x24) ==
                                    Bytes.Util.FromBigEndianUInt32(_headerBytes, 0x24);
+            var checkSizeInBytesValid = _vhdFooter.CurrentSize % Util.LbaSize == 0;
 
-            var checkString = (bool check) => check ? "[green]success[/]" : "[red]fail[/]";
+
             
             logger.Log($"[yellow]Footer cookie check[/]: {checkString(checkFooterCookie)}");
             logger.Log($"[yellow]Header cookie check[/]: {checkString(checkHeaderCookie)}");
@@ -205,6 +213,7 @@ namespace auvdisk.DiskImage.Vhd
             logger.Log($"[yellow]Footer offset check[/]: {checkString(checkFooterDataOffset)}");
             logger.Log($"[yellow]Max BAT entries check[/]: {checkString(checkMaxTableEntries)}");
             logger.Log($"[yellow]Header checksum check[/]: {checkString(checkHeaderValid)}");
+            logger.Log($"[yellow]Size in bytes check[/]: {checkString(checkSizeInBytesValid)}");
 
             if (_vhdFooter.DiskType == VirtualHardDiskType.Differencing)
             {
@@ -229,6 +238,8 @@ namespace auvdisk.DiskImage.Vhd
                 logger.Log($"[yellow]No parent locator entries check[/]: {checkString(!_dynamicHeader.GetParentLocatorEntries().Any())}");
                 logger.Log(new Rule("[green]End of diagnostics[/]").LeftJustified());
             }
+
+            return result;
         }
     }
 }

@@ -7,6 +7,9 @@ using System.Text;
 using DiscUtils.Vhd;
 using System.Text.RegularExpressions;
 using auvdisk.Cli;
+using auvdisk.Extensions;
+using auvdisk.Log;
+using ZstdSharp.Unsafe;
 
 namespace auvdisk.DiskImage.Vhd
 {
@@ -238,12 +241,26 @@ namespace auvdisk.DiskImage.Vhd
             return vhdFooter;
         }
 
-        public static void OutputDiagnosticInfo(string path, Log.ILog logger)
+        public static bool IsValidVhd(string path)
+        {
+            return OutputDiagnosticInfo(path, new NullLogger());
+        }
+
+        public static bool OutputDiagnosticInfo(string path, Log.ILog logger)
         {
             var maybeFooter = ReadVhdFooterSafe(path);
 
             if (maybeFooter != null)
             {
+                var result = true;
+
+                var checkString = (bool check) =>
+                {
+                    result = result && check;
+
+                    return check ? "[green]valid[/]" : "[red]invalid[/]";
+                };
+
                 var diskType = maybeFooter.DiskType;
                 IEnumerable<VirtualHardDiskType> dynamicTypes = [VirtualHardDiskType.Differencing, VirtualHardDiskType.Dynamic];
 
@@ -256,6 +273,7 @@ namespace auvdisk.DiskImage.Vhd
                 else if (maybeFooter.DiskType == VirtualHardDiskType.Fixed)
                 {
                     dataOffsetStr = $"[red]{maybeFooter.DataOffset}[/]";
+                    result = false;
                 }
                 
                 logger.Log(new Rule("[green]VHD Footer[/]").LeftJustified());
@@ -267,7 +285,7 @@ namespace auvdisk.DiskImage.Vhd
                 logger.Log($"[yellow]Sector size[/]: {LbaSize}");
                 logger.Log($"[yellow]Timestamp[/]: {maybeFooter.TimeStamp}");
                 logger.Log($"[yellow]Data offset in bytes[/]: {dataOffsetStr}");
-                logger.Log($"[yellow]Footer validation[/]: {(maybeFooter.IsValid ? "[green]valid[/]": "[red]invalid[/]")}");
+                logger.Log($"[yellow]Footer validation[/]: {checkString(maybeFooter.IsValid)}");
 
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
@@ -280,25 +298,32 @@ namespace auvdisk.DiskImage.Vhd
                     };
 
                     logger.Log($"[yellow]Is sparse[/]: {isSparseString}");
+                    result = result && !(isSparse.HasValue && isSparse.Value);
                 }
                 
                 if (dynamicTypes.Contains(diskType))
                 {
                     using var diffHandler = new DifferencingVhdHandler(path);
 
-                    diffHandler.OutputDiagnosticInfo(logger);
+                    result = diffHandler.OutputDiagnosticInfo(logger) && result;
                 }
                 else
                 {
                     var fileLength = (ulong)(new FileInfo(path).Length);
                     var validSectorCount = maybeFooter.CurrentSize + LbaSize == fileLength;
-                    logger.Log($"[yellow]Sector count validation[/]: {(validSectorCount ? "[green]valid[/]": "[red]invalid[/]")}");
+                    var checkSizeInBytesValid = maybeFooter.CurrentSize % Util.LbaSize == 0;
+
+                    logger.Log($"[yellow]Sector count validation[/]: {checkString(validSectorCount)}");
+                    logger.Log($"[yellow]Size in bytes validation[/]: {checkString(checkSizeInBytesValid)}");
                     logger.Log(new Rule("[green]End of VHD Footer[/]").LeftJustified());
                 }
+
+                return result;
             }
             else
             {
                 logger.Error("Failed to read/parse VHD footer");
+                return false;
             }
         }
 
@@ -376,6 +401,12 @@ namespace auvdisk.DiskImage.Vhd
             else
             {
                 size = maybeSize!.Value;
+
+                if (size % LbaSize != 0)
+                {
+                    size = RoundUp(size, LbaSize);
+                    logger.Warning($"VHD size must be a multiple of {LbaSize}, rounded up size to {size}");
+                }
             }
             
             var footer = CreateVhdFooter(size);
@@ -386,7 +417,7 @@ namespace auvdisk.DiskImage.Vhd
 
             dynamicHeader.TableOffset = LbaSize * 3 + parentLocatorSpaceInBytes;
             dynamicHeader.BlockSize = 1024 * 1024 * 2; // 2MiB
-            dynamicHeader.MaxTableEntries = (uint)size / dynamicHeader.BlockSize;
+            dynamicHeader.MaxTableEntries = (uint)size.DivideAndCeil(dynamicHeader.BlockSize);
             
             ulong batSize = sizeof(uint) * dynamicHeader.MaxTableEntries;
             ulong batSpace = RoundUp(batSize, LbaSize);

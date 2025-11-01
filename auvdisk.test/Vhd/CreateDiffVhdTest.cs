@@ -1,3 +1,5 @@
+using auvdisk.DiskImage.Vhd;
+
 namespace auvdisk.test.Vhd
 {
     [Collection("Sequential")]
@@ -20,6 +22,7 @@ namespace auvdisk.test.Vhd
             Assert.NotNull(disk);
             Assert.Equal(2, disk.Layers.Count());
             Assert.True(File.Exists(_childPath));
+            Assert.True(Util.IsValidVhd(_childPath));
         }
 
         [Fact]
@@ -35,6 +38,7 @@ namespace auvdisk.test.Vhd
             Assert.NotNull(disk);
             Assert.Equal(3, disk.Layers.Count());
             Assert.True(File.Exists(_grandchildPath));
+            Assert.True(Util.IsValidVhd(_grandchildPath));
         }
 
         public void Dispose()

@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.RegularExpressions;
 using auvdisk.DiskImage;
 using auvdisk.Log;
 using CommandLine;
@@ -38,6 +39,47 @@ namespace auvdisk.Extensions
 
                 return null;
             }
+        }
+
+        public static ulong? ParseByteLength(this string str)
+        {
+            var units = new List<string>(){
+                "B", "KiB", "MiB", "GiB", "TiB"
+            }.Select(x => x.ToLower()).ToList();
+
+            str = str.Replace(" ", "");
+            str = str.Replace(",", "");
+            str = str.ToLower();
+
+            Regex regex = new Regex(@"^([\d\.]+)(.*)");
+
+            var match = regex.Match(str);
+
+            if (match.Success)
+            {
+                var amountString = match.Groups[1].Value;
+                var unit = match.Groups[2].Value;
+                var amount = SuppressVal<FormatException, decimal>(() => Convert.ToDecimal(amountString));
+
+                if (amount.HasValue && unit == "")
+                {
+                    return (ulong)Math.Ceiling(amount.Value);
+                }
+                else if (units.Contains(unit) && amount.HasValue)
+                {
+                    ulong multiplier = 1;
+                    int idx = units.FindIndex(x => x == unit);
+
+                    for (int i = 0; i < idx; ++i)
+                    {
+                        multiplier *= 1024;
+                    }
+
+                    return (ulong)Math.Ceiling(amount.Value * multiplier);
+                }
+            }
+
+            return null;
         }
 
         public static string ToReadableString(this DiscUtils.Partitions.PartitionTable partitionTable)
@@ -122,6 +164,16 @@ namespace auvdisk.Extensions
                 .Check((_) => !File.Exists(target), (_) => $"{target} already exists");
         }
 
+        public static Flow<TSubj> WithCheckedSize<TSubj>(this Flow<TSubj> action, string size) where TSubj : class
+        {
+            return action.Check((_) => size.ParseByteLength().HasValue, (_) => "Failed to parse size in bytes");
+        }
+
         public static Value<T> Some<T>(this T value) where T: struct => new(value);
+
+        public static ulong DivideAndCeil(this ulong value, ulong divisor)
+        {
+            return (ulong)Math.Ceiling((double)value / (double)divisor);
+        }
     }
 }

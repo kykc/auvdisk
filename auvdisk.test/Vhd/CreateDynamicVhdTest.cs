@@ -1,3 +1,5 @@
+using auvdisk.DiskImage.Vhd;
+
 namespace auvdisk.test.Vhd
 {
     [Collection("Sequential")]
@@ -11,13 +13,15 @@ namespace auvdisk.test.Vhd
             var logger = new LogWatcher();
             
             Assert.False(File.Exists(_targetPath));
-            
-            DiskImage.Vhd.Util.CreateDynamicVhd(_targetPath, 1024 * 1024 * 1024, logger);
+
+            // Test with size which is not divisible nor by 512 neither by 2MiB block
+            DiskImage.Vhd.Util.CreateDynamicVhd(_targetPath, 107374182401UL, logger);
             using var disk = DiskImage.Vhd.Util.OpenDiskWithDu(_targetPath, logger);
             
             Assert.NotNull(disk);
             Assert.Single(disk.Layers);
             Assert.True(File.Exists(_targetPath));
+            Assert.True(Util.IsValidVhd(_targetPath));
         }
 
         public void Dispose()

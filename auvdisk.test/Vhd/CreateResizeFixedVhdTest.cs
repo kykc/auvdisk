@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using auvdisk.DiskImage.Vhd;
 using auvdisk.Log;
 using DiscUtils.Fat;
 using DiskAccessLibrary;
@@ -31,6 +32,7 @@ namespace auvdisk.test.Vhd
 
             Assert.NotNull(disk);
             Assert.Equal(size, (ulong)disk.Size);
+            Assert.True(Util.IsValidVhd(_targetCreateFast));
 
             WriteTestData(disk, size, logger);
 
@@ -40,6 +42,7 @@ namespace auvdisk.test.Vhd
 
             Assert.NotNull(resizedDisk);
             Assert.Equal(newsize, (ulong)resizedDisk.Size);
+            Assert.True(Util.IsValidVhd(_targetCreateFast));
 
             CheckTestData(_targetCreateFast, logger);
         }

@@ -113,10 +113,12 @@ namespace auvdisk
                 {
                     var action = () =>
                     {
-                        DiskImage.Vhd.Util.CreateFixedVhd(opts.Target, opts.Size, logger, opts.ZeroFill);
+                        var size = opts.Size.ParseByteLength()!.Value;
+                        DiskImage.Vhd.Util.CreateFixedVhd(opts.Target, size, logger, opts.ZeroFill);
                     };
 
                     var result = Flow<None>.Ok(None.Value, logger)
+                        .WithCheckedSize(opts.Size)
                         .WithCheckedTargetAvailable(opts.Target)
                         .WithSideEffect(action);
 
@@ -132,12 +134,14 @@ namespace auvdisk
                 {
                     var action = () =>
                     {
-                        DiskImage.Vhd.Util.CreateDynamicVhd(opts.Target, opts.Size, logger);
+                        var size = opts.Size.ParseByteLength()!.Value;
+                        DiskImage.Vhd.Util.CreateDynamicVhd(opts.Target, size, logger);
                         DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Target, logger);
                         new DiskProbe(opts.Target, logger).Probe();
                     };
 
                     var result = Flow<None>.Ok(None.Value, logger)
+                        .WithCheckedSize(opts.Size)
                         .WithCheckedTargetAvailable(opts.Target)
                         .WithSideEffect(action)
                         .Log("Done.");
@@ -158,19 +162,28 @@ namespace auvdisk
                 },
                 (Cli.DiagVhd opts) =>
                 {
-                    var action = () => DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Source, logger);
+                    bool validVhd = true;
+                    var action = () =>
+                    {
+                        validVhd = DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Source, logger);
+                    };
 
                     var result = Flow<None>.Ok(None.Value, logger)
                         .WithCheckedSourceExists(opts.Source)
                         .WithSideEffect(action);
                     
-                    return result.LogErrorIfAny() ? 1 : 0;
+                    return result.LogErrorIfAny() || !validVhd ? 1 : 0;
                 },
                 (Cli.ResizeFixedVhd opts) =>
                 {
-                    Action action = () => DiskImage.Vhd.Util.ResizeFixedVhd(opts.Target, opts.Size, logger);
+                    Action action = () =>
+                    {
+                        var size = opts.Size.ParseByteLength()!.Value;
+                        DiskImage.Vhd.Util.ResizeFixedVhd(opts.Target, size, logger);
+                    };
 
                     var result = Flow<None>.Ok(None.Value, logger)
+                        .WithCheckedSize(opts.Size)
                         .WithCheckedSourceExists(opts.Target)
                         .WithSideEffect(action);
 
