@@ -145,8 +145,15 @@ namespace auvdisk.Extensions
         public static Flow<TSubj> WithCheckedSourceExists<TSubj>(this Flow<TSubj> action, string source)
             where TSubj : class
         {
+            var tryOpenForReading = (TSubj subj) =>
+            {
+                File.OpenRead(source)?.Close();
+                return subj;
+            };
+
             return action.Log("Checking that source file exists")
-                .Check((_) => File.Exists(source), (_) => $"Source file {source} does not exist");
+                .Check((_) => File.Exists(source), (_) => $"Source file {source} does not exist")
+                .TryMap<TSubj, Exception>(tryOpenForReading);
         }
 
         public static Flow<Value<long>> WithCheckedStreamBoundaries<TSubj>(this Flow<TSubj> action, string path, ulong offset, ulong length)

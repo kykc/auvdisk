@@ -36,7 +36,7 @@ namespace auvdisk
                 Cli.VhdToLoop, Cli.ImgToVhd, Cli.VhdToImg, Cli.CreateDiffVhd, 
                 Cli.CreateFixedVhd, Cli.MergeVhd, Cli.CreateDynamicVhd, Cli.ExtractFile,
                 Cli.DiagVhd, Cli.ResizeFixedVhd, Cli.CheckIsSparse, Cli.VhdToVhdx,
-                Cli.VhdxToVhd, Cli.GenVmdkWrapper, Cli.Qcow2ToRaw>(args);
+                Cli.VhdxToVhd, Cli.GenVmdkWrapper, Cli.Qcow2ToRaw, Cli.ProbeBcd>(args);
 
             var exitCode = cliResult.MapResult(
                 (Cli.VdiskProbe opts) =>
@@ -246,6 +246,19 @@ namespace auvdisk
                 (Cli.Qcow2ToRaw opts) =>
                 {
                     var result = DiskImageConverter.ConvertQcow2ToRaw(opts.Source, opts.Target, logger, opts.Verbose);
+
+                    return result.LogErrorIfAny() ? 1 : 0;
+                },
+                (Cli.ProbeBcd opts) =>
+                {
+                    var action = () =>
+                    {
+                        auvdisk.BCD.Util.ProbeBcd(opts.Source, opts.Verbose, logger);
+                    };
+
+                    var result = Flow<None>.Ok(None.Value, logger)
+                        .WithCheckedSourceExists(opts.Source)
+                        .WithSideEffect(action);
 
                     return result.LogErrorIfAny() ? 1 : 0;
                 },
