@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using auvdisk.Log;
 using DiscUtils.BootConfig;
 using DiscUtils.Registry;
+using DotNext.Collections.Generic;
 using Spectre.Console;
 
 namespace auvdisk.BCD
@@ -15,9 +16,7 @@ namespace auvdisk.BCD
             var properties = record.GetType().GetProperties();
             var ignoreProperties = new string[] { "RawProperties", "HumanReadableName" };
 
-            return new string[]
-                {
-                }
+            return new string[]{}
                 .UnionIf($"Type: {record.GetType().Name}", () => !record.AuWellKnown || verbose)
                 .Union(properties.Where(prop => !ignoreProperties.Contains(prop.Name)).Select(prop => $"{prop.Name.Markup(markup, "yellow")}: {prop.GetValue(record, null)?.Markup(markup)}"))
                 .UnionIf("RawProperties:".Markup(markup, "yellow"), () => !record.AuWellKnown || verbose)
@@ -37,7 +36,7 @@ namespace auvdisk.BCD
 
         public override string ToString()
         {
-            return RecordToString(this, false);
+            return RecordToString(this, false, false);
         }
 
         public ApplicationType ApplicationType { get; set; }
@@ -62,13 +61,22 @@ namespace auvdisk.BCD
 
     public record WindowsOsLoaderBcdRecord : BcdRecord
     {
-        private string? CrudeExtractFilePathFromBinaryDeviceEntry(BcdObject obj, string name)
+        // Here's the deal: I failed to find reference manual and/or exhausting implementation
+        // of the device pointer entry in BCD. DU also "underparses" it. So, because,
+        // in my particular case I care about paths to VHD(x)s the most, I devised a
+        // crude and dirty way to do it:
+        // 1. Via reflection, I get private raw byte[] array of the binary device pointer entry
+        // 2. Then (as if reflection was not enough) I use regex to extract all
+        // null-terminated UTF-16 strings that start with \ from raw binary blob.
+        //
+        // I might burn in programmer's hell for it, but it does what I need surprisingly well.
+        private static string? CrudeExtractFilePathsFromBinaryDeviceEntry(BcdObject obj, string name)
         {
             Element? el = obj.Elements.FirstOrDefault(x => x.FriendlyName == name);
 
             if (el != null)
             {
-                FieldInfo[] fields = typeof(Element).GetFields(
+                var fields = typeof(Element).GetFields(
                     BindingFlags.NonPublic |
                     BindingFlags.Instance);
 
@@ -80,9 +88,18 @@ namespace auvdisk.BCD
 
                 var resultString = Encoding.Unicode.GetString(result);
                 var regex = new Regex(@"\\[\\\w\d-_\.]+\0$");
-                var match = regex.Match(resultString);
+                var matches = new Regex(@"\\[\\\w\d-_\.]+\0").Matches(resultString);
 
-                return regex.IsMatch(resultString) ? "?" + match.Value : null;
+                if (matches.Count > 1)
+                {
+                    return (el?.Value?.ToString() ?? "") + "" + matches.Select(x => x.Value.TrimEnd('\0')).Aggregate((x, y) => x + "\\?" + y);
+                }
+                else if (regex.IsMatch(resultString))
+                {
+                    var match = regex.Match(resultString);
+
+                    return (el?.Value?.ToString() ?? "") + "" + match.Value.TrimEnd('\0');
+                }
             }
 
             return null;
@@ -92,8 +109,8 @@ namespace auvdisk.BCD
         {
             Description = obj.FindElement("{description}") ?? "";
             KernelPath = obj.FindElement("{path}") ?? "";
-            Device = CrudeExtractFilePathFromBinaryDeviceEntry(obj, "{device}") ?? obj.FindElement("{device}") ?? "";
-            OsDevice = CrudeExtractFilePathFromBinaryDeviceEntry(obj, "{osdevice}") ?? obj.FindElement("{osdevice}") ?? "";
+            Device = CrudeExtractFilePathsFromBinaryDeviceEntry(obj, "{device}") ?? obj.FindElement("{device}") ?? "";
+            OsDevice = CrudeExtractFilePathsFromBinaryDeviceEntry(obj, "{osdevice}") ?? obj.FindElement("{osdevice}") ?? "";
             Locale = obj.FindElement("{locale}") ?? "";
             SystemRoot = obj.FindElement("{systemroot}") ?? "";
         }
@@ -104,18 +121,18 @@ namespace auvdisk.BCD
         public string OsDevice { get; set; }
         public string Locale { get; set; }
         public string SystemRoot { get; set; }
-        public override bool AuWellKnown => true;
+        public override bool AuWellKnown => RawProperties.GetOrInvoke("{recoveryos}", () => "").ToLower() != "true";
         public override string? HumanReadableName => Description;
 
         public override string ToString()
         {
-            return RecordToString(this, false);
+            return RecordToString(this, false, false);
         }
     }
 
     public static class Util
     {
-        public static void ProbeBcd(string path, bool verbose, ILog logger)
+        public static IEnumerable<BcdRecord> ProbeBcd(string path, bool verbose, ILog logger)
         {
             using var fileStream = File.OpenRead(path);
             using var hive = new RegistryHive(fileStream);
@@ -130,6 +147,8 @@ namespace auvdisk.BCD
                 logger.Log(new Rule($"[green]{humanReadableName.EscapeMarkup()}[/]").LeftJustified());
                 logger.Log(BcdRecord.RecordToString(record, verbose, true));
             }
+
+            return records;
         }
 
         public static IEnumerable<TSource> Union<TSource>(this IEnumerable<TSource> first, TSource element)
