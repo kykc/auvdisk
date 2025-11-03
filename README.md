@@ -30,6 +30,7 @@ packages directly from this repo (see `.gitea/workflows` for some examples on pa
 | VerbName           | HelpText                                                                                                                                        |
 |--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
 | probe-vdisk        | Probe disk image, try to guess the format, existing partitions and filesystems                                                                  |
+| browse-vdisk       | View virtual disk contents in a simple mc/nc-like file explorer                                                                                 |
 | probe-bcd          | Probe Windows BCD database and output records. Very basic, doesn't locate devices. Might be useful on Linux as nothing else is available there. |
 | ls-vdisk           | Try to list specific directory in all filesystems that were found                                                                               |
 | cat-vdisk          | Try to cat specific file in all filesystems that were found                                                                                     |
@@ -70,5 +71,6 @@ the work that was needed here. The only thing I had to write "from scratch" was 
 * [CommandLineParser](https://github.com/commandlineparser/commandline)
 * [DotNext](https://dotnet.github.io/dotNext/)
 * [Spectre.Console](https://spectreconsole.net/)
+* [Terminal.Gui](https://github.com/gui-cs/Terminal.Gui)
 * [Microsoft.Windows.CsWin32](https://github.com/microsoft/CsWin32)
 * [xUnit](https://xunit.net/?tabs=cs)

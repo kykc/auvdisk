@@ -8,7 +8,7 @@
     <RollForward>LatestMajor</RollForward>
     <LangVersion>Latest</LangVersion>
     <AssemblyName>auvdisk</AssemblyName>
-    <Version>1.7.19</Version>
+    <Version>1.8.0</Version>
     <Authors>Alexander Automatl</Authors>
     <Company>Tomatl Inc</Company>
     <IsWindows Condition="$([MSBuild]::IsOSPlatform('Windows'))">true</IsWindows>
@@ -26,6 +26,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Spectre.Console" Version="0.52.0" />
+    <PackageReference Include="Terminal.Gui" Version="1.19.0" />
     <PackageReference Include="Win32.TokenPrivileges" Version="1.0.19073.2" Condition="'$(IsWindows)'=='true'">
         <NoWarn>NU1701</NoWarn>
     </PackageReference>
