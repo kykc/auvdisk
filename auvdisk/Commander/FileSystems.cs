@@ -14,9 +14,18 @@ namespace auvdisk.Commander
         string PathJoin(string p1, string p2);
         string GetFileName(string path);
         string GetDirectoryName(string path);
+        FileInfo GetFileInfo(string path);
 
         IListEntry Cwd { get; set; }
     }
+
+    record FileInfo(
+        ulong Size,
+        string Name,
+        string FullPath,
+        DateTime CreatedOnUtc,
+        DateTime ModifiedOnUtc,
+        FileAttributes Attributes);
 
     static class RealDiskFactory
     {
@@ -80,6 +89,16 @@ namespace auvdisk.Commander
             }
 
             return result;
+        }
+
+        public FileInfo GetFileInfo(string path)
+        {
+            var createdOn = File.GetCreationTimeUtc(path);
+            var modifiedOn = File.GetLastWriteTimeUtc(path);
+            var length = (ulong)new System.IO.FileInfo(path).Length;
+            var attrs = File.GetAttributes(path);
+
+            return new FileInfo(length, GetFileName(path), path, createdOn, modifiedOn, attrs);
         }
 
         public IListEntry Cwd { get; set; }
@@ -155,6 +174,16 @@ namespace auvdisk.Commander
             }
 
             return result;
+        }
+
+        public FileInfo GetFileInfo(string path)
+        {
+            var createdOn = File.GetCreationTimeUtc(path);
+            var modifiedOn = File.GetLastWriteTimeUtc(path);
+            var length = (ulong)new System.IO.FileInfo(path).Length;
+            var attrs = File.GetAttributes(path);
+
+            return new FileInfo(length, GetFileName(path), path, createdOn, modifiedOn, attrs);
         }
 
         public IListEntry Cwd { get; set; }
@@ -255,6 +284,20 @@ namespace auvdisk.Commander
             }
 
             return result;
+        }
+
+        public FileInfo GetFileInfo(string path)
+        {
+            var tokens = path.TrimStart(SepChar).Split(SepChar);
+            var volume = tokens.First();
+            var filePath = string.Join(SepChar, tokens.Skip(1));
+
+            var createdOn = Fs[volume].GetCreationTimeUtc(filePath);
+            var modifiedOn = Fs[volume].GetLastWriteTimeUtc(filePath);
+            var length = (ulong)Fs[volume].GetFileInfo(filePath).Length;
+            var attrs = Fs[volume].GetAttributes(filePath);
+
+            return new FileInfo(length, GetFileName(path), path, createdOn, modifiedOn, attrs);
         }
 
         public IListEntry Cwd { get; set; }

@@ -9,6 +9,39 @@ namespace auvdisk.Commander
         {
             return (list.Source.ToList() as List<IListEntry>)!;
         }
+
+        public static string ToHumanString(this FileInfo info)
+        {
+            return new[]
+            {
+                $"Name: {info.Name}",
+                $"Full path: {info.FullPath}",
+                $"Size in bytes: {info.Size}",
+                $"Size (human readable): {HumanizeFilesize(info.Size, true)}",
+                $"Created on (UTC): {info.CreatedOnUtc:yyyy-MM-dd HH:mm:ss}",
+                $"Modified on (UTC): {info.ModifiedOnUtc:yyyy-MM-dd HH:mm:ss}",
+                $"Attributes: {info.Attributes}",
+            }.Aggregate((x, y) => $"{x}{Environment.NewLine}{y}");
+        }
+
+        public static string HumanizeFilesize(ulong size, bool human = true)
+        {
+            if (!human)
+            {
+                return size.ToString();
+            }
+
+            var units = new List<string>(){
+                "B", "KiB", "MiB", "GiB", "TiB"
+            };
+
+            ulong bytes = size;
+
+            double pow = Math.Floor((bytes>0 ? Math.Log(bytes) : 0) / Math.Log(1024));
+            pow = Math.Min(pow, units.Count-1);
+            double value = (double)bytes / Math.Pow(1024, pow);
+            return value.ToString(pow==0 ? "F0" : "F2") + "" + units[(int)pow];
+        }
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
@@ -100,6 +133,7 @@ namespace auvdisk.Commander
 
             var statusBar = new StatusBar([
                 new StatusItem(Key.F3, "~F3~ View", () => ViewFile(leftList.HasFocus ? leftList : rightList, leftList.HasFocus ? leftPath : rightPath)),
+                new StatusItem(Key.F4, "~F4~ File Info", () => ViewFileInfo(leftList.HasFocus ? leftList : rightList, leftList.HasFocus ? leftPath : rightPath)),
                 new StatusItem(Key.F5, "~F5~ Copy", () => CopyFile(leftList, rightList, leftPath, rightPath)),
                 new StatusItem(Key.F10, "~F10~ Quit", () => Application.RequestStop())
             ]);
@@ -236,6 +270,45 @@ namespace auvdisk.Commander
             catch (Exception ex)
             {
                 MessageBox.ErrorQuery("Error", $"Failed to view file: {ex.Message}", "OK");
+            }
+        }
+
+        static void ViewFileInfo(ListView list, Label pathLabel)
+        {
+            try
+            {
+                var state = (list.Data as IFilesystem)!;
+                var selected = list.FsSource()[list.SelectedItem];
+                if (!selected.IsFile()) return;
+
+                var filePath = state.PathJoin(state.Cwd.FullPath, selected.Name);
+                var fileInfo = state.GetFileInfo(filePath);
+
+                var viewDialog = new Dialog($"File Info: {selected}");
+
+                var textView = new TextView()
+                {
+                    X = 0,
+                    Y = 0,
+                    Width = Dim.Fill(),
+                    Height = Dim.Fill(1),
+                    ReadOnly = true,
+                    Text = fileInfo.ToHumanString()
+                };
+
+                var closeButton = new Button("Close (ESC)")
+                {
+                    X = Pos.Center(),
+                    Y = Pos.Bottom(textView)
+                };
+                closeButton.Clicked += () => Application.RequestStop();
+
+                viewDialog.Add(textView, closeButton);
+                Application.Run(viewDialog);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.ErrorQuery("Error", $"Failed to view file info: {ex.Message}", "OK");
             }
         }
 
