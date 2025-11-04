@@ -1,4 +1,5 @@
 using System.Reflection.Metadata;
+using System.Text.RegularExpressions;
 using auvdisk.Extensions;
 using DiscUtils;
 using DiscUtils.Iso9660;
@@ -196,28 +197,59 @@ namespace auvdisk.DiskImage
             return (fs) => RecursiveHandler(fs, path);
         }
 
-        public static Action<DiscFileSystem> GetListArbitraryDir(string path, Log.ILog logger, bool silent)
+        public static Action<DiscFileSystem> GetListArbitraryDir(string path, Log.ILog logger, bool silentArg, bool recursive = false, Regex? filter = null)
         {
-            return (DiscFileSystem fs) =>
+            void Handler(DiscFileSystem fs, string targetPath, bool silent)
             {
-                string prettyPath = "/" + path.FormatDuPath();
-                string searchPath = path.FormatDuPath(false);
+                string prettyPath = "/" + targetPath.FormatDuPath();
+                string searchPath = targetPath.FormatDuPath(false);
 
                 if (!silent)
                 {
-                    logger.Log($"Listing contents of [yellow]{prettyPath}[/]:");
+                    var modifiers = new List<string> { };
+                    if (recursive) modifiers.Add("recursive");
+                    if (filter != null) modifiers.Add("filtered");
+                    var modifiersString = String.Empty;
+
+                    if (modifiers.Count > 0)
+                    {
+                        modifiersString = $" ({String.Join(", ", modifiers)})";
+                    }
+
+                    logger.Log($"Listing contents of [yellow]{prettyPath}[/]{modifiersString}:");
                 }
 
                 try
                 {
                     foreach (var dir in fs.GetDirectories(searchPath))
                     {
-                        logger.Log("d   /" + dir.FormatDuPath());
+                        if (recursive)
+                        {
+                            Handler(fs, dir, true);
+                        }
+                        else
+                        {
+                            logger.Log("d   /" + dir.FormatDuPath());
+                        }
                     }
 
                     foreach (var f in fs.GetFiles(searchPath))
                     {
-                        logger.Log("    /" + f.FormatDuPath());
+                        if (filter != null)
+                        {
+                            var matches = filter.Matches(f);
+
+                            if (matches.Count > 0)
+                            {
+                                var result = "    /" + f.FormatDuPath();
+                                result = filter.Replace(result, (m) => $"[yellow]{m.Value}[/]");
+                                logger.Log(result);
+                            }
+                        }
+                        else
+                        {
+                            logger.Log("    /" + f.FormatDuPath());
+                        }
                     }
                 }
                 catch (DirectoryNotFoundException ex)
@@ -232,7 +264,9 @@ namespace auvdisk.DiskImage
                 {
                     logger.Error("Unexpected exception " + ex.GetType().ToString() + ": " + ex.Message);
                 }
-            };
+            }
+
+            return (fs) => Handler(fs, path, silentArg);
         }
 
         public static Action<DiscFileSystem> GetCatArbitraryFile(string path, Log.ILog logger, bool silent)

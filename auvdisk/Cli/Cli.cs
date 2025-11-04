@@ -172,10 +172,6 @@ namespace auvdisk.Cli
     [Verb("ls-vdisk", HelpText = "Try to list specific directory in all filesystems that were found")]
     class VdiskList
     {
-        [Option("offset", Default = 0, HelpText = "Skip number of bytes from the beginning of the file")]
-        public long Offset { get; set; } = 0;
-        [Option("trim", Default = 0, HelpText = "Skip number of bytes from the end of the file")]
-        public long Trim { get; set; } = 0;
         [Option('s', "source", Required = true, HelpText = "Path to vdisk image file")]
         public string Source { get; set; } = "";
         [Option('t', "target", Required = true, HelpText = "Target search path")]
@@ -184,16 +180,16 @@ namespace auvdisk.Cli
         public int PartIdx { get; set; } = -1;
         [Option("silent", Required = false, Default = false, HelpText = "Suppress all output except FS handler")]
         public bool Silent { get; set; } = false;
+        [Option("filter", Required = false, Default = "", HelpText = "Regex output filtering")]
+        public string Filter { get; set; } = "";
+        [Option('r', "recursive", Required = false, Default = false, HelpText = "List filesystem(s) recursively")]
+        public bool Recursive { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("cat-vdisk", HelpText = "Try to cat specific file in all filesystems that were found")]
     class VdiskCat
     {
-        [Option("offset", Default = 0, HelpText = "Skip number of bytes from the beginning of the file")]
-        public long Offset { get; set; } = 0;
-        [Option("trim", Default = 0, HelpText = "Skip number of bytes from the end of the file")]
-        public long Trim { get; set; } = 0;
         [Option('s', "source", Required = true, HelpText = "Path to vdisk image file")]
         public string Source { get; set; } = "";
         [Option('t', "target", Required = true, HelpText = "Target file path")]

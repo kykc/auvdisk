@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using auvdisk.Extensions;
 using CommandLine;
 using auvdisk.DiskImage;
@@ -57,8 +58,23 @@ namespace auvdisk
                 },
                 (Cli.VdiskList opts) =>
                 {
+                    Regex? filterRegex = null;
+                    var filterEnabled = args.Contains("--filter");
+
+                    if (opts.Recursive && filterEnabled)
+                    {
+                        filterRegex = new Regex(opts.Filter != String.Empty
+                            ? opts.Filter
+                            : AnsiConsole.Prompt(new TextPrompt<string>("regex [yellow]?>[/] ")));
+                    }
+                    else if (filterEnabled)
+                    {
+                        logger.Warning("Filter option is ignored in non-recursive mode");
+                    }
+
                     ILog probeLogger = opts.Silent ? new NullLogger() : logger;
-                    var probe = new DiskProbe(opts.Source, probeLogger, DiskProbe.GetListArbitraryDir(opts.Target, logger, opts.Silent), opts.PartIdx);
+                    var fsHandler = DiskProbe.GetListArbitraryDir(opts.Target, logger, opts.Silent, opts.Recursive, filterRegex);
+                    var probe = new DiskProbe(opts.Source, probeLogger, fsHandler, opts.PartIdx);
                     probe.Probe();
 
                     return 0;
