@@ -9,15 +9,15 @@ namespace auvdisk.Cli
 {
     static class Extensions
     {
-        public static ParserResult<object> ParseArguments<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21>(this Parser parser, IEnumerable<string> args)
+        public static ParserResult<object> ParseArguments<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22>(this Parser parser, IEnumerable<string> args)
         {
             if (parser == null) throw new ArgumentNullException("parser");
 
             return parser.ParseArguments(args, new[] { typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6), typeof(T7), typeof(T8),
-                typeof(T9), typeof(T10), typeof(T11), typeof(T12), typeof(T13), typeof(T14), typeof(T15), typeof(T16), typeof(T17), typeof(T18), typeof(T19), typeof(T20), typeof(T21) });
+                typeof(T9), typeof(T10), typeof(T11), typeof(T12), typeof(T13), typeof(T14), typeof(T15), typeof(T16), typeof(T17), typeof(T18), typeof(T19), typeof(T20), typeof(T21), typeof(T22) });
         }
 
-        public static TResult MapResult<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, TResult>(this ParserResult<object> result,
+        public static TResult MapResult<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, TResult>(this ParserResult<object> result,
             Func<T1, TResult> parsedFunc1,
             Func<T2, TResult> parsedFunc2,
             Func<T3, TResult> parsedFunc3,
@@ -39,6 +39,7 @@ namespace auvdisk.Cli
             Func<T19, TResult> parsedFunc19,
             Func<T20, TResult> parsedFunc20,
             Func<T21, TResult> parsedFunc21,
+            Func<T22, TResult> parsedFunc22,
             Func<IEnumerable<Error>, TResult> notParsedFunc)
         {
             var parsed = result as Parsed<object>;
@@ -128,6 +129,10 @@ namespace auvdisk.Cli
                 {
                     return parsedFunc21((T21)parsed.Value);
                 }
+                if (parsed.Value is T22)
+                {
+                    return parsedFunc22((T22)parsed.Value);
+                }
                 throw new InvalidOperationException();
             }
             return notParsedFunc(((NotParsed<object>)result).Errors);
@@ -155,6 +160,15 @@ namespace auvdisk.Cli
         public int PartIdx { get; set; } = -1;
         [Option('r', "recursive", Required = false, Default = false, HelpText = "List filesystem(s) recursively")]
         public bool Recursive { get; set; } = false;
+    }
+
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("browse-volumes",
+        HelpText = "Browse volumes available on the local system, avoiding using system FS drivers")]
+    class BrowseVolumes
+    {
+        [Option('l', "list", Required = false, HelpText = "List the volumes instead of browsing")]
+        public bool List { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]

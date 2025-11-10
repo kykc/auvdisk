@@ -196,30 +196,10 @@ namespace auvdisk.Commander
 
         public Dictionary<string, DiscFileSystem> Fs { get; }
 
-        public DiscUtilsFs(IEnumerable<DiscFileSystem> fs)
+        public DiscUtilsFs(Dictionary<string, DiscFileSystem> fs)
         {
-            Fs = fs.Select(x => new KeyValuePair<string, DiscFileSystem>(GetFsName(x), x)).ToDictionary();
+            Fs = fs;
             Cwd = new DirEntry(Sep, this);
-        }
-
-        private static string GetFsName(DiscFileSystem fs)
-        {
-            var result = fs.FriendlyName ?? fs.GetType().Name;
-
-            if (auvdisk.Fs.Util.ExtractUuid(fs, new NullLogger()) is { } uuid)
-            {
-                result += $" {uuid}";
-            }
-            else if (fs.VolumeLabel != String.Empty)
-            {
-                result += $" {fs.VolumeLabel}";
-            }
-            else if (fs.VolumeId > 0)
-            {
-                result += $" {fs.VolumeId}";
-            }
-
-            return result;
         }
 
         public IEnumerable<string> GetFiles(string path)

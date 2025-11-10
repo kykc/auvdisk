@@ -1,4 +1,7 @@
+using auvdisk.DiskImage;
+using auvdisk.Extensions;
 using auvdisk.Log;
+using DiscUtils;
 using Terminal.Gui;
 
 namespace auvdisk.Commander
@@ -47,9 +50,9 @@ namespace auvdisk.Commander
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     static class FsCommander
     {
-        public static void EntryPoint(string path, ILog logger)
+        public static void OpenDiskImage(string path, ILog logger)
         {
-            using var fsList = DiskImage.Factory.MakeFsList(path, logger);
+            var fsList = DiskImage.Factory.MakeFsListFromVdisk(path, logger);
 
             if (fsList is null)
             {
@@ -57,6 +60,23 @@ namespace auvdisk.Commander
                 return;
             }
 
+            EntryPoint(fsList, logger);
+        }
+
+        public static Flow<None> OpenLocalFs(ILog logger)
+        {
+            var fsCollection = Factory.MakeFsListFromAvailableVolumes(logger);
+
+            if (!fsCollection.IsError())
+            {
+                EntryPoint(fsCollection.Unwrap(), logger);
+            }
+
+            return fsCollection.Map((x) => None.Value);
+        }
+
+        public static void EntryPoint(DiskImage.FsCollection fsCollection, ILog logger)
+        {
             Application.Init();
             // TODO: try to pick colors which doesn't make anyone's eyes bleed
             Colors.Base.Normal = Application.Driver.MakeAttribute(Color.BrightYellow, Color.Blue);
@@ -77,7 +97,7 @@ namespace auvdisk.Commander
                 Height = Dim.Fill()
             };
 
-            var leftFrame = new FrameView(path)
+            var leftFrame = new FrameView(fsCollection.Caption)
             {
                 X = 0,
                 Y = 0,
@@ -99,7 +119,7 @@ namespace auvdisk.Commander
                 Width = Dim.Fill(),
                 Height = Dim.Fill(),
                 AllowsMarking = false,
-                Data = new DiscUtilsFs(fsList.FileSystems),
+                Data = new DiscUtilsFs(fsCollection.FileSystems),
             };
 
             leftFrame.Add(leftPath, leftList);
@@ -151,9 +171,10 @@ namespace auvdisk.Commander
 
             Application.Run();
             Application.Shutdown();
+            fsCollection.Dispose();
         }
 
-        static bool LoadDirectory(ListView list, Label pathLabel)
+        static bool LoadDirectory(ListView list, Terminal.Gui.Label pathLabel)
         {
             try
             {
@@ -186,7 +207,7 @@ namespace auvdisk.Commander
             }
         }
 
-        static void NavigateDirectory(ListView list, Label pathLabel)
+        static void NavigateDirectory(ListView list, Terminal.Gui.Label pathLabel)
         {
             var selected = list.FsSource()[list.SelectedItem];
             var state = (list.Data as IFilesystem)!;
@@ -225,7 +246,7 @@ namespace auvdisk.Commander
             }
         }
 
-        static void ViewFile(ListView list, Label pathLabel)
+        static void ViewFile(ListView list, Terminal.Gui.Label pathLabel)
         {
             try
             {
@@ -273,7 +294,7 @@ namespace auvdisk.Commander
             }
         }
 
-        static void ViewFileInfo(ListView list, Label pathLabel)
+        static void ViewFileInfo(ListView list, Terminal.Gui.Label pathLabel)
         {
             try
             {
@@ -312,7 +333,7 @@ namespace auvdisk.Commander
             }
         }
 
-        static void CopyFile(ListView srcList, ListView dstList, Label srcPath, Label dstPath)
+        static void CopyFile(ListView srcList, ListView dstList, Terminal.Gui.Label srcPath, Terminal.Gui.Label dstPath)
         {
             try
             {

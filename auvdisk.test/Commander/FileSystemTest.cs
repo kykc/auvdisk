@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using auvdisk.DiskImage;
 using DiscUtils;
 
 namespace auvdisk.test.Commander
@@ -67,7 +68,7 @@ namespace auvdisk.test.Commander
 
             Assert.Single(fsInfos);
 
-            var fs = new auvdisk.Commander.DiscUtilsFs(fsInfos);
+            var fs = new auvdisk.Commander.DiscUtilsFs(Factory.GetFileSystems(fsInfos));
             var ext4Caption = fs.GetDirectories(sep).Select(x => fs.GetFileName(x)).First();
             Assert.Equal(fs.Fs.Keys.First(), ext4Caption);
             var ext4RootFiles = fs.GetFiles($"{sep}{ext4Caption}").ToList();

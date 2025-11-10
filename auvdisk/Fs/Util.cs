@@ -6,13 +6,13 @@ using auvdisk.Extensions;
 
 namespace auvdisk.Fs
 {
-    public class Util
+    public static class Util
     {
 #pragma warning disable CA1416
         public static bool ResizeFileFastUnsafe(string target, ulong size, Log.ILog logger)
         {
 #if WINDOWS
-            return auvdisk.Interop.Win32.ResizeFileFastUnsafe(target, size, logger).IsSuccess;
+            return auvdisk.Interop.Win32.Util.ResizeFileFastUnsafe(target, size, logger).IsSuccess;
 #else
             logger.Error("This operation is not supported on this platform");
             return false;
@@ -22,7 +22,7 @@ namespace auvdisk.Fs
         public static bool? IsSparseFile(string target, Log.ILog logger)
         {
 #if WINDOWS
-            return auvdisk.Interop.Win32.IsSparseFile(target, logger);
+            return auvdisk.Interop.Win32.Util.IsSparseFile(target, logger);
 #else
             logger.Error("This operation is not supported on this platform");
             return null;
@@ -57,6 +57,11 @@ namespace auvdisk.Fs
             {
                 return null;
             }
+        }
+
+        public static string? GetUuid(this DiscUtils.DiscFileSystem fs, Log.ILog logger)
+        {
+            return ExtractUuid(fs, logger);
         }
         
         public static void ExtractFileSegment(string source, string target, ulong offset, ulong length)

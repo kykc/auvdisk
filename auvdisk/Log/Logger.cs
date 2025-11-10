@@ -1,3 +1,4 @@
+using Common.Logging;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
@@ -10,13 +11,24 @@ namespace auvdisk.Log
         void Log(string log);
         void Error(string error);
         void Warning(string warning);
+        void Debug(string debug);
         Action<string> ToAction();
         Stream ToStream();
+
+        LogLevel LogLevel { get; }
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     public class Logger : ILog
     {
+        public Logger()
+        {
+            if ((Environment.GetEnvironmentVariable("AUVDISK_LOG_LEVEL") ?? "").ToLowerInvariant() == "debug")
+            {
+                LogLevel = LogLevel.Debug;
+            }
+        }
+
         public void Log(IRenderable log)
         {
             AnsiConsole.Write(log);
@@ -30,6 +42,14 @@ namespace auvdisk.Log
         public void Warning(string warning)
         {
             AnsiConsole.MarkupLine($"[yellow]WARNING: {warning.EscapeMarkup()}[/]");
+        }
+
+        public void Debug(string debug)
+        {
+            if (LogLevel <= LogLevel.Debug)
+            {
+                AnsiConsole.WriteLine(debug);
+            }
         }
 
         public void Log(string s)
@@ -65,6 +85,8 @@ namespace auvdisk.Log
         {
             return Console.OpenStandardOutput();
         }
+
+        public LogLevel LogLevel { get; set; } = LogLevel.Info;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
@@ -86,6 +108,10 @@ namespace auvdisk.Log
         {
         }
 
+        public void Debug(string debug)
+        {
+        }
+
         public Action<string> ToAction()
         {
             return Log;
@@ -95,5 +121,7 @@ namespace auvdisk.Log
         {
             return Stream.Null;
         }
+
+        public LogLevel LogLevel => LogLevel.All;
     }
 }

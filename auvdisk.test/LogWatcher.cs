@@ -1,3 +1,4 @@
+using Common.Logging;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
@@ -5,10 +6,11 @@ namespace auvdisk.test
 {
     public class LogWatcher : auvdisk.Log.ILog
     {
-        private List<string> _log = new();
-        private List<string> _warning = new();
-        private List<string> _error = new();
-        private List<string> _all = new();
+        private readonly List<string> _log = new();
+        private readonly List<string> _warning = new();
+        private readonly List<string> _error = new();
+        private readonly List<string> _all = new();
+        private readonly List<string> _debug = new();
         
         public void Log(IRenderable log)
         {
@@ -35,6 +37,12 @@ namespace auvdisk.test
             _all.Add(warning);
         }
 
+        public void Debug(string debug)
+        {
+            _debug.Add(debug);
+            _all.Add(debug);
+        }
+
         public Action<string> ToAction()
         {
             return Log;
@@ -44,6 +52,8 @@ namespace auvdisk.test
         {
             return new ListStringWriterStream(_all);
         }
+
+        public LogLevel LogLevel => LogLevel.All;
 
         public IEnumerable<string> GetAll()
         {

@@ -1,9 +1,14 @@
 using System.Numerics;
+using System.Reflection.Emit;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using auvdisk.DiskImage;
+using auvdisk.Interop;
 using auvdisk.Log;
 using CommandLine;
 using DiskAccessLibrary.VHD;
+using Spectre.Console;
 
 namespace auvdisk.Extensions
 {
@@ -110,6 +115,18 @@ namespace auvdisk.Extensions
             return false;
         }
 
+        public static Table MakeConsoleTable(string[] columns)
+        {
+            var table = new Table();
+
+            foreach (var column in columns)
+            {
+                table.AddColumn(column);
+            }
+
+            return table;
+        }
+
         public static Flow<DiskProbe.ProbeResult> WithCheckedVhdType<TSubj>(this Flow<TSubj> action, string source, VirtualHardDiskType diskType)
             where TSubj : class
         {
@@ -168,7 +185,7 @@ namespace auvdisk.Extensions
         public static Flow<TSubj> WithCheckedTargetAvailable<TSubj>(this Flow<TSubj> action, string target) where TSubj : class
         {
             return action.Log("Checking that target file doesn't exists")
-                .Check((_) => !File.Exists(target), (_) => $"{target} already exists");
+                .Check((_) => !Path.Exists(target), (_) => $"{target} already exists");
         }
 
         public static Flow<TSubj> WithCheckedSize<TSubj>(this Flow<TSubj> action, string size) where TSubj : class

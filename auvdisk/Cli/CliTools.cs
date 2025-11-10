@@ -18,16 +18,8 @@ namespace auvdisk.Cli
 
         public static void AllocateWithDd(string filename, ulong size)
         {
-            var config = new CommandExecutorConfig
-            {
-                Executable = "dd",
-                RequiresElevation = false,
-                Arguments =
-                    ["if=/dev/zero", $"of={filename.Replace(" ", "\\ ")} ", "bs=1", "count=0", $"seek={size.ToString()}"], // TODO: proper shell escaping
-                WaitForExit = true
-            };
-
-            CommandExecutor.Execute(config);
+            var (stdOut, stdErr) = SimpleExec.Command.ReadAsync("dd",
+                ["if=/dev/zero", $"of={filename}", "bs=1", "count=0", $"seek={size.ToString()}"]).GetAwaiter().GetResult();
         }
 
         public static bool IsDdPresent()

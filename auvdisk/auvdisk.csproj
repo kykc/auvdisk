@@ -5,10 +5,11 @@
     <TargetFrameworks Condition="'$(NETCoreSdkVersion)' >= '9.0.0'">$(TargetFrameworks);net9.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RollForward>LatestMajor</RollForward>
     <LangVersion>Latest</LangVersion>
     <AssemblyName>auvdisk</AssemblyName>
-    <Version>1.8.2</Version>
+    <Version>1.8.3</Version>
     <Authors>Alexander Automatl</Authors>
     <Company>Tomatl Inc</Company>
     <IsWindows Condition="$([MSBuild]::IsOSPlatform('Windows'))">true</IsWindows>
@@ -17,14 +18,16 @@
 
   <ItemGroup>
     <PackageReference Include="CommandLineParser" Version="2.9.1" />
+    <PackageReference Include="Common.Logging" Version="3.4.1" />
     <PackageReference Include="DiskAccessLibrary" Version="1.6.4.3" />
     <PackageReference Include="DotNext" Version="5.25.1" />
     <PackageReference Include="Lib.Harmony" Version="2.4.1" />
     <PackageReference Include="LTRData.DiscUtils" Version="1.0.69" />
-    <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.228" Condition="'$(IsWindows)'=='true'">
+    <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.242" Condition="'$(IsWindows)'=='true'">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="SimpleExec" Version="12.0.0" />
     <PackageReference Include="Spectre.Console" Version="0.52.0" />
     <PackageReference Include="Terminal.Gui" Version="1.19.0" />
     <PackageReference Include="Win32.TokenPrivileges" Version="1.0.19073.2" Condition="'$(IsWindows)'=='true'">

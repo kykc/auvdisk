@@ -5,6 +5,8 @@ using CommandLine;
 using auvdisk.DiskImage;
 using auvdisk.Cli;
 using auvdisk.Log;
+using DiscUtils;
+using DiscUtils.Streams;
 using Spectre.Console;
 
 namespace auvdisk
@@ -38,7 +40,7 @@ namespace auvdisk
                 Cli.CreateFixedVhd, Cli.MergeVhd, Cli.CreateDynamicVhd, Cli.ExtractFile,
                 Cli.DiagVhd, Cli.ResizeFixedVhd, Cli.CheckIsSparse, Cli.VhdToVhdx,
                 Cli.VhdxToVhd, Cli.GenVmdkWrapper, Cli.Qcow2ToRaw, Cli.ProbeBcd,
-                Cli.BrowseVdisk>(args);
+                Cli.BrowseVdisk, Cli.BrowseVolumes>(args);
 
             var exitCode = cliResult.MapResult(
                 (Cli.VdiskProbe opts) =>
@@ -283,7 +285,7 @@ namespace auvdisk
                 {
                     var action = () =>
                     {
-                        Commander.FsCommander.EntryPoint(opts.Source, logger);
+                        Commander.FsCommander.OpenDiskImage(opts.Source, logger);
                     };
 
                     var result = Flow<None>.Ok(None.Value, logger)
@@ -291,6 +293,21 @@ namespace auvdisk
                         .WithSideEffect(action);
 
                     return result.LogErrorIfAny() ? 1 : 0;
+                },
+                (Cli.BrowseVolumes opts) =>
+                {
+                    if (opts.List)
+                    {
+                        var result = Factory.MakeFsListFromAvailableVolumes(logger);
+
+                        return result.LogErrorIfAny() ? 1 : 0;
+                    }
+                    else
+                    {
+                        var result = Commander.FsCommander.OpenLocalFs(logger);
+
+                        return result.LogErrorIfAny() ? 1 : 0;
+                    }
                 },
                 _ => 2
             );
