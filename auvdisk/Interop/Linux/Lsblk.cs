@@ -1,9 +1,11 @@
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using auvdisk.Cli;
 using auvdisk.Extensions;
 using auvdisk.Log;
+using SimpleExec;
 
 namespace auvdisk.Interop.Linux;
 
@@ -57,8 +59,23 @@ public static class Lsblk
 
     public static Flow<LsblkRoot> GetPartitions(ILog logger)
     {
-        var (stdOut, stdErr) = SimpleExec.Command.ReadAsync("lsblk",
-            ["-sb", "--json", "--output", "fstype,name,mountpoints,uuid,label,size,phy-sec,log-sec"]).GetAwaiter().GetResult();
+        string stdOut;
+
+        try
+        {
+            (stdOut, _) = Command.ReadAsync("lsblk",
+                    ["-sb", "--json", "--output", "fstype,name,mountpoints,uuid,label,size,phy-sec,log-sec"])
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (ExitCodeReadException ex)
+        {
+            return Flow<LsblkRoot>.Err($"Failed to fetch partition list: {ex.StandardError.Trim()}", logger);
+        }
+        catch (Win32Exception ex)
+        {
+            return Flow<LsblkRoot>.Err($"Failed to launch lsblk: {ex.Message}", logger);
+        }
 
         var data = JsonSerializer.Deserialize<LsblkRoot>(stdOut);
 
