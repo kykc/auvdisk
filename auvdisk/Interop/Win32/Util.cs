@@ -118,47 +118,51 @@ namespace auvdisk.Interop.Win32
         {
             try
             {
-                List<PhysicalVolumeInfo> result = [];
-
                 ManagementObjectSearcher searcher =
                     new ManagementObjectSearcher("root\\CIMV2", "SELECT DeviceID, Index, BytesPerSector FROM Win32_DiskDrive");
 
-                foreach (var o in searcher.Get())
+                DiscUtils.PhysicalVolumeInfo[] GetVolumes(string diskId)
                 {
-                    var diskId = o?["DeviceID"]?.ToString();
-                    var diskIdx = o?["Index"]?.ToString();
-                    UInt32? bytesPerSector = o?["BytesPerSector"] as UInt32?;
-
-                    if (diskId != null && diskIdx != null)
-                    {
-                        using var diskStream = new BlockDeviceUnbufferedStream(diskId);
-
-                        var volumes = VolumeManager.GetPhysicalVolumes(diskStream);
-
-                        if (volumes != null)
-                        {
-                            foreach (var (volume, volumeIdx) in volumes.Select((volume, volumeIdx) => (volume, volumeIdx)))
-                            {
-                                string[]? mountPoints = Utils.SuppressRef<ManagementException, string[]>(() =>
-                                {
-                                    var obj = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage",
-                                            $"SELECT * FROM MSFT_Partition WHERE DiskNumber = {diskIdx} AND PartitionNumber = {volumeIdx + 1}")
-                                        .Get().Cast<ManagementObject>().FirstOrDefault();
-
-                                    return obj?["AccessPaths"] as string[] ?? [];
-                                });
-
-                                result.Add(new PhysicalVolumeInfo(
-                                    $"\\\\.\\Harddisk{diskIdx}Partition{volumeIdx + 1}",
-                                    mountPoints?.ToList() ?? [],
-                                    (ulong)volume.Length,
-                                    bytesPerSector));
-                            }
-                        }
-                    }
+                    using var stream = new BlockDeviceUnbufferedStream(diskId);
+                    return VolumeManager.GetPhysicalVolumes(stream);
                 }
 
-                return Flow<IEnumerable<PhysicalVolumeInfo>>.Ok(result, logger);
+                string[]? GetMountPoints(string diskIdx, int volumeIdx)
+                {
+                    return Utils.SuppressRef<ManagementException, string[]>(() =>
+                    {
+                        var query =
+                            $"SELECT * FROM MSFT_Partition WHERE DiskNumber = {diskIdx} AND PartitionNumber = {volumeIdx + 1}";
+
+                        var obj = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", query)
+                            .Get().Cast<ManagementObject>().FirstOrDefault();
+
+                        return obj?["AccessPaths"] as string[] ?? [];
+                    });
+                }
+
+                var disks = searcher.Get().Cast<ManagementObject>()
+                    .AsParallel().AsOrdered()
+                    .Select(o => (diskId: o["DeviceID"]?.ToString(), diskIdx: o["Index"]?.ToString(),
+                        bytesPerSector: (UInt32)o["BytesPerSector"]))
+                    .Where(d => d is { diskId: not null, diskIdx: not null })
+                    .Select(d => (d.diskId, d.diskIdx, d.bytesPerSector, volumes: GetVolumes(d.diskId!)));
+
+                var volumes = disks
+                    .SelectMany(d => d.volumes .Select((v, volumeIdx) => (
+                        volumeIdx,
+                        d.diskId,
+                        d.diskIdx,
+                        d.bytesPerSector,
+                        volumeInfo: v,
+                        mountPoints: GetMountPoints(d.diskIdx!, volumeIdx))))
+                    .Select(v => new PhysicalVolumeInfo(
+                        $"\\\\.\\Harddisk{v.diskIdx}Partition{v.volumeIdx + 1}",
+                        v.mountPoints?.ToList() ?? [],
+                        (ulong)v.volumeInfo.Length,
+                        v.bytesPerSector));
+
+                return Flow<IEnumerable<PhysicalVolumeInfo>>.Ok(volumes.ToList(), logger);
             }
             catch (ManagementException ex)
             {
