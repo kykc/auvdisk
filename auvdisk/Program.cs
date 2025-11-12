@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using auvdisk.Extensions;
@@ -48,19 +49,7 @@ namespace auvdisk
 
             var logger = new Log.Logger();
 
-            // Special case for launching self with Admin privileges to create large file fast.
-            // Somewhat hacky, we don't populate those CLI arguments in help as they're
-            // for internal use only
-            if (HandleResizeFileUnsafe(args, logger))
-            {
-                return 0;
-            }
-            else if (HandleMarkdownHelp(args, logger))
-            {
-                return 0;
-            }
-
-            var cliResult = Parser.Default.ParseArguments(args, Cli.VerbHandlers.GetVerbs().ToArray());
+            var cliResult = Parser.Default.ParseArguments(args, Cli.VerbHandlers.GetVerbTypes(true, false).ToArray());
 
             var handlers = new Cli.VerbHandlers();
             
@@ -413,6 +402,29 @@ namespace auvdisk
                 return 0;
             });
 
+            handlers.Register((OutMarkdownHelp opts) =>
+            {
+                var types = VerbHandlers.GetVerbTypes(false, true)
+                    .Select(t => t.GetCustomAttribute<VerbAttribute>())
+                    .Where(t => t is { Hidden: false })
+                    .Select(v => new
+                    {
+                        VerbName = v!.Name,
+                        HelpText = v!.HelpText,
+                    });
+
+                Console.WriteLine(Text.MarkdownGenerator.ToMarkdownTable(types, logger));
+
+                return 0;
+            });
+
+            handlers.Register((ResizeFileUnsafe opts) =>
+            {
+                var success = Fs.Util.HandleResizeFileUnsafe(opts.Target, opts.Size, opts.ZeroFill, logger);
+
+                return success ? 0 : 1;
+            });
+
             int exitCode = handlers.HandleParserResult(cliResult);
             
             Console.Out.Flush();
@@ -420,69 +432,7 @@ namespace auvdisk
 
             return exitCode;
         }
-
-        public static bool HandleMarkdownHelp(string[] args, Log.ILog logger)
-        {
-            if (args is ["markdown-help"])
-            {
-                var types = Cli.Util.GetTypesWithAttribute<VerbAttribute>()
-                    .Select(t => t.CustomAttributes.FirstOrDefault(a => a.AttributeType == typeof(VerbAttribute)))
-                    .Select(v => new
-                    {
-                        VerbName = v!.ConstructorArguments.First().Value,
-                        HelpText = v.NamedArguments.Where(x => x.MemberName == "HelpText")!.First().TypedValue.Value
-                    });
-
-                Console.WriteLine(auvdisk.Text.MarkdownGenerator.ToMarkdownTable(types, logger));
-
-                return true;
-            }
-
-            return false;
-        }
-
-        public static bool HandleResizeFileUnsafe(string[] args, Log.ILog logger)
-        {
-            if (args is ["resize-file-unsafe", _, _])
-            {
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                {
-                    bool success = false;
-#if WINDOWS
-                    try
-                    {
-                        logger.Log($"Administrator privileges: {Environment.IsPrivilegedProcess}");
-                        var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
-                        using var privilege =
-                            new Win32.TokenPrivileges.AdjustPrivilege(Win32.TokenPrivileges.PrivilegeName.SeManageVolumePrivilege);
-
-                        bool canManagerVolume = Win32.TokenPrivileges.PrivilegeProvider.HasPrivilege(null,
-                            currentProcess, Win32.TokenPrivileges.PrivilegeName.SeManageVolumePrivilege);
-
-                        logger.Log($"SeManageVolumePrivilege: {canManagerVolume}");
-
-                        success = Fs.Util.ResizeFileFastUnsafe(args[1], ulong.Parse(args[2]), logger);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.Error(Spectre.Console.Markup.Escape(ex.Message));
-                    }
-#endif
-                    if (!success)
-                    {
-                        logger.Log("Falling back to slow mode");
-                        Fs.Util.ResizeFile(args[1], ulong.Parse(args[2]), logger);
-                    }
-                }
-                else
-                {
-                    Fs.Util.ResizeFile(args[1], ulong.Parse(args[2]), logger);
-                }
-
-                return true;
-            }
-
-            return false;
-        }
+        
+        
     }
 }

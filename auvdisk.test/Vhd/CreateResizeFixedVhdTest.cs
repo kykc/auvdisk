@@ -36,10 +36,11 @@ namespace auvdisk.test.Vhd
             var disk = auvdisk.DiskImage.Vhd.Util.CreateFixedVhd(_targetCreateFast, size, logger, false);
 
             Assert.NotNull(disk);
-            Assert.Equal(size, (ulong)disk.Size);
+            Assert.False(disk.IsError());
+            Assert.Equal(size, (ulong)disk.Unwrap().Size);
             Assert.True(Util.IsValidVhd(_targetCreateFast));
 
-            WriteTestData(disk, size, logger);
+            WriteTestData(disk.Unwrap(), size, logger);
 
             ulong newsize = 1024UL * 1024UL * 1024UL * 15; // 15 GiB
 
@@ -64,9 +65,10 @@ namespace auvdisk.test.Vhd
             var disk = auvdisk.DiskImage.Vhd.Util.CreateFixedVhd(_targetCreateZeroFill, size, logger, true);
 
             Assert.NotNull(disk);
-            Assert.Equal(size, (ulong)disk.Size);
+            Assert.False(disk.IsError());
+            Assert.Equal(size, (ulong)disk.Unwrap().Size);
 
-            WriteTestData(disk, size, logger);
+            WriteTestData(disk.Unwrap(), size, logger);
 
             ulong newsize = 1024UL * 1024UL * 1024UL; // 1 GiB
 

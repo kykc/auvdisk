@@ -27,29 +27,31 @@ packages directly from this repo (see `.gitea/workflows` for some examples on pa
 
 `auvdisk --help` output:
 
-| VerbName           | HelpText                                                                                                                                        |
-|--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| probe-vdisk        | Probe disk image, try to guess the format, existing partitions and filesystems                                                                  |
-| browse-vdisk       | View virtual disk contents in a simple mc/nc-like file explorer                                                                                 |
-| probe-bcd          | Probe Windows BCD database and output records. Very basic, doesn't locate devices. Might be useful on Linux as nothing else is available there. |
-| ls-vdisk           | Try to list specific directory in all filesystems that were found                                                                               |
-| cat-vdisk          | Try to cat specific file in all filesystems that were found                                                                                     |
-| conv-loop-to-vhd   | Wrap raw filesystem loop image into GPT VHD with prepended EFI boot partition, formatted into FAT32                                             |
-| conv-vhd-to-loop   | Extract raw filesystem image from one of the partitions present in the source VHD image                                                         |
-| conv-img-to-vhd    | Append VHD footer to RAW image file (in-place)                                                                                                  |
-| conv-vhd-to-img    | Delete VHD footer from image, effectively converting it to RAW image (in-place)                                                                 |
-| create-diff-vhd    | Create differencing VHD image                                                                                                                   |
-| create-fixed-vhd   | Create fixed size VHD image                                                                                                                     |
-| create-dynamic-vhd | Create dynamic VHD image                                                                                                                        |
-| merge-vhd          | Merge differencing VHD into parent. Only fixed parent and a single direct child pair is supported                                               |
-| extract-file       | Extract file using offset and length in bytes                                                                                                   |
-| diag-vhd           | Output VHD diagnostics info                                                                                                                     |
-| resize-fixed-vhd   | Resize fixed VHD image                                                                                                                          |
-| check-is-sparse    | Check if file is a sparse file (Windows and NTFS only)                                                                                          |
-| conv-vhd-to-vhdx   | Convert any VHD image to fixed VHDX image                                                                                                       |
-| conv-vhdx-to-vhd   | Convert any VHDX image to fixed VHD image                                                                                                       |
-| gen-vmdk-wrapper   | Generate VMDK wrapper for a RAW image                                                                                                           |
-| conv-qcow-to-raw   | Convert qcow2 image to RAW                                                                                                                      |
+| Verb                  | Description                                                                                                                                     |
+|-----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| browse-vdisk          | View virtual disk contents in a simple mc/nc-like file explorer                                                                                 |
+| probe-vdisk           | Probe disk image, try to guess the format, existing partitions and filesystems                                                                  |
+| browse-volumes        | Browse volumes available on the local system, avoiding using system FS drivers                                                                  |
+| probe-bcd             | Probe Windows BCD database and output records. Very basic, doesn't locate devices. Might be useful on Linux as nothing else is available there. |
+| ls-vdisk              | Try to list specific directory in all filesystems that were found                                                                               |
+| cat-vdisk             | Try to cat specific file in all filesystems that were found                                                                                     |
+| conv-loop-to-vhd      | Wrap raw filesystem loop image into GPT VHD with prepended EFI boot partition, formatted into FAT32                                             |
+| conv-vhd-to-loop      | Extract raw filesystem image from one of the partitions present in the source VHD image                                                         |
+| conv-img-to-vhd       | Append VHD footer to RAW image file (in-place)                                                                                                  |
+| conv-vhd-to-img       | Delete VHD footer from image, effectively converting it to RAW image (in-place)                                                                 |
+| create-diff-vhd       | Create differencing VHD image                                                                                                                   |
+| create-fixed-vhd      | Create fixed size VHD image                                                                                                                     |
+| create-dynamic-vhd    | Create dynamic VHD image                                                                                                                        |
+| merge-vhd             | Merge differencing VHD into parent. Only fixed parent and a single direct child pair is supported                                               |
+| extract-file          | Extract file using offset and length in bytes                                                                                                   |
+| diag-vhd              | Output VHD diagnostics info                                                                                                                     |
+| resize-fixed-vhd      | Resize fixed VHD image                                                                                                                          |
+| check-is-sparse       | Check if file is a sparse file (Windows and NTFS only)                                                                                          |
+| conv-vhd-to-vhdx      | Convert any VHD image to fixed VHDX image                                                                                                       |
+| conv-vhdx-to-vhd      | Convert any VHDX image to fixed VHD image                                                                                                       |
+| gen-vmdk-wrapper      | Generate VMDK wrapper for a RAW image                                                                                                           |
+| conv-qcow-to-raw      | Convert qcow2 image to RAW                                                                                                                      |
+| change-partition-type | Generate diskpart command for changing GPT partition type (Windows only)                                                                        |
 
 ## Unit tests
 

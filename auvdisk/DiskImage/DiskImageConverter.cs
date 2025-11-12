@@ -22,14 +22,19 @@ namespace auvdisk.DiskImage
         // TODO: make an option to disable prepending of EFI boot partition
         public static Flow<DiskProbe.ProbeResult> ConvertLoopToVhd(string source, string target, Log.ILog logger, bool verbose, bool zeroFill = false)
         {
-            var action = () =>
+            var action = (DiskProbe.ProbeResult probeResult) =>
             {
                 var sourceLength = new System.IO.FileInfo(source).Length;
                 ulong efiBootSize = 512 * 1024 * 1024; // 512MiB
 
                 logger.Log("Source file length is " + sourceLength.ToString());
 
-                Vhd.Util.CreateBootableFixedVhdLayout(target, efiBootSize, (ulong)sourceLength, logger, zeroFill);
+                var createLayoutResult = Vhd.Util.CreateBootableFixedVhdLayout(target, efiBootSize, (ulong)sourceLength, logger, zeroFill);
+
+                if (createLayoutResult.IsError())
+                {
+                    return createLayoutResult.Map((_) => probeResult);
+                }
 
                 logger.Log("Opening VHD using DiscUtils");
                 // Safe to use DiscUtils constructor as target is guaranteed to be of type fixed
@@ -49,13 +54,15 @@ namespace auvdisk.DiskImage
                 }
 
                 logger.Log("Closed VHD, done! It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
+
+                return Flow<DiskProbe.ProbeResult>.Ok(probeResult, logger);
             };
 
             return Flow<None>.Ok(None.Value, logger)
                 .WithCheckedSourceExists(source)
                 .WithCheckedFsType("", source, verbose) // this will effectively check that filesystem was recognized and will accept any type of FS
                 .WithCheckedTargetAvailable(target)
-                .WithSideEffect(action);
+                .Bind(action);
         }
 
         public static Flow<DiskProbe.ProbeResult> ConvertVhdToLoop(string source, string target, Log.ILog logger, bool verbose, int partIdx = -1)

@@ -82,7 +82,11 @@ namespace auvdisk.DiskImage.Vhd
                 return null;
             }
 
-            HandleResizeFile();
+            if (!Fs.Util.HandleResizeFileUnsafe(path, size, zeroFill, logger))
+            {
+                logger.Error("Failed to resize VHD file");
+                return null;
+            }
 
             using var fs = new FileStream(path, FileMode.Open, FileAccess.Write);
             fs.Seek(0, SeekOrigin.End);
@@ -92,28 +96,9 @@ namespace auvdisk.DiskImage.Vhd
 
             logger.Log("Done.");
             return new VirtualHardDisk(path);
-
-            void HandleResizeFile()
-            {
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !zeroFill)
-                {
-                    if (!Environment.IsPrivilegedProcess)
-                    {
-                        CliTools.ResizeFileUnsafe(path, size);
-                    }
-                    else
-                    {
-                        Program.HandleResizeFileUnsafe(["resize-file-unsafe", path, size.ToString()], logger);
-                    }
-                }
-                else
-                {
-                    Fs.Util.ResizeFile(path, size, logger);
-                }
-            }
         }
 
-        public static VirtualHardDisk CreateFixedVhd(string path, ulong size, Log.ILog logger, bool forceZeroFill = false)
+        public static Flow<VirtualHardDisk> CreateFixedVhd(string path, ulong size, Log.ILog logger, bool forceZeroFill = false)
         {
             if (size % LbaSize > 0)
             {
@@ -125,14 +110,10 @@ namespace auvdisk.DiskImage.Vhd
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !forceZeroFill)
             {
                 logger.Log("Zero-fill was not requested, will try to speed things up. You may receive UAC prompt");
-
-                if (!Environment.IsPrivilegedProcess)
+                
+                if (!Fs.Util.HandleResizeFileUnsafe(path, size, forceZeroFill, logger))
                 {
-                    CliTools.ResizeFileUnsafe(path, size);
-                }
-                else
-                {
-                    Program.HandleResizeFileUnsafe(["resize-file-unsafe", path, size.ToString()], logger);
+                    return Flow<VirtualHardDisk>.Err("Failed to resize VHD file", logger);
                 }
 
                 using var fs = new FileStream(path, FileMode.Open, FileAccess.Write);
@@ -141,7 +122,7 @@ namespace auvdisk.DiskImage.Vhd
                 fs.Write(footer.GetBytes());
                 fs.Close();
                 
-                return new VirtualHardDisk(path);
+                return Flow<VirtualHardDisk>.Ok(new VirtualHardDisk(path), logger);
             }
             else if (CliTools.IsDdPresent() && !forceZeroFill)
             {
@@ -156,13 +137,17 @@ namespace auvdisk.DiskImage.Vhd
                     stream.Write(CreateVhdFooter(size).GetBytes());
                 }
 
-                return new VirtualHardDisk(path);
+                return Flow<VirtualHardDisk>.Ok(new VirtualHardDisk(path), logger);
             }
             else
             {
                 logger.Log("Using DiskAccessLibrary to create VHD");
                 logger.Log("Will do full-length zeroing which might take some time");
-                logger.Log("This is needed to avoid creating a sparse file. Known to happen on Linux when writing to Samba share");
+                if (!forceZeroFill) // Don't need to print this if zero-fill was forced by user
+                {
+                    logger.Log(
+                        "This is needed to avoid creating a sparse file. Known to happen on Linux when writing to Samba share");
+                }
 
                 ulong sectorCount = size / LbaSize;
 
@@ -175,11 +160,11 @@ namespace auvdisk.DiskImage.Vhd
                     stream.Write(CreateVhdFooter(size).GetBytes());
                 }
 
-                return new VirtualHardDisk(path);
+                return Flow<VirtualHardDisk>.Ok(new VirtualHardDisk(path), logger);
             }
         }
 
-        public static ulong CreateBootableFixedVhdLayout(string target, ulong bootSizeInBytes, ulong dataSizeInBytes, Log.ILog logger, bool zeroFill = false)
+        public static Flow<Value<ulong>> CreateBootableFixedVhdLayout(string target, ulong bootSizeInBytes, ulong dataSizeInBytes, Log.ILog logger, bool zeroFill = false)
         {
             logger.Log("Creating fixed VHD layout");
             dataSizeInBytes = RoundUp(dataSizeInBytes, LbaSize);
@@ -190,32 +175,35 @@ namespace auvdisk.DiskImage.Vhd
 
             ulong totalSize = offsetLba * LbaSize + overheadSize + bootSizeInBytes + dataSizeInBytes;
             logger.Log("Total size of the image contents is " + totalSize.ToString());
-            var vdisk = CreateFixedVhd(target, totalSize, logger, zeroFill);
+            var vdiskResult = CreateFixedVhd(target, totalSize, logger, zeroFill);
 
-            List<GuidPartitionEntry> list = new List<GuidPartitionEntry>();
+            return vdiskResult.Map((vdisk) =>
+            {
+                List<GuidPartitionEntry> list = new List<GuidPartitionEntry>();
 
-            GuidPartitionEntry bootPartitionEntry = new GuidPartitionEntry();
-            bootPartitionEntry.PartitionGuid = Guid.NewGuid();
-            bootPartitionEntry.PartitionTypeGuid = GPTPartition.EFISystemPartitionTypeGuid;
-            bootPartitionEntry.FirstLBA = offsetLba;
-            bootPartitionEntry.LastLBA = offsetLba + bootSizeInBytes / LbaSize - 1;
-            bootPartitionEntry.PartitionName = "Boot";
-            list.Add(bootPartitionEntry);
+                GuidPartitionEntry bootPartitionEntry = new GuidPartitionEntry();
+                bootPartitionEntry.PartitionGuid = Guid.NewGuid();
+                bootPartitionEntry.PartitionTypeGuid = GPTPartition.EFISystemPartitionTypeGuid;
+                bootPartitionEntry.FirstLBA = offsetLba;
+                bootPartitionEntry.LastLBA = offsetLba + bootSizeInBytes / LbaSize - 1;
+                bootPartitionEntry.PartitionName = "Boot";
+                list.Add(bootPartitionEntry);
 
-            GuidPartitionEntry dataPartitionEntry = new GuidPartitionEntry();
-            dataPartitionEntry.PartitionGuid = Guid.NewGuid();
-            dataPartitionEntry.PartitionTypeGuid = GPTPartition.BasicDataPartititionTypeGuid;
-            dataPartitionEntry.FirstLBA = bootPartitionEntry.LastLBA + 1;
-            // This one is a bit magical to me, snatched from DiscAccessLibrary internals. Probably accounts for GPT partition table footer
-            dataPartitionEntry.LastLBA = (ulong)(vdisk.TotalSectors - 1 - 16384 / vdisk.BytesPerSector) - 1;
-            list.Add(dataPartitionEntry);
+                GuidPartitionEntry dataPartitionEntry = new GuidPartitionEntry();
+                dataPartitionEntry.PartitionGuid = Guid.NewGuid();
+                dataPartitionEntry.PartitionTypeGuid = GPTPartition.BasicDataPartititionTypeGuid;
+                dataPartitionEntry.FirstLBA = bootPartitionEntry.LastLBA + 1;
+                // This one is a bit magical to me, snatched from DiscAccessLibrary internals. Probably accounts for GPT partition table footer
+                dataPartitionEntry.LastLBA = (ulong)(vdisk.TotalSectors - 1 - 16384 / vdisk.BytesPerSector) - 1;
+                list.Add(dataPartitionEntry);
 
-            logger.Log("Initializing VHD with GPT partition table");
-            logger.Log("Boot partition space in LBA is from " + bootPartitionEntry.FirstLBA.ToString() + " to " + bootPartitionEntry.LastLBA.ToString());
-            logger.Log("Data partition space in LBA is from " + dataPartitionEntry.FirstLBA.ToString() + " to " + dataPartitionEntry.LastLBA.ToString());
-            DiskAccessLibrary.GuidPartitionTable.InitializeDisk(vdisk, (long)offsetLba, list);
+                logger.Log("Initializing VHD with GPT partition table");
+                logger.Log("Boot partition space in LBA is from " + bootPartitionEntry.FirstLBA.ToString() + " to " + bootPartitionEntry.LastLBA.ToString());
+                logger.Log("Data partition space in LBA is from " + dataPartitionEntry.FirstLBA.ToString() + " to " + dataPartitionEntry.LastLBA.ToString());
+                DiskAccessLibrary.GuidPartitionTable.InitializeDisk(vdisk, (long)offsetLba, list);
 
-            return dataSizeInBytes;
+                return new Value<ulong>(dataSizeInBytes);
+            });
         }
         
         private static ulong RoundUp(ulong numToRound, ulong multiple)

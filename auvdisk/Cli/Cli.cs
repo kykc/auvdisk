@@ -9,6 +9,13 @@ using System.Threading.Tasks;
 
 namespace auvdisk.Cli
 {
+    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = true)]
+    public class NotSupportedAttribute(bool notSupported) : Attribute
+    {
+        public bool NotSupported { get; } = notSupported;
+        public bool IsSupported => !NotSupported;
+    }
+    
     class VerbHandlers
     {
         private readonly Dictionary<Type, object> _verbHandlers = new();
@@ -18,11 +25,6 @@ namespace auvdisk.Cli
             _verbHandlers.Add(typeof(T), handler);
 
             return this;
-        }
-
-        public Func<T, int> Get<T>()
-        {
-            return (_verbHandlers[typeof(T)] as Func<T, int>)!;
         }
 
         public int HandleParserResult(ParserResult<object> result)
@@ -37,10 +39,13 @@ namespace auvdisk.Cli
             }
         }
         
-        public static IEnumerable<Type> GetVerbs()
+        public static IEnumerable<Type> GetVerbTypes(bool includeHidden = false, bool includeUnsupported = false)
         {
             return Assembly.GetExecutingAssembly().GetTypes()
-                .Where(t => t.IsDefined(typeof(VerbAttribute), true) && !(t.GetCustomAttribute<VerbAttribute>()?.Hidden ?? false));
+                .Where(t => t.IsDefined(typeof(VerbAttribute), true))
+                .Where(t => 
+                    (!(t.GetCustomAttribute<NotSupportedAttribute>()?.NotSupported ?? false) || includeUnsupported) && 
+                    (!(t.GetCustomAttribute<VerbAttribute>()?.Hidden ?? false) || includeHidden));
         }
     }
     
@@ -250,6 +255,7 @@ namespace auvdisk.Cli
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("check-is-sparse", HelpText = "Check if file is a sparse file (Windows and NTFS only)")]
+    [NotSupported(!Program.IsWindows)]
     class CheckIsSparse
     {
         [Option('t', "target", Required = true, HelpText = "Target file path")]
@@ -303,8 +309,8 @@ namespace auvdisk.Cli
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    [Verb("change-partition-type", Hidden = !Program.IsWindows,
-        HelpText = "Generate diskpart command for changing GPT partition type (Windows only)")]
+    [Verb("change-partition-type", HelpText = "Generate diskpart command for changing GPT partition type (Windows only)")]
+    [NotSupported(!Program.IsWindows)]
     class ChangePartitionType
     {
         [Option('d', "disk", Required = false, HelpText = "Disk number")]
@@ -313,5 +319,23 @@ namespace auvdisk.Cli
         public int PartitionNumber { get; set; } = 0;
         [Option('t', "type", Required = false, HelpText = "Partition type")]
         public string PartitionType { get; set; } = "";
+    }
+
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("out-markdown-help", HelpText = "Output markdown help (for internal use only)", Hidden = true)]
+    class OutMarkdownHelp
+    {
+    }
+
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("resize-file-unsafe", HelpText = "Resize file (for internal use only)", Hidden = true)]
+    class ResizeFileUnsafe
+    {
+        [Option('t', "target", Required = true, HelpText = "Target file path")]
+        public string Target { get; set; } = "";
+        [Option('s', "size",  Required = true, HelpText = "Size of the file")]
+        public ulong Size { get; set; } = 0;
+        [Option('z', "zero-fill", Required = false, Default = false, HelpText = "Force zero-fill")]
+        public bool ZeroFill { get; set; } = false;
     }
 }
