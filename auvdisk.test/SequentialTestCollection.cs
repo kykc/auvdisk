@@ -10,6 +10,7 @@ namespace auvdisk.test
         public TestFixture()
         {
             DiscUtils.Complete.SetupHelper.SetupComplete();
+            Program.IsInteractive = false;
         }
 
         public void Dispose()

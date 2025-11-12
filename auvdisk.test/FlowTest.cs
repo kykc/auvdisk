@@ -5,6 +5,11 @@ namespace auvdisk.test
 {
     public class FlowTest
     {
+        public FlowTest()
+        {
+            Program.IsInteractive = false;
+        }
+        
         private LogWatcher Logger { get; } = new LogWatcher();
 
         [Fact]

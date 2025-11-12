@@ -1,6 +1,8 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Net;
+using auvdisk.Extensions;
 
 namespace auvdisk.Bytes
 {

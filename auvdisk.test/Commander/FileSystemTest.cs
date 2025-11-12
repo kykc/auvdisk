@@ -9,6 +9,7 @@ namespace auvdisk.test.Commander
         public FileSystemTest()
         {
             DiscUtils.Complete.SetupHelper.SetupComplete();
+            Program.IsInteractive = false;
         }
 
         [Fact]

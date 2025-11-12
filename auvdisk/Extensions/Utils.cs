@@ -3,6 +3,7 @@ using System.Reflection.Emit;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using auvdisk.Bytes;
 using auvdisk.DiskImage;
 using auvdisk.Interop;
 using auvdisk.Log;
@@ -44,6 +45,40 @@ namespace auvdisk.Extensions
 
                 return null;
             }
+        }
+
+        public static StreamCopyProgressWrapper WithProgress<TStream>(this TStream subject) where TStream : Stream
+        {
+            return new StreamCopyProgressWrapper(subject);
+        }
+
+        public static string HumanizeFilesize(ulong size, bool human = true)
+        {
+            if (!human)
+            {
+                return size.ToString();
+            }
+
+            var units = new List<string>(){
+                "B", "KiB", "MiB", "GiB", "TiB"
+            };
+
+            ulong bytes = size;
+
+            double pow = Math.Floor((bytes>0 ? Math.Log(bytes) : 0) / Math.Log(1024));
+            pow = Math.Min(pow, units.Count-1);
+            double value = (double)bytes / Math.Pow(1024, pow);
+            return value.ToString(pow==0 ? "F0" : "F2") + "" + units[(int)pow];
+        }
+
+        public static string HumanizeBytes(this ulong bytes, bool human = true)
+        {
+            return HumanizeFilesize(bytes, human);
+        }
+        
+        public static string HumanizeBytes(this long bytes, bool human = true)
+        {
+            return HumanizeFilesize((ulong)bytes, human);
         }
 
         public static ulong? ParseByteLength(this string str)

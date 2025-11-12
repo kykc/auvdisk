@@ -77,7 +77,7 @@ namespace auvdisk.DiskImage
                 var fsList = new List<DiscFileSystem>();
                 var disposableList = new List<IDisposable>();
 
-                foreach (var volume in volumeList)
+                foreach (var volume in volumeList.OrderBy((v) => v.DeviceId, Interop.Common.GetDeviceIdComparer()))
                 {
                     Stream? fileStream = null;
                     ReadOnlyCollection<DiscUtils.FileSystemInfo>? fsInfoList = null;
@@ -113,7 +113,7 @@ namespace auvdisk.DiskImage
                         fs.VolumeLabel,
                         volume.MountPoints.Any() ? String.Join(", ", volume.MountPoints) : "N/A",
                         fs?.GetUuid(new NullLogger()) ?? "",
-                        volume.Size.HasValue ? Commander.Extensions.HumanizeFilesize(volume.Size.Value, true) : "N/A",
+                        volume.Size.HasValue ? Utils.HumanizeFilesize(volume.Size.Value, true) : "N/A",
                         volume.BytesPerSector?.ToString() ?? "N/A");
                 }
 

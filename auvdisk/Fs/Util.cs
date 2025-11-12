@@ -31,6 +31,7 @@ namespace auvdisk.Fs
 
 #pragma warning restore CA1416
 
+        // TODO: implement progress for zero fill?
         public static void ResizeFile(string target, ulong size, Log.ILog logger)
         {
             var stream = new FileStream(target, FileMode.OpenOrCreate);
@@ -66,9 +67,9 @@ namespace auvdisk.Fs
         
         public static void ExtractFileSegment(string source, string target, ulong offset, ulong length)
         {
-            using var rawFileStream = new FileStream(source, FileMode.Open, FileAccess.Read);
+            using var rawFileStream = new System.IO.FileStream(source, FileMode.Open, FileAccess.Read);
             using var decoratedStream = new SegmentStream(rawFileStream, (long)offset, (long)length);
-            using var targetStream = new FileStream(target, FileMode.Create, FileAccess.Write);
+            using var targetStream = new System.IO.FileStream(target, FileMode.Create, FileAccess.Write);
             decoratedStream.CopyTo(targetStream);
         }
     }

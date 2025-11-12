@@ -2,6 +2,8 @@ using auvdisk.Extensions;
 using auvdisk.Log;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 
 namespace auvdisk.Interop
 {
@@ -17,6 +19,32 @@ namespace auvdisk.Interop
 
     public static class Common
     {
+        public static IComparer<string> GetDeviceIdComparer()
+        {
+            return Comparer<string>.Create((x, y) =>
+            {
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    var regex = new Regex(@"Harddisk(?<diskIdx>\d+)Partition(?<partIdx>\d+)");
+                    var matchX = regex.Match(x);
+                    var matchY = regex.Match(y);
+
+                    if (matchX.Success && matchY.Success)
+                    {
+                        x = 
+                            Int32.Parse(matchX.Groups["diskIdx"].Value).ToString("D5") +
+                            Int32.Parse(matchX.Groups["partIdx"].Value).ToString("D5");
+                        
+                        y =
+                            Int32.Parse(matchY.Groups["diskIdx"].Value).ToString("D5") +
+                            Int32.Parse(matchY.Groups["partIdx"].Value).ToString("D5");
+                    }
+                }
+                
+                return string.Compare(x, y, StringComparison.InvariantCultureIgnoreCase);
+            });
+        }
+        
         public static Flow<IEnumerable<PhysicalVolumeInfo>> GetVolumes(ILog logger)
         {
 #if WINDOWS

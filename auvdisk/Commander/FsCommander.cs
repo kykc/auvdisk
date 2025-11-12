@@ -8,11 +8,6 @@ namespace auvdisk.Commander
 {
     static class Extensions
     {
-        public static List<IListEntry> FsSource(this ListView list)
-        {
-            return (list.Source.ToList() as List<IListEntry>)!;
-        }
-
         public static string ToHumanString(this FileInfo info)
         {
             return new[]
@@ -20,30 +15,16 @@ namespace auvdisk.Commander
                 $"Name: {info.Name}",
                 $"Full path: {info.FullPath}",
                 $"Size in bytes: {info.Size}",
-                $"Size (human readable): {HumanizeFilesize(info.Size, true)}",
+                $"Size (human readable): {Utils.HumanizeFilesize(info.Size, true)}",
                 $"Created on (UTC): {info.CreatedOnUtc:yyyy-MM-dd HH:mm:ss}",
                 $"Modified on (UTC): {info.ModifiedOnUtc:yyyy-MM-dd HH:mm:ss}",
                 $"Attributes: {info.Attributes}",
             }.Aggregate((x, y) => $"{x}{Environment.NewLine}{y}");
         }
-
-        public static string HumanizeFilesize(ulong size, bool human = true)
+        
+        public static List<IListEntry> FsSource(this ListView list)
         {
-            if (!human)
-            {
-                return size.ToString();
-            }
-
-            var units = new List<string>(){
-                "B", "KiB", "MiB", "GiB", "TiB"
-            };
-
-            ulong bytes = size;
-
-            double pow = Math.Floor((bytes>0 ? Math.Log(bytes) : 0) / Math.Log(1024));
-            pow = Math.Min(pow, units.Count-1);
-            double value = (double)bytes / Math.Pow(1024, pow);
-            return value.ToString(pow==0 ? "F0" : "F2") + "" + units[(int)pow];
+            return (list.Source.ToList() as List<IListEntry>)!;
         }
     }
 

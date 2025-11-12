@@ -6,9 +6,11 @@ using Spectre.Console;
 using System.Text;
 using DiscUtils.Vhd;
 using System.Text.RegularExpressions;
+using auvdisk.Bytes;
 using auvdisk.Cli;
 using auvdisk.Extensions;
 using auvdisk.Log;
+using ShellProgressBar;
 using ZstdSharp.Unsafe;
 
 namespace auvdisk.DiskImage.Vhd
@@ -159,18 +161,16 @@ namespace auvdisk.DiskImage.Vhd
             else
             {
                 logger.Log("Using DiskAccessLibrary to create VHD");
-                logger.Log("Will do full-length zeroing which is slow");
+                logger.Log("Will do full-length zeroing which might take some time");
                 logger.Log("This is needed to avoid creating a sparse file. Known to happen on Linux when writing to Samba share");
 
-                byte[] nullSector = Enumerable.Repeat((byte)0x0, (int)LbaSize).ToArray();
                 ulong sectorCount = size / LbaSize;
 
-                using (var stream = new FileStream(path, FileMode.CreateNew))
+                using (var stream = new FileStream(path, FileMode.CreateNew).WithProgress())
                 {
-                    for (ulong sector = 0; sector < sectorCount; ++sector)
-                    {
-                        stream.Write(nullSector);
-                    }
+                    stream.ZeroFill(sectorCount, (int)LbaSize,
+                        new StreamCopyProgressWrapper.ProgressOptions
+                            { ActionName = "Writing", ProgressName = "Filled" });
 
                     stream.Write(CreateVhdFooter(size).GetBytes());
                 }

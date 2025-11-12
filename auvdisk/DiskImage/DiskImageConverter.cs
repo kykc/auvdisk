@@ -9,8 +9,10 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using auvdisk.Bytes;
 using auvdisk.Log;
 using DiscUtils.Streams;
+using ShellProgressBar;
 using Spectre.Console;
 
 namespace auvdisk.DiskImage
@@ -39,10 +41,10 @@ namespace auvdisk.DiskImage
                     fat.CreateDirectory(@"EFI\Boot");
 
                     logger.Log("Copying data from loop to VHD. Depending on disk speed and image size this might take a while");
-                    using (var sourceStream = File.OpenRead(source))
+                    using (var sourceStream = File.OpenRead(source).WithProgress())
                     using (var targetStream = disk.Partitions[1].Open())
                     {
-                        sourceStream.CopyTo(targetStream);
+                        sourceStream.CopyTo(targetStream, new StreamCopyProgressWrapper.ProgressOptions());
                     }
                 }
 
@@ -73,10 +75,17 @@ namespace auvdisk.DiskImage
                     var dynamicOrDifferencing =
                         disk.Layers.Any((l) => l.IsSparse || l.NeedsParent) || disk.Layers.Count() > 1;
                     
-                    if (dynamicOrDifferencing && !AnsiConsole.Confirm(
-                            "[yellow]WARNING: Source VHD is differencing or dynamic disk, this was never properly tested, proceed?[/]"))
+                    if (dynamicOrDifferencing)
                     {
-                        return;
+                        if (Program.IsInteractive && !AnsiConsole.Confirm(
+                                "[yellow]WARNING: Source VHD is differencing or dynamic disk, this was never properly tested, proceed?[/]"))
+                        {
+                            return;
+                        }
+                        else
+                        {
+                            logger.Warning("Source VHD is differencing or dynamic disk, this was never properly tested");
+                        }
                     }
                     
                     logger.Log("VHD contains " + disk.Partitions.Count + " partitions:");
@@ -101,11 +110,11 @@ namespace auvdisk.DiskImage
                     logger.Log($"Selecting partition {selectedPart.idx}");
                     logger.Log("Opening partition using DiscUtils, target file using FileStream");
 
-                    using (var partStream = disk.Partitions.Partitions[selectedPart.idx].Open())
+                    using (var partStream = disk.Partitions.Partitions[selectedPart.idx].Open().WithProgress())
                     using (var targetStream = new FileStream(target, FileMode.Create))
                     {
                         logger.Log("Copying data from VHD to loop. Depending on disk speed and image size this might take a while");
-                        partStream.CopyTo(targetStream);
+                        partStream.CopyTo(targetStream, new StreamCopyProgressWrapper.ProgressOptions());
                     }
                 }
 
@@ -132,7 +141,7 @@ namespace auvdisk.DiskImage
                     new FileStream(target, FileMode.Create, FileAccess.ReadWrite);
                 using var vhdx = DiscUtils.Vhdx.Disk.InitializeFixed(targetStream, DiscUtils.Streams.Ownership.None, vhd.Capacity)!;
 
-                vhd.Content.CopyTo(vhdx.Content);
+                vhd.Content.WithProgress().CopyTo(vhdx.Content, new StreamCopyProgressWrapper.ProgressOptions());
                 targetStream.Flush();
                 logger.Log("Done.");
             };
@@ -158,7 +167,7 @@ namespace auvdisk.DiskImage
                 using var vhd =
                     DiscUtils.Vhd.Disk.InitializeFixed(targetStream, DiscUtils.Streams.Ownership.None, vhdx.Capacity);
 
-                vhdx.Content.CopyTo(vhd.Content);
+                vhdx.Content.WithProgress().CopyTo(vhd.Content, new StreamCopyProgressWrapper.ProgressOptions());
                 targetStream.Flush();
                 logger.Log("Done.");
             };
@@ -177,12 +186,14 @@ namespace auvdisk.DiskImage
             {
                 logger.Log("Opening source as a qcow2 image");
                 using var fs = File.OpenRead(source);
-                var qcow2Stream = new Bytes.Qcow2Stream(fs);
+                var qcow2Stream = new Qcow2Stream(fs).WithProgress();
                 logger.Log("Preparing target for writing");
                 using var targetStream = File.Open(target, FileMode.Create, FileAccess.ReadWrite);
                 logger.Log("Copying data, this might take a while depending on disk speed and image size...");
-                qcow2Stream.CopyTo(targetStream);
+
+                qcow2Stream.CopyTo(targetStream, new StreamCopyProgressWrapper.ProgressOptions()); 
                 targetStream.Flush();
+
                 logger.Log("Done.");
             };
 

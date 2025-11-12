@@ -1,7 +1,9 @@
+using auvdisk.Bytes;
 using Spectre.Console;
 using auvdisk.Extensions;
 using auvdisk.Log;
 using DiscUtils;
+using ShellProgressBar;
 using DiskLayerModel = (string FullPath, System.Guid? UniqueId, bool IsSparse, bool NeedsParent);
 
 namespace auvdisk.DiskImage.Vhd
@@ -11,8 +13,10 @@ namespace auvdisk.DiskImage.Vhd
 
     public static class Merge
     {
-        public static Flow<DiscUtils.Vhd.Disk> PerformMerge(string parent, string child, string target, Log.ILog logger, bool confirm = false)
+        public static Flow<DiscUtils.Vhd.Disk> PerformMerge(string parent, string child, string target, Log.ILog logger)
         {
+            bool skipInteractivity = !Program.IsInteractive;
+            
             return Flow<Value<DiskMergeTask>>
                 .Ok((parent, child).Some(), logger)
                 .Check((t) => File.Exists(t.Val.Parent), (t) => $"{t.Val.Parent} does not exist")
@@ -40,15 +44,24 @@ namespace auvdisk.DiskImage.Vhd
                 timer.Start();
 
                 var diffHandler = new DifferencingVhdHandler(child);
-
-                logger.Log("Merging...");
+                
                 var fileStream = new FileStream(target, FileMode.Open, FileAccess.Write);
-                var foundSectors = diffHandler.MergeChangedSectorsIntoFixedParent(fileStream);
+                
+                ulong foundSectors = 0;
+                logger.Log("Merging...");
+                
+                // Basically, is we're in the interactive mode we want to present progress bar
+                foundSectors = diffHandler.MergeChangedSectorsIntoFixedParent(fileStream, skipInteractivity ? null : new DifferencingVhdHandler.ProgressOptions());
 
                 timer.Stop();
 
                 logger.Log($"Moved {foundSectors} sectors from child image to parent");
-                logger.Log($"Merge took {timer.ElapsedMilliseconds}ms");
+
+                // Interactive mode will have timing on the progress bar
+                if (skipInteractivity)
+                {
+                    logger.Log($"Merge took {timer.ElapsedMilliseconds}ms");
+                }
 
                 const string inPlaceMsg = "As parent image was modified it's probably a good idea to delete all child images now, as they are effectively invalidated";
                 const string newImgMsg = "New fixed merged image created.";
@@ -80,7 +93,7 @@ namespace auvdisk.DiskImage.Vhd
             {
                 const string msg =
                     "Passed target is different than the parent; full image copy is needed before merge. This might take a while, proceed?";
-                return parent == target || confirm || AnsiConsole.Confirm(msg);
+                return parent == target || skipInteractivity || AnsiConsole.Confirm(msg);
             }
 
             void DoImageCopyIfNeeded()
@@ -88,15 +101,26 @@ namespace auvdisk.DiskImage.Vhd
                 logger.Log("Copying parent to target...");
                 var timer = new System.Diagnostics.Stopwatch();
                 timer.Start();
-                File.Copy(parent, target);
-                logger.Log($"Done copying parent to target in {timer.ElapsedMilliseconds}ms");
+
+                using var sourceStream = new FileStream(parent, FileMode.Open, FileAccess.Read).WithProgress();
+                using var targetStream = File.OpenWrite(target);
+                
+                if (skipInteractivity)
+                {
+                    sourceStream.CopyTo(targetStream);
+                    logger.Log($"Done copying parent to target in {timer.ElapsedMilliseconds}ms");
+                }
+                else
+                {
+                    sourceStream.CopyTo(targetStream, new StreamCopyProgressWrapper.ProgressOptions());
+                }
             }
 
             bool ConfirmMergeIntoParentIfNeeded(Value<DiskMergeModel> layers)
             {
                 const string msg = "Target and parent are the same file, are you sure to merge child directly into parent?";
 
-                return parent != target || confirm || AnsiConsole.Confirm(msg);
+                return parent != target || skipInteractivity || AnsiConsole.Confirm(msg);
             }
         }
     }

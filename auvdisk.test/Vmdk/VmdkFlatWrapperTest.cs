@@ -2,6 +2,11 @@ namespace auvdisk.test.Vmdk
 {
     public class VmdkFlatWrapperTest
     {
+        public VmdkFlatWrapperTest()
+        {
+            Program.IsInteractive = false;
+        }
+        
         [Fact]
         public void TestAgainstReference()
         {

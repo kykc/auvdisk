@@ -1,11 +1,26 @@
 using auvdisk.Extensions;
 using DiskAccessLibrary.VHD;
+using ShellProgressBar;
 using Spectre.Console;
 
 namespace auvdisk.DiskImage.Vhd
 {
     class DifferencingVhdHandler : IDisposable
     {
+        public class ProgressData
+        {
+            public long TotalBytes { get; init; } = 0;
+            public long ProcessedBytes { get; set; } = 0;
+            public double PercentComplete => TotalBytes > 0 ? ProcessedBytes * 1.0 / TotalBytes : 100.0;
+        }
+        
+        public class ProgressOptions
+        {
+            public string ActionName { get; set; } = "Merging";
+            public string ProgressName { get; set; } = "Processed";
+            public int Ticks { get; set; } = 10000;
+        }
+        
         private const int BytesPerDiskSector = (int)Util.LbaSize;
         const int HeaderSectorCount = 2;
 
@@ -55,13 +70,33 @@ namespace auvdisk.DiskImage.Vhd
             }
         }
 
-        public ulong MergeChangedSectorsIntoFixedParent(FileStream target)
+        public IProgress<ProgressData> GetProgress(ProgressBar progressBar, string actionName = "Copied")
         {
+            return progressBar.AsProgress<ProgressData>(
+                t => $"{actionName} {t.ProcessedBytes.HumanizeBytes()} of {t.TotalBytes.HumanizeBytes()}", 
+                t => t.PercentComplete);
+        }
+
+        public ulong MergeChangedSectorsIntoFixedParent(FileStream target, ProgressOptions? progressOpts = null)
+        {
+            ProgressBar? progressBar = null;
+            IProgress<ProgressData>? progress = null;
+            if (progressOpts != null)
+            {
+                // ProgressBar seems to be mangling few last lines on the terminal
+                Console.WriteLine();
+                Console.Out.Flush();
+                
+                progressBar = new ProgressBar(progressOpts.Ticks, $"{progressOpts.ActionName}...");
+                progress = GetProgress(progressBar);
+            }
+
             ulong sectorsPerBlock = _dynamicHeader.BlockSize / BytesPerDiskSector;
             int blockBitmapSectorCount = (int)Math.Ceiling((double)sectorsPerBlock / (BytesPerDiskSector * 8));
             byte[] bitmap = new byte[blockBitmapSectorCount * BytesPerDiskSector];
             byte[] sector = new byte[BytesPerDiskSector];
-
+            var throttle = new Throttle<ProgressData>((p) => progress?.Report(p), Program.ProgressReportRate);
+            var progressData = new ProgressData { TotalBytes = (long)_vhdFooter.CurrentSize, ProcessedBytes = 0 };
             ulong foundSectors = 0;
             
             for (ulong blockIdx = 0; blockIdx < (ulong)_batEntries.Length; ++blockIdx)
@@ -70,6 +105,8 @@ namespace auvdisk.DiskImage.Vhd
 
                 if (batEntry == UInt32.MaxValue)
                 {
+                    progressData.ProcessedBytes += BytesPerDiskSector * (long)sectorsPerBlock;
+                    throttle.Call(progressData);
                     continue;
                 }
                 
@@ -91,8 +128,14 @@ namespace auvdisk.DiskImage.Vhd
                         target.Seek((long)absoluteSectorIdx * BytesPerDiskSector, SeekOrigin.Begin);
                         target.Write(sector);
                     }
+                    
+                    progressData.ProcessedBytes += BytesPerDiskSector;
+                    throttle.Call(progressData);
                 }
             }
+            
+            progress?.Report(progressData);
+            progressBar?.Dispose();
 
             return foundSectors;
         }

@@ -5,7 +5,6 @@ namespace auvdisk.test.Vhd
     [Collection("Sequential")]
     public class ParentLocatorTest
     {
-
         [Fact]
         public void TestDiscUtilsLocator()
         {

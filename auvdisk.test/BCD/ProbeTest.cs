@@ -4,6 +4,11 @@ namespace auvdisk.test.BCD
 {
     public class ProbeTest
     {
+        public ProbeTest()
+        {
+            Program.IsInteractive = false;
+        }
+        
         private static string Target => Path.Join(Directory.GetCurrentDirectory(), "testdata", "BCD");
 
         [Fact]

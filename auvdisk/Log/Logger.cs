@@ -21,14 +21,6 @@ namespace auvdisk.Log
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     public class Logger : ILog
     {
-        public Logger()
-        {
-            if ((Environment.GetEnvironmentVariable("AUVDISK_LOG_LEVEL") ?? "").ToLowerInvariant() == "debug")
-            {
-                LogLevel = LogLevel.Debug;
-            }
-        }
-
         public void Log(IRenderable log)
         {
             AnsiConsole.Write(log);
@@ -86,7 +78,7 @@ namespace auvdisk.Log
             return Console.OpenStandardOutput();
         }
 
-        public LogLevel LogLevel { get; set; } = LogLevel.Info;
+        public LogLevel LogLevel { get; set; } = Program.LogLevel;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
