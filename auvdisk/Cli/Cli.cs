@@ -364,6 +364,8 @@ namespace auvdisk.Cli
         public bool ZeroFill { get; set; } = false;
         [Option('b', "bootable", Required = false, HelpText = "Make VHD bootable using bcdboot")]
         public bool Bootable { get; set; } = false;
+        [Option("vhdx", Required = false, Default = false, HelpText = "Create VHDx image instead of VHD")]
+        public bool Vhdx { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]

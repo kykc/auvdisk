@@ -52,7 +52,7 @@ namespace auvdisk.test
             Assert.Equal(42, result.Unwrap().Val);
             Assert.True(disposable.Disposed);
 
-            result = Flow<Value<int>>.Ok(42.Some(), Logger).MapDispose(x => (x.Val * 2).Some());
+            result = Flow<Value<int>>.Ok(42.Some(), Logger).Map(x => (x.Val * 2).Some());
             Assert.True(result.HasValue());
             Assert.Equal(42 * 2, result.Unwrap().Val);
             Assert.Throws<NullReferenceException>(() => result.UnwrapErr());
@@ -61,7 +61,7 @@ namespace auvdisk.test
             Assert.Empty(Logger.GetError());
             result.WithSideEffect(() => sideEffectWasExecuted = true);
             Assert.True(sideEffectWasExecuted);
-            result = Flow<Value<int>>.Err("Divide by zero", Logger).MapDispose<Value<int>>(x => throw new InvalidOperationException());
+            result = Flow<Value<int>>.Err("Divide by zero", Logger).Map<Value<int>>(x => throw new InvalidOperationException());
             Assert.False(result.HasValue());
             Assert.Throws<NullReferenceException>(() => result.Unwrap());
             Assert.Equal("Divide by zero", result.UnwrapErr());

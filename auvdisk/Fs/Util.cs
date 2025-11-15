@@ -5,6 +5,8 @@ using Win32.TokenPrivileges;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using auvdisk.Bytes;
+using auvdisk.Cli;
+using auvdisk.DiskImage.Vhd;
 using auvdisk.Extensions;
 using auvdisk.Log;
 using Spectre.Console;
@@ -43,7 +45,7 @@ namespace auvdisk.Fs
         
         private static bool ResizeFile(string target, ulong size, Log.ILog logger)
         {
-            using var stream = new FileStream(target, FileMode.OpenOrCreate).WithProgress();
+            using var stream = new FileStream(target, FileMode.Open, FileAccess.ReadWrite, FileShare.None).WithProgress();
             var currentSize = stream.Length;
             Debug.Assert(size > (ulong)currentSize);
             var difference = size - (ulong)currentSize;
@@ -88,17 +90,23 @@ namespace auvdisk.Fs
         {
             using var rawFileStream = new System.IO.FileStream(source, FileMode.Open, FileAccess.Read);
             using var decoratedStream = new SegmentStream(rawFileStream, (long)offset, (long)length);
-            using var targetStream = new System.IO.FileStream(target, FileMode.Create, FileAccess.Write);
+            using var targetStream = new System.IO.FileStream(target, FileMode.CreateNew, FileAccess.Write);
             decoratedStream.WithProgress().CopyTo(targetStream, logger);
         }
         
-        public static bool HandleResizeFileUnsafe(string target, ulong size, bool forceZeroFill, Log.ILog logger)
+        public static bool HandleResizeFile(string target, ulong size, bool forceZeroFill, Log.ILog logger)
         {
             bool success = false;
+
+            if (!File.Exists(target))
+            {
+                logger.Error($"File {target} does not exist");
+                return false;
+            }
             
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !forceZeroFill)
             {
-                var prompt = () => AnsiConsole.Confirm("Proceed with fast/unsafe method?");
+                var prompt = () => AnsiConsole.Confirm("Zero-fill was not requested. Proceed with fast/unsafe method? (You may receive an UAC prompt)");
                 
                 if (!Environment.IsPrivilegedProcess && Program.IsInteractive && prompt())
                 {
@@ -136,12 +144,13 @@ namespace auvdisk.Fs
                 {
                     try
                     {
+                        logger.Log("Resizing file with  fast/unsafe method");
                         logger.Log($"Administrator privileges: {Environment.IsPrivilegedProcess}");
                         var currentProcess = Process.GetCurrentProcess();
 
                         // Creates a lot of weirdness when many threads run this from UTs.
                         // This leads to token being held until process finishes "in production"
-                        // However, auvdisk isn't designed to be handing around, so this shouldn't be
+                        // However, auvdisk isn't designed to be hanging around, so this shouldn't be
                         // a real issue.
                         lock (Lock)
                         {
@@ -173,6 +182,15 @@ namespace auvdisk.Fs
                     logger.Log("Falling back to slow mode");
                     success = ResizeFile(target, size, logger);
                 }
+            }
+            else if (CliTools.IsDdPresent() && !forceZeroFill)
+            {
+                logger.Log("Found dd, will try to speed things up");
+                logger.Warning("This may result in a sparse file, if target file is on NTFS or SMB share");
+
+                var ddResult = CliTools.AllocateWithDd(target, size, logger);
+
+                success = !ddResult.IsError() || ResizeFile(target, size, logger);
             }
             else
             {

@@ -65,7 +65,7 @@ public class DiskImageConverterTest : IDisposable
         Assert.True(probeResult.Disk.Partitions[1].FileSystem.HasValue);
         Assert.Equal("EXT", probeResult.Disk.Partitions[1].FileSystem.Value.FsType);
 
-        Assert.True(Util.IsValidVhd("ext4.vhd"));
+        Assert.True(DiskImage.Vhd.Util.IsValidVhd("ext4.vhd"));
         
         result = DiskImageConverter.ConvertVhdToLoop("ext4.vhd", "ext4.loop", logger, false);
         
@@ -143,7 +143,7 @@ public class DiskImageConverterTest : IDisposable
         Assert.Equal(VirtualHardDiskType.Fixed, resultVhdFooter.DiskType);
         Assert.Equal(originalVhdFooter.CurrentSize, resultVhdFooter.CurrentSize);
         Assert.Equal(originalVhdFooter.OriginalSize, resultVhdFooter.OriginalSize);
-        Assert.True(Util.IsValidVhd(subject));
+        Assert.True(DiskImage.Vhd.Util.IsValidVhd(subject));
     }
     
     [Fact]
@@ -199,7 +199,7 @@ public class DiskImageConverterTest : IDisposable
             using var resultVhd = DiscUtils.VirtualDisk.OpenDisk(targetBack, "vhd", FileAccess.Read, "", "");
 
             Assert.Equal(TestUtil.CalcSha256Hash(initialVhd.Content), TestUtil.CalcSha256Hash(resultVhd.Content));
-            Assert.True(Util.IsValidVhd(targetBack));
+            Assert.True(DiskImage.Vhd.Util.IsValidVhd(targetBack));
         };
 
         testImpl(false);

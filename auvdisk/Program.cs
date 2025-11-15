@@ -358,7 +358,7 @@ namespace auvdisk
 
             handlers.Register((ResizeFileUnsafe opts) =>
             {
-                var success = Fs.Util.HandleResizeFileUnsafe(opts.Target, opts.Size, opts.ZeroFill, logger);
+                var success = Fs.Util.HandleResizeFile(opts.Target, opts.Size, opts.ZeroFill, logger);
 
                 return success ? 0 : 1;
             });

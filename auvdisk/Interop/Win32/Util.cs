@@ -208,10 +208,8 @@ namespace auvdisk.Interop.Win32
         }
 
         [SuppressMessage("ReSharper", "ConvertToLambdaExpression")]
-        public static Flow<Value<ulong>> CloneVolumeToVirtualDiskWithVss(string volume, string target, ILog logger, bool createFixed = false, bool forceZeroFill = false, bool bootable = false)
+        public static Flow<Value<ulong>> CloneVolumeToVirtualDiskWithVss(string volume, string target, ILog logger, bool createFixed = false, bool forceZeroFill = false, bool bootable = false, bool vhdx = false)
         {
-            // TODO: extend to be able to write VHDx
-
             var findVolumes = (IEnumerable<VhdMounter.VhdVolumeInfo> volumes) =>
             {
                 const char efiTargetLetter = 'X'; // TODO: ideally, check that it is not already taken
@@ -236,16 +234,15 @@ namespace auvdisk.Interop.Win32
                     snapStream = new BlockDeviceUnbufferedStream(vss.Root);
                     logger.Log($"Created snapshot {vss.Root} for volume {volume}");
                 })
-                .Bind(_ => // Create VHD file, prepare target partitions
+                .Bind(_ => // Create VHD/VHDx file, prepare target partitions
                 {
-                    return DiskImage.Vhd.Util.CreateBootableVhdLayout(
+                    return DiskImage.Util.CreateBootableLayout(
                         target, 512 * 1024 * 1024, (ulong)snapStream!.Length, 
-                        logger, forceZeroFill, !createFixed);
+                        logger, forceZeroFill, !createFixed, vhdx);
                 })
-                .WithSideEffect(_ => // Open VHD with DiscUtils, format EFI partition, clone NTFS partition
+                .WithSideEffect(_ => // Open image with DiscUtils, format EFI partition, clone NTFS partition
                 {
-                    using var stream = File.Open(target, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-                    using var disk = new DiscUtils.Vhd.Disk(stream, Ownership.None);
+                    using var disk = VirtualDisk.OpenDisk(target, FileAccess.ReadWrite);
                     logger.Log($"Formatting EFI partition into FAT32");
                     FatFileSystem.FormatPartition(disk, 0, "BOOT");
                     var partStream = disk.Partitions.Partitions[1].Open();

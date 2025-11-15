@@ -54,6 +54,25 @@ namespace auvdisk.Extensions
         {
             return subj.HasValue ? Flows.Ok(subj.Value, logger) : Flows.Err<TSubj>(error, logger);
         }
+        
+        // Defined as an extension method to be able to put constraints on TSubj : IDisposable
+        public static Flow<TRes> MapDispose<TSubj, TRes>(this Flow<TSubj> subj, Func<TSubj, TRes> mapper)
+            where TRes : class
+            where TSubj : class, IDisposable
+        {
+            if (subj.HasValue())
+            {
+                var val = mapper(subj.Unwrap());
+                
+                subj.Unwrap().Dispose();
+                
+                return Flows.Ok(val, subj.Logger);
+            }
+            else
+            {
+                return Flows.Err<TRes>(subj.UnwrapErr(), subj.Logger);
+            }
+        }
     }
     
     public class Flow<TSubj> : IDisposable
@@ -155,26 +174,6 @@ namespace auvdisk.Extensions
             }
 
             return this;
-        }
-        
-        public Flow<TRes> MapDispose<TRes>(Func<TSubj, TRes> mapper)
-            where TRes : class
-        {
-            if (HasValue())
-            {
-                var val = mapper(Value!);
-
-                if (Value is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
-
-                return new Flow<TRes>(Logger, val, null);
-            }
-            else
-            {
-                return new Flow<TRes>(Logger, Error ?? "Unexpected error");
-            }
         }
 
         public Flow<TRes> MapDisposeOr<TRes>(Func<TSubj, TRes?> mapper, string error)

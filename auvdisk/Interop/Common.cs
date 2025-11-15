@@ -167,7 +167,7 @@ namespace auvdisk.Interop
                 var result = Flows.Ok(rawOpts, logger)
                     .WithCheckedTargetAvailable((opts) => opts.Target)
                     .MapOr(NormalizeDriveLetter, "Invalid source volume path")
-                    .Bind(opts => Interop.Win32.Util.CloneVolumeToVirtualDiskWithVss(opts.Source, opts.Target, logger, opts.Fixed, opts.ZeroFill, opts.Bootable));
+                    .Bind(opts => Interop.Win32.Util.CloneVolumeToVirtualDiskWithVss(opts.Source, opts.Target, logger, opts.Fixed, opts.ZeroFill, opts.Bootable, opts.Vhdx));
                 
                 return result.LogErrorIfAny() ? 1 : 0;
             });

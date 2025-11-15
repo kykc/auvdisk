@@ -10,6 +10,7 @@ using auvdisk.Bytes;
 using auvdisk.Cli;
 using auvdisk.Extensions;
 using auvdisk.Log;
+using DiscUtils;
 using ZstdSharp.Unsafe;
 
 namespace auvdisk.DiskImage.Vhd
@@ -67,7 +68,7 @@ namespace auvdisk.DiskImage.Vhd
                 .MapOr(_ => maybeFooter, $"Failed to read VHD footer of file {path}")
                 .Check(f => size > f.CurrentSize, f => "Provided size is less or equal to the current VHD size")
                 .Check(f => f.DiskType == VirtualHardDiskType.Fixed, f => "Provided disk is not a fixed VHD file")
-                .Check(f => Fs.Util.HandleResizeFileUnsafe(path, size, zeroFill, logger), f => "Failed to resize VHD file")
+                .Check(f => Fs.Util.HandleResizeFile(path, size, zeroFill, logger), f => "Failed to resize VHD file")
                 .Map((f) =>
                 {
                     using var fs = new FileStream(path, FileMode.Open, FileAccess.Write);
@@ -90,122 +91,32 @@ namespace auvdisk.DiskImage.Vhd
                 size = RoundUp(size, LbaSize);
                 logger.Warning($"VHD size must be a multiple of {LbaSize}, rounded up size to {size}");
             }
-
-            // Faster due to disabled Windows FS security (resulting file contains contents from real disk, potential security issue)
-            // TODO: move this logic to HandleResizeFileUnsafe
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !forceZeroFill)
+            
+            try
             {
-                logger.Log("Zero-fill was not requested, will try to speed things up. You may receive UAC prompt");
-
-                try
-                {
-                    new FileStream(path, FileMode.Create, FileAccess.ReadWrite, FileShare.None).Close();
-                }
-                catch (Exception e)
-                {
-                    return Flows.Err<VhdFileInfo>(e.Message, logger);
-                }
-                
-                if (!Fs.Util.HandleResizeFileUnsafe(path, size, forceZeroFill, logger))
-                {
-                    return Flow<VhdFileInfo>.Err("Failed to resize VHD file", logger);
-                }
-
-                using var fs = new FileStream(path, FileMode.Open, FileAccess.Write);
-                fs.Seek(0, SeekOrigin.End);
-                var footer = CreateVhdFooter(size);
-                fs.Write(footer.GetBytes());
-                fs.Close();
-                
-                return Flow<VhdFileInfo>.Ok(new VhdFileInfo(footer, path, LbaSize), logger);
+                // "touch" file
+                new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None).Close();
             }
-            else if (CliTools.IsDdPresent() && !forceZeroFill)
+            catch (Exception e)
             {
-                logger.Log("Found dd, will allocate VHD using it to speed things up");
-                logger.Warning("This may result in a sparse file, and Windows doesn't like sparse VHDs");
-
-                var ddResult = CliTools.AllocateWithDd(path, size, logger);
-
-                if (ddResult.IsError())
-                {
-                    return Flows.Err<VhdFileInfo>(ddResult.UnwrapErr(), logger);
-                }
-                
-                var footer = CreateVhdFooter(size);
-                using var stream = new FileStream(path, FileMode.Open);
-                stream.Seek(0, SeekOrigin.End);
-                stream.Write(footer.GetBytes());
-
-                return Flow<VhdFileInfo>.Ok(new VhdFileInfo(footer, path, LbaSize), logger);
+                return Flows.Err<VhdFileInfo>(e.Message, logger);
             }
-            else
+            
+            if (!Fs.Util.HandleResizeFile(path, size, forceZeroFill, logger))
             {
-                logger.Log("Using DiskAccessLibrary to create VHD");
-                logger.Log("Will do full-length zeroing which might take some time");
-                if (!forceZeroFill) // Don't need to print this if zero-fill was forced by user
-                {
-                    logger.Log(
-                        "This is needed to avoid creating a sparse file. Known to happen on Linux when writing to Samba share");
-                }
-
-                ulong sectorCount = size / LbaSize;
-
-                using var stream = new FileStream(path, FileMode.CreateNew).WithProgress();
-                var footer = CreateVhdFooter(size);
-                
-                stream.ZeroFill(sectorCount, (int)LbaSize, logger);
-
-                stream.Write(footer.GetBytes());
-
-                return Flow<VhdFileInfo>.Ok(new VhdFileInfo(footer, path, LbaSize), logger);
+                return Flow<VhdFileInfo>.Err("Failed to resize VHD file", logger);
             }
-        }
-
-        public static Flow<Value<ulong>> CreateBootableVhdLayout(string target, ulong bootSizeInBytes, ulong dataSizeInBytes, Log.ILog logger, bool zeroFill = false, bool dynamic = false)
-        {
-            logger.Log($"Creating {(dynamic ? "dynamic" : "fixed")} VHD layout");
-            dataSizeInBytes = RoundUp(dataSizeInBytes, LbaSize);
-            logger.Log("Rounded up data partition size is " + dataSizeInBytes.ToString());
-
-            const ulong offsetLba = 2048UL; // Start first partition from the sector/LBA 2048, this is what Windows does AFAIK
-            const ulong overheadSize = 1024UL * 1024UL; // 1MiB for partition table and stuff
-
-            ulong totalSize = offsetLba * LbaSize + overheadSize + bootSizeInBytes + dataSizeInBytes;
-            logger.Log($"Total size of the image contents is {totalSize}");
-            var vdiskResult = dynamic ? CreateDynamicVhd(target, totalSize, logger) : CreateFixedVhd(target, totalSize, logger, zeroFill);
-
-            return vdiskResult.Map((vhdInfo) =>
-            {
-                List<GuidPartitionEntry> list = new List<GuidPartitionEntry>();
-
-                GuidPartitionEntry bootPartitionEntry = new GuidPartitionEntry();
-                bootPartitionEntry.PartitionGuid = Guid.NewGuid();
-                bootPartitionEntry.PartitionTypeGuid = GPTPartition.EFISystemPartitionTypeGuid;
-                bootPartitionEntry.FirstLBA = offsetLba;
-                bootPartitionEntry.LastLBA = offsetLba + bootSizeInBytes / LbaSize - 1;
-                bootPartitionEntry.PartitionName = "Boot";
-                list.Add(bootPartitionEntry);
-
-                GuidPartitionEntry dataPartitionEntry = new GuidPartitionEntry();
-                dataPartitionEntry.PartitionGuid = Guid.NewGuid();
-                dataPartitionEntry.PartitionTypeGuid = GPTPartition.BasicDataPartititionTypeGuid;
-                dataPartitionEntry.FirstLBA = bootPartitionEntry.LastLBA + 1;
-                // This one is a bit magical to me, snatched from DiscAccessLibrary internals. Probably accounts for GPT partition table footer
-                dataPartitionEntry.LastLBA = (ulong)(vhdInfo.TotalSectors - 1 - 16384 / vhdInfo.BytesPerSector) - 1;
-                list.Add(dataPartitionEntry);
-
-                logger.Log("Initializing VHD with GPT partition table");
-                logger.Log("Boot partition space in LBA is from " + bootPartitionEntry.FirstLBA.ToString() + " to " + bootPartitionEntry.LastLBA.ToString());
-                logger.Log("Data partition space in LBA is from " + dataPartitionEntry.FirstLBA.ToString() + " to " + dataPartitionEntry.LastLBA.ToString());
-                // This effectively limits this method to fixed and dynamic disk as DAL does not support differencing
-                // But partitioning differencing disk is probably more of a corner case, so I'll let this slide for now
-                DiskAccessLibrary.GuidPartitionTable.InitializeDisk(new VirtualHardDisk(vhdInfo.Path), (long)offsetLba, list);
-
-                return new Value<ulong>(dataSizeInBytes);
-            });
+            
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Write);
+            fs.Seek(0, SeekOrigin.End);
+            var footer = CreateVhdFooter(size);
+            fs.Write(footer.GetBytes());
+            fs.Close();
+                
+            return Flow<VhdFileInfo>.Ok(new VhdFileInfo(footer, path, LbaSize), logger);
         }
         
-        private static ulong RoundUp(ulong numToRound, ulong multiple)
+        internal static ulong RoundUp(ulong numToRound, ulong multiple)
         {
             if (multiple == 0)
                 return numToRound;
@@ -397,7 +308,7 @@ namespace auvdisk.DiskImage.Vhd
             footer.DiskType = maybeParentPath != null ? VirtualHardDiskType.Differencing : VirtualHardDiskType.Dynamic;
             footer.DataOffset = LbaSize;
             
-            var stream = new FileStream(path, FileMode.Create, FileAccess.Write);
+            var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
 
             dynamicHeader.TableOffset = LbaSize * 3 + parentLocatorSpaceInBytes;
             dynamicHeader.BlockSize = 1024 * 1024 * 2; // 2MiB

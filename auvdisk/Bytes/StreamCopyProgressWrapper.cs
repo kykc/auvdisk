@@ -27,7 +27,7 @@ namespace auvdisk.Bytes
             
             byte[] nullSector = Enumerable.Repeat((byte)0x0, sectorSize).ToArray();
 
-            // TODO: rebuffer to (larger) buffer size
+            // TODO: rebuffer to (larger) buffer size. Logic can be grabbed from ResizeFile
             Utils.WithProgress(logger, progressData, (progress) =>
             {
                 for (ulong sector = 0; sector < sectorCount; ++sector)

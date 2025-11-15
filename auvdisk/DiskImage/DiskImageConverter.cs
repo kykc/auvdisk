@@ -29,7 +29,7 @@ namespace auvdisk.DiskImage
 
                 logger.Log("Source file length is " + sourceLength.ToString());
 
-                var createLayoutResult = Vhd.Util.CreateBootableVhdLayout(target, efiBootSize, (ulong)sourceLength, logger, zeroFill);
+                var createLayoutResult = Util.CreateBootableLayout(target, efiBootSize, (ulong)sourceLength, logger, zeroFill);
 
                 if (createLayoutResult.IsError())
                 {
@@ -118,7 +118,7 @@ namespace auvdisk.DiskImage
                     logger.Log("Opening partition using DiscUtils, target file using FileStream");
 
                     using (var partStream = disk.Partitions.Partitions[selectedPart.idx].Open().WithProgress())
-                    using (var targetStream = new FileStream(target, FileMode.Create))
+                    using (var targetStream = new FileStream(target, FileMode.CreateNew))
                     {
                         logger.Log("Copying data from VHD to loop. Depending on disk speed and image size this might take a while");
                         partStream.CopyTo(targetStream, logger);
@@ -146,20 +146,19 @@ namespace auvdisk.DiskImage
                 // See auvdisk.test/Vhd/ParentLocatorTest for details
                 using var vhd = VirtualDisk.OpenDisk(source, "vhd", FileAccess.Read, "", "")!;
 
-                using var targetStream =
-                    new FileStream(target, FileMode.Create, FileAccess.ReadWrite);
+                var vhdxResult = fixedVhdx
+                    ? Vhdx.Util.CreateFixed(target, (ulong)vhd.Capacity, logger, forceZeroFill)
+                    : Vhdx.Util.CreateDynamic(target, (ulong)vhd.Capacity, logger);
 
-                if (fixedVhdx && !forceZeroFill)
+                if (vhdxResult.IsError())
                 {
-                    logger.Warning($"Unsafe fast file creation is not implemented here, full zero-fill might take some time");
+                    return Flows.Err<DiskProbe.ProbeResult>("Failed to create VHDx", logger);
                 }
 
-                using var vhdx = fixedVhdx  
-                    ? DiscUtils.Vhdx.Disk.InitializeFixed(targetStream, DiscUtils.Streams.Ownership.None, vhd.Capacity)!
-                    : DiscUtils.Vhdx.Disk.InitializeDynamic(targetStream, DiscUtils.Streams.Ownership.None, vhd.Capacity)!;
+                using var vhdx = vhdxResult.Unwrap();
                 
                 vhd.Content.WithProgress().CopyTo(vhdx.Content, logger);
-                targetStream.Flush();
+                vhdx.Content.Flush();
 
                 return Flows.Ok(probeResult, logger);
             };
@@ -213,7 +212,7 @@ namespace auvdisk.DiskImage
                 using var fs = File.OpenRead(source);
                 var qcow2Stream = new Qcow2Stream(fs).WithProgress();
                 logger.Log("Preparing target for writing");
-                using var targetStream = File.Open(target, FileMode.Create, FileAccess.ReadWrite);
+                using var targetStream = File.Open(target, FileMode.CreateNew, FileAccess.ReadWrite);
                 logger.Log("Copying data, this might take a while depending on disk speed and image size...");
 
                 qcow2Stream.CopyTo(targetStream, logger); 

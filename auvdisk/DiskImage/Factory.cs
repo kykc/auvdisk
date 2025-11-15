@@ -50,7 +50,7 @@ namespace auvdisk.DiskImage
             {
                 var result = $"{idx:D2} " + fs.FriendlyName ?? fs.GetType().Name;
 
-                if (Util.ExtractUuid(fs, new NullLogger()) is { } uuid)
+                if (Fs.Util.ExtractUuid(fs, new NullLogger()) is { } uuid)
                 {
                     result += $" {uuid}";
                 }

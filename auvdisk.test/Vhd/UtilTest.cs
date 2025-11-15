@@ -13,6 +13,9 @@ namespace auvdisk.test.Vhd
         
         private string TargetFixed => "vhdutil_bootable_fixed.vhd";
         private string TargetDynamic => "vhdutil_bootable_dynamic.vhd";
+        
+        private string TargetFixedVhdx => "vhdutil_bootable_fixed.vhdx";
+        private string TargetDynamicVhdx => "vhdutil_bootable_dynamic.vhdx";
 
         private ILog Logger { get; } = new LogWatcher();
         
@@ -45,17 +48,25 @@ namespace auvdisk.test.Vhd
         {
             Assert.False(File.Exists(TargetFixed));
             Assert.False(File.Exists(TargetDynamic));
+            Assert.False(File.Exists(TargetFixedVhdx));
+            Assert.False(File.Exists(TargetDynamicVhdx));
+
+            var test = (string fixedPath, string dynamicPath, bool vhdx) =>
+            {
+                var resultFixed = DiskImage.Util.CreateBootableLayout(fixedPath, BootSize, DataSize, Logger, false, false, vhdx);
+                var probeFixed = new DiskProbe(fixedPath, Logger).Probe();
             
-            var resultFixed = DiskImage.Vhd.Util.CreateBootableVhdLayout(TargetFixed, BootSize, DataSize, Logger, false, false);
-            var probeFixed = new DiskProbe(TargetFixed, Logger).Probe();
+                CheckLayout(resultFixed, probeFixed, vhdx);
             
-            CheckLayout(resultFixed, probeFixed);
+                var resultDynamic = DiskImage.Util.CreateBootableLayout(dynamicPath, BootSize, DataSize, Logger, false, true, vhdx);
+                var probeDynamic = new DiskProbe(dynamicPath, Logger).Probe();
             
-            var resultDynamic = DiskImage.Vhd.Util.CreateBootableVhdLayout(TargetDynamic, BootSize, DataSize, Logger, false, true);
-            var probeDynamic = new DiskProbe(TargetDynamic, Logger).Probe();
-            
-            CheckLayout(resultDynamic, probeDynamic);
-            Assert.True(GetLength(TargetDynamic) < (long)DataSize);
+                CheckLayout(resultDynamic, probeDynamic, vhdx);
+                Assert.True(GetLength(dynamicPath) < (long)DataSize);
+            };
+
+            test(TargetFixed, TargetDynamic, false);
+            test(TargetFixedVhdx, TargetDynamicVhdx, true);
         }
         
         private long GetLength(string path)
@@ -64,10 +75,10 @@ namespace auvdisk.test.Vhd
             return file.Length;
         }
 
-        private void CheckLayout(Flow<Value<ulong>> layoutResult, DiskProbe.ProbeResult probeResult)
+        private void CheckLayout(Flow<Value<ulong>> layoutResult, DiskProbe.ProbeResult probeResult, bool vhdx)
         {
             Assert.False(layoutResult.IsError());
-            Assert.Equal(DataSize + 511, layoutResult.Unwrap().Val);
+            Assert.Equal(vhdx ? DataSize + 1024 * 1024 - 1 : DataSize + 511, layoutResult.Unwrap().Val);
             
             
             Assert.NotNull(probeResult.Disk);
@@ -81,6 +92,8 @@ namespace auvdisk.test.Vhd
         {
             File.Delete(TargetDynamic);
             File.Delete(TargetFixed);
+            File.Delete(TargetDynamicVhdx);
+            File.Delete(TargetFixedVhdx);
         }
     }
 }
