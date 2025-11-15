@@ -22,7 +22,10 @@ public static class Lsblk
                $"/dev/{x.Name}",
                 x.MountPoints.Where(m => m != null).Select(m => m!).ToList(),
                 x.Size,
-                x.BytesPerSectorLogical)).ToList();
+                x.BytesPerSectorLogical, 
+                (x.Children ?? []).Select(c => c.Model).FirstOrDefault(),
+                (x.Children ?? []).Select(c => $"/dev/{c.Name}").FirstOrDefault()
+            )).ToList();
         }
     }
 
@@ -31,6 +34,9 @@ public static class Lsblk
     {
         [JsonPropertyName("fstype")]
         public string? FsType { get; set; }
+        
+        [JsonPropertyName("model")]
+        public string? Model { get; set; }
 
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
@@ -44,7 +50,7 @@ public static class Lsblk
         [JsonPropertyName("label")]
         public string? Label { get; set; }
 
-        [JsonPropertyName("children")]
+        [JsonPropertyName("children")] 
         public List<BlockDevice>? Children { get; set; }
 
         [JsonPropertyName("size")]
@@ -64,7 +70,7 @@ public static class Lsblk
         try
         {
             (stdOut, _) = Command.ReadAsync("lsblk",
-                    ["-sb", "--json", "--output", "fstype,name,mountpoints,uuid,label,size,phy-sec,log-sec"])
+                    ["-sb", "--json", "--output", "fstype,name,mountpoints,uuid,label,size,phy-sec,log-sec,model"])
                 .GetAwaiter()
                 .GetResult();
         }

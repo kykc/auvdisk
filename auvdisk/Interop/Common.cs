@@ -21,7 +21,11 @@ namespace auvdisk.Interop
         [Display(Name = "Size")]
         ulong? Size,
         [Display(Name = "Bytes per Sector")]
-        uint? BytesPerSector);
+        uint? BytesPerSector,
+        [Display(Name = "HW Model")]
+        string? HardwareModel,
+        [Display(Name = "Parent")]
+        string? ParentDeviceId);
 
     public static class Common
     {
@@ -94,7 +98,7 @@ namespace auvdisk.Interop
             {
                 if (opts.DiskNumber == 0 || opts.PartitionNumber == 0 || opts.PartitionType == "")
                 {
-                    var fsListResult = Factory.MakeFsListFromAvailableVolumes(logger);
+                    var fsListResult = Factory.MakeFsListFromAvailableVolumes(logger, true);
 
                     if (fsListResult.IsError())
                     {

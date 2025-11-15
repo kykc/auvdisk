@@ -138,7 +138,7 @@ namespace auvdisk.Interop.Win32
             try
             {
                 ManagementObjectSearcher searcher =
-                    new ManagementObjectSearcher("root\\CIMV2", "SELECT DeviceID, Index, BytesPerSector FROM Win32_DiskDrive");
+                    new ManagementObjectSearcher("root\\CIMV2", "SELECT DeviceID, Index, BytesPerSector, Model FROM Win32_DiskDrive");
 
                 DiscUtils.PhysicalVolumeInfo[] GetVolumes(string diskId)
                 {
@@ -163,9 +163,9 @@ namespace auvdisk.Interop.Win32
                 var disks = searcher.Get().Cast<ManagementObject>()
                     .AsParallel().AsOrdered()
                     .Select(o => (diskId: o["DeviceID"]?.ToString(), diskIdx: o["Index"]?.ToString(),
-                        bytesPerSector: (UInt32)o["BytesPerSector"]))
+                        bytesPerSector: (UInt32)o["BytesPerSector"], hardwareModel: o["Model"]?.ToString()))
                     .Where(d => d is { diskId: not null, diskIdx: not null })
-                    .Select(d => (d.diskId, d.diskIdx, d.bytesPerSector, volumes: GetVolumes(d.diskId!)));
+                    .Select(d => (d.hardwareModel, d.diskId, d.diskIdx, d.bytesPerSector, volumes: GetVolumes(d.diskId!)));
 
                 var volumes = disks
                     .SelectMany(d => d.volumes .Select((v, volumeIdx) => (
@@ -173,13 +173,16 @@ namespace auvdisk.Interop.Win32
                         d.diskId,
                         d.diskIdx,
                         d.bytesPerSector,
+                        d.hardwareModel,
                         volumeInfo: v,
                         mountPoints: GetMountPoints(d.diskIdx!, volumeIdx))))
                     .Select(v => new PhysicalVolumeInfo(
                         $"\\\\.\\Harddisk{v.diskIdx}Partition{v.volumeIdx + 1}",
                         v.mountPoints?.ToList() ?? [],
                         (ulong)v.volumeInfo.Length,
-                        v.bytesPerSector));
+                        v.bytesPerSector, 
+                        v.hardwareModel,
+                        v.diskIdx?.ToString()));
 
                 return Flow<IEnumerable<PhysicalVolumeInfo>>.Ok(volumes.ToList(), logger);
             }

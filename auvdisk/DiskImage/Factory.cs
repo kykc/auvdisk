@@ -69,15 +69,16 @@ namespace auvdisk.DiskImage
             return fsList.Select((x, idx) => new KeyValuePair<string, DiscFileSystem>(GetFsName(idx, x), x)).ToDictionary();
         }
 
-        public static Flow<FsCollection> MakeFsListFromAvailableVolumes(ILog logger)
+        public static Flow<FsCollection> MakeFsListFromAvailableVolumes(ILog logger, bool treeOutput = false)
         {
             return Interop.Common.GetVolumes(logger).Map((volumeList) =>
             {
-                var table = Utils.MakeConsoleTable(["Device Id", "FS Type", "Label", "Mount Points", "UUID", "Size", "Bytes per Sector"]);
                 var fsList = new List<DiscFileSystem>();
                 var disposableList = new List<IDisposable>();
 
-                foreach (var volume in volumeList.OrderBy((v) => v.DeviceId, Interop.Common.GetDeviceIdComparer()))
+                Dictionary<string, List<string[]>> tuiStructure = new();
+                
+                foreach (var (volume, idx) in volumeList.OrderBy((v) => v.DeviceId, Interop.Common.GetDeviceIdComparer()).Select((x, idx) => (x, idx)))
                 {
                     Stream? fileStream = null;
                     ReadOnlyCollection<DiscUtils.FileSystemInfo>? fsInfoList = null;
@@ -107,17 +108,67 @@ namespace auvdisk.DiskImage
                     fsList.Add(fs);
                     disposableList.Add(fileStream);
 
-                    table.AddRow(
+                    var parentDeviceCaption = $"{volume.ParentDeviceId ?? "N/A"} <{volume.HardwareModel ?? "N/A"}>";
+
+                    if (!tuiStructure.ContainsKey(parentDeviceCaption))
+                    {
+                        tuiStructure[parentDeviceCaption] = [];
+                    }
+                    
+                    tuiStructure[parentDeviceCaption].Add([
+                        volume.ParentDeviceId ?? "N/A",
+                        volume.HardwareModel ?? "N/A",
                         volume.DeviceId,
                         fs.FriendlyName,
                         fs.VolumeLabel,
                         volume.MountPoints.Any() ? String.Join(", ", volume.MountPoints) : "N/A",
                         fs?.GetUuid(new NullLogger()) ?? "",
                         volume.Size.HasValue ? Utils.HumanizeFilesize(volume.Size.Value, true) : "N/A",
-                        volume.BytesPerSector?.ToString() ?? "N/A");
+                        volume.BytesPerSector?.ToString() ?? "N/A"]);
                 }
 
-                logger.Log(table);
+                if (Program.IsInteractive)
+                {
+                    if (!treeOutput)
+                    {
+                        var table = Utils.MakeConsoleTable([
+                            "Parent Id", "HW Model", "Device Id", "FS Type", "Label", "Mount Points", "UUID", "Size", "Bytes per Sector"
+                        ]);
+                        
+                        foreach (var driveDevice in tuiStructure.Keys)
+                        {
+                            foreach (var volumeInfo in tuiStructure[driveDevice])
+                            {
+                                table.AddRow(volumeInfo);
+                            }
+                        }
+
+                        logger.Log(table);
+                    }
+                    else
+                    {
+                        var root = new Tree("Disk Drives");
+
+                        foreach (var driveDevice in tuiStructure.Keys)
+                        {
+                            var driveNode = root.AddNode($"[yellow]{driveDevice}[/]");
+                            var volumeTable = Utils.MakeConsoleTable([
+                                "Device Id", "FS Type", "Label", "Mount Points", "UUID", "Size", "Bytes per Sector"
+                            ]);
+
+                            foreach (var volumeInfo in tuiStructure[driveDevice])
+                            {
+                                // Those are parent-related fields and would be the same for every row in a table when grouping
+                                volumeTable.AddRow(volumeInfo.Skip(2).ToArray());
+                            }
+
+                            volumeTable.Collapse();
+                            driveNode.AddNode(volumeTable);
+                        }
+
+                        logger.Log(root);
+                    }
+                }
 
                 return new FsCollection(disposableList, GetFileSystems(fsList), "OS Volumes");
             });

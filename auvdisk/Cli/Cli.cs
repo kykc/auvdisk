@@ -79,6 +79,9 @@ namespace auvdisk.Cli
     {
         [Option('l', "list", Required = false, HelpText = "List the volumes instead of browsing")]
         public bool List { get; set; } = false;
+
+        [Option('t', "tree", Required = false, Default = false, HelpText = "Tree output")]
+        public bool TreeOutput { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]

@@ -328,7 +328,7 @@ namespace auvdisk
             {
                 if (opts.List)
                 {
-                    var result = DiskImage.Factory.MakeFsListFromAvailableVolumes(logger);
+                    var result = DiskImage.Factory.MakeFsListFromAvailableVolumes(logger, opts.TreeOutput);
 
                     return result.LogErrorIfAny() ? 1 : 0;
                 }
