@@ -9,7 +9,7 @@
     <RollForward>LatestMajor</RollForward>
     <LangVersion>Latest</LangVersion>
     <AssemblyName>auvdisk</AssemblyName>
-    <Version>1.8.7</Version>
+    <Version>1.9.0</Version>
     <Authors>Alexander Automatl</Authors>
     <Company>Tomatl Inc</Company>
     <IsWindows Condition="$([MSBuild]::IsOSPlatform('Windows'))">true</IsWindows>
@@ -23,7 +23,6 @@
     <PackageReference Include="DotNext" Version="5.25.1" />
     <PackageReference Include="Lib.Harmony" Version="2.4.1" />
     <PackageReference Include="LTRData.DiscUtils" Version="1.0.69" />
-    <PackageReference Include="ShellProgressBar" Version="5.2.0" />
     <PackageReference Include="SimpleExec" Version="12.0.0" />
     <PackageReference Include="Spectre.Console" Version="0.52.0" />
     <PackageReference Include="Terminal.Gui" Version="1.19.0" />
@@ -40,7 +39,9 @@
     <InternalsVisibleTo Include="auvdisk.test" />
   </ItemGroup>
   <ItemGroup Condition="'$(IsWindows)'=='true'">
+    <PackageReference Include="AlphaVSS" Version="2.0.3" />
     <PackageReference Include="System.Management.Automation" Version="7.4.13" />
+    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.4.13" />
     <PackageReference Include="Win32.TokenPrivileges" Version="1.0.19073.2">
       <NoWarn>NU1701</NoWarn>
     </PackageReference>

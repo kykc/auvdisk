@@ -47,11 +47,15 @@ packages directly from this repo (see `.gitea/workflows` for some examples on pa
 | diag-vhd              | Output VHD diagnostics info                                                                                                                     |
 | resize-fixed-vhd      | Resize fixed VHD image                                                                                                                          |
 | check-is-sparse       | Check if file is a sparse file (Windows and NTFS only)                                                                                          |
-| conv-vhd-to-vhdx      | Convert any VHD image to fixed VHDX image                                                                                                       |
-| conv-vhdx-to-vhd      | Convert any VHDX image to fixed VHD image                                                                                                       |
+| conv-vhd-to-vhdx      | Convert any VHD image to VHDx image                                                                                                             |
+| conv-vhdx-to-vhd      | Convert any VHDX image to VHD image                                                                                                             |
 | gen-vmdk-wrapper      | Generate VMDK wrapper for a RAW image                                                                                                           |
 | conv-qcow-to-raw      | Convert qcow2 image to RAW                                                                                                                      |
 | change-partition-type | Generate diskpart command for changing GPT partition type (Windows only)                                                                        |
+| clone-volume-to-vhd   | Clone live mounted volume into VHD using Volume Shadow Copy (Windows only)                                                                      |
+| mount-vhd-x           | Mount VHD/VHDx image (Windows only)                                                                                                             |
+| mount-volume          | Assign letter to volume (Windows only)                                                                                                          |
+| unmount-volume        | Remove drive letter association from volume (Windows only)                                                                                      |
 
 ## Unit tests
 

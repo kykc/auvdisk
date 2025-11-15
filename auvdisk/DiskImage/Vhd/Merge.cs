@@ -3,7 +3,6 @@ using Spectre.Console;
 using auvdisk.Extensions;
 using auvdisk.Log;
 using DiscUtils;
-using ShellProgressBar;
 using DiskLayerModel = (string FullPath, System.Guid? UniqueId, bool IsSparse, bool NeedsParent);
 
 namespace auvdisk.DiskImage.Vhd
@@ -21,7 +20,7 @@ namespace auvdisk.DiskImage.Vhd
                 .Ok((parent, child).Some(), logger)
                 .Check((t) => File.Exists(t.Val.Parent), (t) => $"{t.Val.Parent} does not exist")
                 .Check((t) => File.Exists(t.Val.Child), (t) => $"{t.Val.Child} does not exist")
-                .MapOr((t) => Util.OpenDiskWithDu(t.Val.Child, logger), "Failed to open child VHD disk")
+                .Bind((t) => Util.OpenDiskWithDu(t.Val.Child, logger))
                 .MapDispose((disk) => disk.Layers.Select(LayerToModel).ToList())
                 .Check(CheckHasTwoLayers,
                     (_) => "Target image should consist of exactly 2 layers (fixed parent and sparse child)")
@@ -35,9 +34,9 @@ namespace auvdisk.DiskImage.Vhd
                 .Check(ConfirmImageCopyIfNeeded, (_) => "Exiting")
                 .WithSideEffect(DoImageCopyIfNeeded)
                 .Check(ConfirmMergeIntoParentIfNeeded, (_) => "Exiting")
-                .MapOr(PerformMergeAction, "Failed to open resulting disk image");
+                .Bind(PerformMergeAction);
 
-            DiscUtils.Vhd.Disk? PerformMergeAction(Value<DiskMergeModel> _)
+            Flow<DiscUtils.Vhd.Disk> PerformMergeAction(Value<DiskMergeModel> _)
             {
                 var timer = new System.Diagnostics.Stopwatch();
 
@@ -51,7 +50,7 @@ namespace auvdisk.DiskImage.Vhd
                 logger.Log("Merging...");
                 
                 // Basically, is we're in the interactive mode we want to present progress bar
-                foundSectors = diffHandler.MergeChangedSectorsIntoFixedParent(fileStream, skipInteractivity ? null : new DifferencingVhdHandler.ProgressOptions());
+                foundSectors = diffHandler.MergeChangedSectorsIntoFixedParent(fileStream, logger);
 
                 timer.Stop();
 
@@ -107,12 +106,12 @@ namespace auvdisk.DiskImage.Vhd
                 
                 if (skipInteractivity)
                 {
-                    sourceStream.CopyTo(targetStream);
+                    sourceStream.CopyTo(targetStream, logger);
                     logger.Log($"Done copying parent to target in {timer.ElapsedMilliseconds}ms");
                 }
                 else
                 {
-                    sourceStream.CopyTo(targetStream, new StreamCopyProgressWrapper.ProgressOptions());
+                    sourceStream.CopyTo(targetStream, logger);
                 }
             }
 

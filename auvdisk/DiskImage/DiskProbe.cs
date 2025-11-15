@@ -93,12 +93,12 @@ namespace auvdisk.DiskImage
             {
                 Logger.Log($"Valid VHD footer with id [yellow]{maybeVhdFooter.UniqueId}[/] was found, assuming VHD file format");
                 
-                using var vhdDisk = Vhd.Util.OpenDiskWithDu(Path, Logger);
+                using var vhdDiskResult = Vhd.Util.OpenDiskWithDu(Path, Logger);
                 //using var vhdDisk = new DiscUtils.Vhd.Disk(Path, FileAccess.Read);
 
-                if (vhdDisk != null)
+                if (vhdDiskResult.HasValue())
                 {
-                    return new ProbeResult(HandleVirtualDisk(vhdDisk, "VHD", maybeVhdFooter.UniqueId), null);
+                    return new ProbeResult(HandleVirtualDisk(vhdDiskResult.Unwrap(), "VHD", maybeVhdFooter.UniqueId), null);
                 }
                 else  
                 {

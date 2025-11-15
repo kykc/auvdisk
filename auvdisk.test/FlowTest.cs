@@ -57,13 +57,10 @@ namespace auvdisk.test
             Assert.Equal(42 * 2, result.Unwrap().Val);
             Assert.Throws<NullReferenceException>(() => result.UnwrapErr());
             Assert.False(result.IsError());
-            result.WithSideEffect(() => sideEffectWasExecuted = true, () => false);
-            Assert.False(sideEffectWasExecuted);
-            result.WithSideEffect(() => sideEffectWasExecuted = true, () => true);
-            Assert.True(sideEffectWasExecuted);
             result.LogErrorIfAny();
             Assert.Empty(Logger.GetError());
-
+            result.WithSideEffect(() => sideEffectWasExecuted = true);
+            Assert.True(sideEffectWasExecuted);
             result = Flow<Value<int>>.Err("Divide by zero", Logger).MapDispose<Value<int>>(x => throw new InvalidOperationException());
             Assert.False(result.HasValue());
             Assert.Throws<NullReferenceException>(() => result.Unwrap());

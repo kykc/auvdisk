@@ -348,6 +348,7 @@ namespace auvdisk.Commander
 
                 if (result == 0)
                 {
+                    // TODO: progress bar
                     using var dstStream = File.OpenWrite(dstFile);
                     using var srcStream = sourceFs.OpenFile(srcFile);
 

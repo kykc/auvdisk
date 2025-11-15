@@ -37,17 +37,18 @@ namespace auvdisk.test.Vhd
 
             Assert.NotNull(disk);
             Assert.False(disk.IsError());
-            Assert.Equal(size, (ulong)disk.Unwrap().Size);
+            Assert.Equal(size, disk.Unwrap().CapacityInBytes);
             Assert.True(Util.IsValidVhd(_targetCreateFast));
 
-            WriteTestData(disk.Unwrap(), size, logger);
+            WriteTestData(new VirtualHardDisk(disk.Unwrap().Path), size, logger);
 
             ulong newsize = 1024UL * 1024UL * 1024UL * 15; // 15 GiB
 
             var resizedDisk = auvdisk.DiskImage.Vhd.Util.ResizeFixedVhd(_targetCreateFast, newsize, logger, false);
 
             Assert.NotNull(resizedDisk);
-            Assert.Equal(newsize, (ulong)resizedDisk.Size);
+            Assert.False(resizedDisk.IsError());
+            Assert.Equal(newsize, resizedDisk.Unwrap().CapacityInBytes);
             Assert.True(Util.IsValidVhd(_targetCreateFast));
 
             CheckTestData(_targetCreateFast, logger);
@@ -66,16 +67,17 @@ namespace auvdisk.test.Vhd
 
             Assert.NotNull(disk);
             Assert.False(disk.IsError());
-            Assert.Equal(size, (ulong)disk.Unwrap().Size);
+            Assert.Equal(size, disk.Unwrap().CapacityInBytes);
 
-            WriteTestData(disk.Unwrap(), size, logger);
+            WriteTestData(new VirtualHardDisk(disk.Unwrap().Path), size, logger);
 
             ulong newsize = 1024UL * 1024UL * 1024UL; // 1 GiB
 
             var resizedDisk = auvdisk.DiskImage.Vhd.Util.ResizeFixedVhd(_targetCreateZeroFill, newsize, logger, true);
 
             Assert.NotNull(resizedDisk);
-            Assert.Equal(newsize, (ulong)resizedDisk.Size);
+            Assert.False(resizedDisk.IsError());
+            Assert.Equal(newsize, resizedDisk.Unwrap().CapacityInBytes);
 
             CheckTestData(_targetCreateZeroFill, logger);
         }

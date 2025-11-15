@@ -21,7 +21,7 @@ namespace auvdisk.test
             
             Assert.True(File.Exists(intermediateVhd));
             
-            Fs.Util.ExtractFileSegment(intermediateVhd, resultLoop,  537919488, 6274560);
+            Fs.Util.ExtractFileSegment(intermediateVhd, resultLoop,  537919488, 6274560, logger);
 
             Assert.True(File.Exists(resultLoop));
 

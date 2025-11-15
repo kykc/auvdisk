@@ -50,7 +50,7 @@ namespace auvdisk.DiskImage
             {
                 var result = $"{idx:D2} " + fs.FriendlyName ?? fs.GetType().Name;
 
-                if (auvdisk.Fs.Util.ExtractUuid(fs, new NullLogger()) is { } uuid)
+                if (Util.ExtractUuid(fs, new NullLogger()) is { } uuid)
                 {
                     result += $" {uuid}";
                 }
@@ -148,7 +148,7 @@ namespace auvdisk.DiskImage
             }
             else if (probe.Disk is { ImageType: "VHD" })
             {
-                var disk = Vhd.Util.OpenDiskWithDu(path, logger)!;
+                var disk = Vhd.Util.OpenDiskWithDu(path, logger).Unwrap();
 
                 return new FsCollection(new List<IDisposable> { disk }, GetFileSystems(disk), path);
             }

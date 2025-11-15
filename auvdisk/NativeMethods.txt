@@ -2,7 +2,6 @@
 SetFilePointerEx
 SetEndOfFile
 CloseHandle
-GENERIC_ACCESS_RIGHTS
 FILE_CREATION_DISPOSITION
 DeviceIoControl
 FSCTL_QUERY_ALLOCATED_RANGES
@@ -14,3 +13,4 @@ FILE_ACCESS_RIGHTS
 FlushFileBuffers
 GET_LENGTH_INFORMATION
 ReadFile
+DeleteVolumeMountPoint

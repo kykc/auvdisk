@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -5,6 +6,7 @@ using auvdisk.Extensions;
 using CommandLine;
 using auvdisk.DiskImage;
 using auvdisk.Cli;
+using auvdisk.Interop;
 using auvdisk.Log;
 using Common.Logging;
 using DiscUtils;
@@ -136,9 +138,8 @@ namespace auvdisk
             
             handlers.Register((Cli.CreateDiffVhd opts) =>
             {
-                var action = () =>
+                var outputDiskInfo = () =>
                 {
-                    DiskImage.Vhd.Util.CreateDifferentialVhd(opts.Parent, opts.Child, logger);
                     DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Child, logger);
                     new DiskProbe(opts.Child, logger).Probe();
                 };
@@ -147,7 +148,8 @@ namespace auvdisk
                     .WithCheckedTargetAvailable(opts.Child)
                     .WithCheckedSourceExists(opts.Parent)
                     .WithCheckedDiskType("VHD", opts.Parent, opts.Verbose)
-                    .WithSideEffect(action)
+                    .Bind(_ => DiskImage.Vhd.Util.CreateDifferentialVhd(opts.Parent, opts.Child, logger))
+                    .WithSideEffect(outputDiskInfo)
                     .Log("Done.");
 
                 return result.LogErrorIfAny() ? 1 : 0;
@@ -197,12 +199,12 @@ namespace auvdisk
             
             handlers.Register((Cli.ExtractFile opts) =>
             {
-                var action = () => Fs.Util.ExtractFileSegment(opts.Source, opts.Target, opts.Offset, opts.Length);
+                var action = () => Fs.Util.ExtractFileSegment(opts.Source, opts.Target, opts.Offset, opts.Length, logger);
 
-                var result = Flow<None>.Ok(None.Value, logger)
-                    .WithCheckedSourceExists(opts.Source)
-                    .WithCheckedTargetAvailable(opts.Target)
-                    .WithCheckedStreamBoundaries(opts.Source, opts.Offset, opts.Length)
+                var result = Flow<ExtractFile>.Ok(opts, logger)
+                    .WithCheckedSourceExists(x => x.Source)
+                    .WithCheckedTargetAvailable(x => x.Target)
+                    .WithCheckedStreamBoundaries(x => x.Source, x => x.Offset, x => x.Length)
                     .WithSideEffect(action);
 
                 return result.LogErrorIfAny() ? 1 : 0;
@@ -216,52 +218,41 @@ namespace auvdisk
                     validVhd = DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Source, logger);
                 };
 
-                var result = Flow<None>.Ok(None.Value, logger)
-                    .WithCheckedSourceExists(opts.Source)
+                var result = Flow<DiagVhd>.Ok(opts, logger)
+                    .WithCheckedSourceExists(x => x.Source)
                     .WithSideEffect(action);
 
                 return result.LogErrorIfAny() || !validVhd ? 1 : 0;
             });
             
-            handlers.Register((Cli.ResizeFixedVhd opts) =>
+            handlers.Register((Cli.ResizeFixedVhd rawOpts) =>
             {
-                Action action = () =>
+                var parseSize = (ResizeFixedVhd opts) =>
                 {
                     var size = opts.Size.ParseByteLength()!.Value;
-                    DiskImage.Vhd.Util.ResizeFixedVhd(opts.Target, size, logger);
+                    return new { size, opts };
                 };
 
-                var result = Flow<None>.Ok(None.Value, logger)
-                    .WithCheckedSize(opts.Size)
-                    .WithCheckedSourceExists(opts.Target)
-                    .WithSideEffect(action);
+                var result = Flow<ResizeFixedVhd>.Ok(rawOpts, logger)
+                    .WithCheckedSize(x => x.Size)
+                    .WithCheckedSourceExists(x => x.Target)
+                    .Map(parseSize)
+                    .Bind(x => DiskImage.Vhd.Util.ResizeFixedVhd(x.opts.Target, x.size, logger, rawOpts.ZeroFill));
 
                 return result.LogErrorIfAny() ? 1 : 0;
-            });
-            
-            handlers.Register((Cli.CheckIsSparse opts) =>
-            {
-                var result = Fs.Util.IsSparseFile(opts.Target, logger);
-
-                if (result != null)
-                {
-                    logger.Log($"Is sparse file: {result}");
-                }
-
-                return result == null ? 1 : 0;
             });
             
             handlers.Register((Cli.VhdToVhdx opts) =>
             {
                 var result =
-                    DiskImageConverter.ConvertVhdToFixedVhdx(opts.Source, opts.Target, logger, opts.Verbose);
+                    DiskImageConverter.ConvertVhdToVhdx(opts.Source, opts.Target, logger, opts.Verbose, opts.Fixed, opts.ZeroFill);
 
                 return result.LogErrorIfAny() ? 1 : 0;
             });
             
             handlers.Register((Cli.VhdxToVhd opts) =>
             {
-                var result = DiskImageConverter.ConvertVhdxToFixedVhd(opts.Source, opts.Target, logger, opts.Verbose);
+                var result = DiskImageConverter.ConvertVhdxToVhd(opts.Source, opts.Target, logger, opts.Verbose, opts.Fixed, opts.ZeroFill);
 
                 return result.LogErrorIfAny() ? 1 : 0;
             });
@@ -276,10 +267,9 @@ namespace auvdisk
 
                     if (vmdk != null)
                     {
-                        // Using Console (not logger) here on purpose. I'm afraid something might break Spectre.Console markup handling at some moment
                         Utils.If(() => logger.Log(new Rule("[green]Resulting VMDK[/]").LeftJustified()),
                             () => !opts.Silent);
-                        Console.WriteLine(vmdk?.ToString() ?? ""); // On error logger will contain the reason already
+                        logger.Log(vmdk?.ToString().EscapeMarkup() ?? ""); // On error logger will contain the reason already
                         Utils.If(() => logger.Log(new Rule("[green]End of VMDK[/]").LeftJustified()),
                             () => !opts.Silent);
                         Utils.If(
@@ -350,58 +340,6 @@ namespace auvdisk
                 }
             });
 
-            handlers.Register((Cli.ChangePartitionType opts) =>
-            {
-                if (opts.DiskNumber == 0 || opts.PartitionNumber == 0 || opts.PartitionType == "")
-                {
-                    var fsListResult = Factory.MakeFsListFromAvailableVolumes(logger);
-
-                    if (fsListResult.IsError())
-                    {
-                        fsListResult.LogErrorIfAny();
-                        return 1;
-                    }
-                }
-
-                if (opts.DiskNumber == 0)
-                {
-                    opts.DiskNumber = AnsiConsole.Prompt(new TextPrompt<int>("disk number [yellow]?>[/] "));
-                }
-
-                if (opts.PartitionNumber == 0)
-                {
-                    opts.PartitionNumber = AnsiConsole.Prompt(new TextPrompt<int>("partition number [yellow]?>[/] "));
-                }
-
-                if (opts.PartitionType == "")
-                {
-                    opts.PartitionType = AnsiConsole.Prompt(new TextPrompt<string>("partition type [yellow]?>[/] "));
-                }
-                
-                string partTypeGuid = "";
-                
-                if (opts.PartitionType.ToLowerInvariant() == "data")
-                {
-                    partTypeGuid = "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7";
-                }
-                else if (opts.PartitionType.ToLowerInvariant() == "efi")
-                {
-                    partTypeGuid = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b";
-                }
-                else
-                {
-                    logger.Error("Unknown partition type: " + opts.PartitionType);
-                    return 1;
-                }
-                
-                string result =
-                    $"\"select disk {opts.DiskNumber}\", \"select partition {opts.PartitionNumber}\", \"set id={partTypeGuid} override\" | diskpart";
-                
-                logger.Log($"[green]{result}[/]");
-
-                return 0;
-            });
-
             handlers.Register((OutMarkdownHelp opts) =>
             {
                 var types = VerbHandlers.GetVerbTypes(false, true)
@@ -424,6 +362,8 @@ namespace auvdisk
 
                 return success ? 0 : 1;
             });
+
+            Interop.Common.RegisterPlatformSpecificVerbs(handlers, logger);
 
             int exitCode = handlers.HandleParserResult(cliResult);
             

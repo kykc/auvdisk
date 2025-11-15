@@ -1,128 +1,83 @@
 using System.Buffers;
 using auvdisk.Extensions;
-using ShellProgressBar;
+using auvdisk.Log;
 
 namespace auvdisk.Bytes
 {
-    public class StreamCopyProgressWrapper(Stream subject) : Stream
+    public sealed class StreamCopyProgressWrapper(Stream subject) : Stream, IDisposable
     {
+        void IDisposable.Dispose()
+        {
+            Dispose(true);
+        }
+
         public const int DefaultCopyBufferSize = 81920;
         
-        public class ProgressData
+        public class ProgressData(string actionName, long totalBytes) : IProgressData
         {
-            public long TotalBytes { get; init; } = 0;
-            public long ProcessedBytes { get; set; } = 0;
-            public double PercentComplete => TotalBytes > 0 ? ProcessedBytes * 1.0 / TotalBytes : 100.0;
+            public long TotalBytes { get; init; } = totalBytes;
+            public int IncrementBytes { get; set; } = 0;
+            public string Description => $"{actionName}...";
+            public string Complete => "Done.";
         }
 
-        public class ProgressOptions
+        public void ZeroFill(ulong sectorCount, int sectorSize, ILog logger)
         {
-            public string ActionName { get; set; } = "Copying";
-            public string ProgressName { get; set; } = "Copied";
-            public int Ticks { get; set; } = 10000;
-            public bool Enabled { get; set; } = Program.IsInteractive;
-        }
-
-        public IProgress<ProgressData> GetProgress(ProgressBar progressBar, string actionName = "Copied")
-        {
-            return progressBar.AsProgress<ProgressData>(
-                t => $"{actionName} {t.ProcessedBytes.HumanizeBytes()} of {t.TotalBytes.HumanizeBytes()}", 
-                t => t.PercentComplete);
-        }
-
-        public void ZeroFill(ulong sectorCount, int sectorSize, ProgressOptions progOpts)
-        {
-            ProgressBar? progressBar = null;
-            IProgress<ProgressData>? progress = null;
-
-            if (progOpts.Enabled)
-            {
-                // ProgressBar seems to be mangling few last lines on the terminal
-                Console.WriteLine();
-                Console.Out.Flush();
-                
-                progressBar = new ProgressBar(progOpts.Ticks, $"{progOpts.ActionName}...");
-                progress = GetProgress(progressBar);
-            }
-
-            var throttle = new Throttle<ProgressData>(
-                (p) => progress?.Report(p), 
-                Program.ProgressReportRate);
-            
-            var progressData = new ProgressData
-            {
-                TotalBytes = (long)sectorCount * sectorSize,
-                ProcessedBytes = 0
-            };
+            var progressData = new ProgressData("Zero-filling", (long)sectorCount * sectorSize);
             
             byte[] nullSector = Enumerable.Repeat((byte)0x0, sectorSize).ToArray();
-            
-            for (ulong sector = 0; sector < sectorCount; ++sector)
+
+            // TODO: rebuffer to (larger) buffer size
+            Utils.WithProgress(logger, progressData, (progress) =>
             {
-                Write(nullSector);
-                
-                progressData.ProcessedBytes += nullSector.Length;
-                throttle.Call(progressData);
-            }
-            
-            progress?.Report(progressData);
-            progressBar?.Dispose();
+                for (ulong sector = 0; sector < sectorCount; ++sector)
+                {
+                    Write(nullSector);
+                    
+                    progressData.IncrementBytes += nullSector.Length;
+                    progress?.Call(progressData);
+                }
+
+                return progressData;
+            });
         }
 
-        public void CopyTo(Stream destination, ProgressOptions options)
+        [Obsolete("Use CopyTo(destination, logger) instead.")]
+        public new void CopyTo(Stream destination)
         {
-            if (options.Enabled)
-            {
-                // ProgressBar seems to be mangling few last lines on the terminal
-                Console.WriteLine();
-                Console.Out.Flush();
-                
-                using var progressBar = new ProgressBar(options.Ticks, $"{options.ActionName}...");
-
-                CopyTo(destination, GetProgress(progressBar, options.ProgressName));
-            }
-            else
-            {
-                base.CopyTo(destination);
-            }
+            throw new InvalidOperationException();
         }
         
-        protected void CopyTo(Stream destination, IProgress<ProgressData>? progress)
+        public void CopyTo(Stream destination, ILog logger, int bufferSize = DefaultCopyBufferSize)
         {
-            int bufferSize = DefaultCopyBufferSize;
+            var progressData = new ProgressData("Copying", Length);
             
             ValidateCopyToArguments(destination, bufferSize);
             if (!CanRead)
             {
                 throw new NotSupportedException("Stream does not support reading.");
             }
-            
-            var throttle = new Throttle<ProgressData>(
-                (p) => progress?.Report(p), 
-                Program.ProgressReportRate);
-            
-            var progressData = new ProgressData
+           
+            Utils.WithProgress(logger, progressData, progress =>
             {
-                TotalBytes = Length,
-                ProcessedBytes = 0
-            };
-
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
-            try
-            {
-                int bytesRead;
-                while ((bytesRead = Read(buffer, 0, buffer.Length)) != 0)
+                byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
+                try
                 {
-                    destination.Write(buffer, 0, bytesRead);
-                    progressData.ProcessedBytes += bytesRead;
-                    throttle.Call(progressData);
+                    int bytesRead;
+                    while ((bytesRead = Read(buffer, 0, buffer.Length)) != 0)
+                    {
+                        destination.Write(buffer, 0, bytesRead);
+                        progressData.IncrementBytes += bytesRead;
+                        progress?.Call(progressData);
+                    }
                 }
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(buffer);
-                progress?.Report(progressData);
-            }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                }
+
+                return progressData;
+            });
         }
         
         public override void Flush()
@@ -156,7 +111,7 @@ namespace auvdisk.Bytes
             {
                 subject.Dispose();
             }
-            
+
             base.Dispose(disposing);
         }
 

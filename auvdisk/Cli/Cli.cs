@@ -263,7 +263,7 @@ namespace auvdisk.Cli
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    [Verb("conv-vhd-to-vhdx", HelpText = "Convert any VHD image to fixed VHDX image")]
+    [Verb("conv-vhd-to-vhdx", HelpText = "Convert any VHD image to VHDx image")]
     class VhdToVhdx
     {
         [Option('s', "source", Required = true, HelpText = "Source imagefile path")]
@@ -272,10 +272,14 @@ namespace auvdisk.Cli
         public string Target { get; set; } = "";
         [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
         public bool Verbose { get; set; } = false;
+        [Option('f', "fixed", Required = false, Default = false, HelpText = "Force full disk preallocation (fixed VHDx)")]
+        public bool Fixed { get; set;} = false;
+        [Option('z',  "zero", Required = false, Default = false, HelpText = "Force zero-fill (only valid with --fixed)")]
+        public bool ZeroFill { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    [Verb("conv-vhdx-to-vhd", HelpText = "Convert any VHDX image to fixed VHD image")]
+    [Verb("conv-vhdx-to-vhd", HelpText = "Convert any VHDX image to VHD image")]
     class VhdxToVhd
     {
         [Option('s', "source", Required = true, HelpText = "Source imagefile path")]
@@ -284,6 +288,10 @@ namespace auvdisk.Cli
         public string Target { get; set; } = "";
         [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
         public bool Verbose { get; set; } = false;
+        [Option('f', "fixed", Required = false, Default = false, HelpText = "Force full disk preallocation (fixed VHDx)")]
+        public bool Fixed { get; set;} = false;
+        [Option('z',  "zero", Required = false, Default = false, HelpText = "Force zero-fill (only valid with --fixed)")]
+        public bool ZeroFill { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
@@ -319,6 +327,8 @@ namespace auvdisk.Cli
         public int PartitionNumber { get; set; } = 0;
         [Option('t', "type", Required = false, HelpText = "Partition type")]
         public string PartitionType { get; set; } = "";
+        [Option('y', "yes", Required = false, Default = false, HelpText = "Execute generated script w/o asking any questions")]
+        public bool Yes { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
@@ -337,5 +347,53 @@ namespace auvdisk.Cli
         public ulong Size { get; set; } = 0;
         [Option('z', "zero-fill", Required = false, Default = false, HelpText = "Force zero-fill")]
         public bool ZeroFill { get; set; } = false;
+    }
+    
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("clone-volume-to-vhd", HelpText = "Clone live mounted volume into VHD using Volume Shadow Copy (Windows only)")]
+    [NotSupported(!Program.IsWindows)]
+    public class CloneLiveVolumeToVhd
+    {
+        [Option('t', "target", Required = true, HelpText = "Target file path")]
+        public string Target { get; set; } = "";
+        [Option('s', "source", Required = true, HelpText = "Source volume path (letter)")]
+        public string Source { get; set; } = "";
+        [Option('f', "fixed", Required = false, Default = false, HelpText = "Force full disk preallocation (fixed VHD)")]
+        public bool Fixed { get; set;} = false;
+        [Option('z',  "zero", Required = false, Default = false, HelpText = "Force zero-fill (only valid with --fixed)")]
+        public bool ZeroFill { get; set; } = false;
+        [Option('b', "bootable", Required = false, HelpText = "Make VHD bootable using bcdboot")]
+        public bool Bootable { get; set; } = false;
+    }
+
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("mount-vhd-x", HelpText = "Mount VHD/VHDx image (Windows only)")]
+    [NotSupported(!Program.IsWindows)]
+    public class MountVhdX
+    {
+        [Option('t', "target", Required = true, HelpText = "Target image path")]
+        public string Target { get; set; } = "";
+        [Option('d', "dismount", Required = false, Default = false, HelpText = "Dismount disk image")]
+        public bool Dismount { get; set; } = false;
+    }
+
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("mount-volume", HelpText = "Assign letter to volume (Windows only)")]
+    [NotSupported(!Program.IsWindows)]
+    public class AssignVolumeLetter
+    {
+        [Option('v', "volume", Required = true, HelpText = "Path volume (example: \\\\?\\Volume{0deefc43-02e6-40d8-8978-e4874fb4b405}\\). Can be found using `browse-volumes --list`")]
+        public string Volume { get; set; } = "";
+        [Option('l', "letter", Required = true, HelpText = "Target drive letter")]
+        public string Letter { get; set; } = "";
+    }
+    
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("unmount-volume", HelpText = "Remove drive letter association from volume (Windows only)")]
+    [NotSupported(!Program.IsWindows)]
+    public class UnassignVolumeLetter
+    {
+        [Option('l', "letter", Required = true, HelpText = "Target drive letter")]
+        public string Letter { get; set; } = "";
     }
 }

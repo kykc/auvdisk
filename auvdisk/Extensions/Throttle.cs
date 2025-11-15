@@ -5,7 +5,7 @@ namespace auvdisk.Extensions
         private readonly object _lock = new();
         private DateTime _lastCallTime = DateTime.MinValue;
 
-        public void Call(T arg)
+        public bool Call(T arg)
         {
             lock (_lock)
             {
@@ -14,8 +14,11 @@ namespace auvdisk.Extensions
                 {
                     _lastCallTime = now;
                     callback(arg);
+                    return true;
                 }
             }
+
+            return false;
         }
     }
 }

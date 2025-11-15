@@ -12,14 +12,14 @@ using System.Threading.Tasks;
 using auvdisk.Bytes;
 using auvdisk.Log;
 using DiscUtils.Streams;
-using ShellProgressBar;
 using Spectre.Console;
 
 namespace auvdisk.DiskImage
 {
     public static class DiskImageConverter
     {
-        // TODO: make an option to disable prepending of EFI boot partition
+        // TODO: make an option to disable prepending of EFI boot partition. For CreateBootableVhdLayout just support zero efiBootSize?
+        // TODO: sanitize Flow results handling and types. Look at the ConvertVhdToFixedVhdx or ConvertLoopToVhd as an example
         public static Flow<DiskProbe.ProbeResult> ConvertLoopToVhd(string source, string target, Log.ILog logger, bool verbose, bool zeroFill = false)
         {
             var action = (DiskProbe.ProbeResult probeResult) =>
@@ -29,7 +29,7 @@ namespace auvdisk.DiskImage
 
                 logger.Log("Source file length is " + sourceLength.ToString());
 
-                var createLayoutResult = Vhd.Util.CreateBootableFixedVhdLayout(target, efiBootSize, (ulong)sourceLength, logger, zeroFill);
+                var createLayoutResult = Vhd.Util.CreateBootableVhdLayout(target, efiBootSize, (ulong)sourceLength, logger, zeroFill);
 
                 if (createLayoutResult.IsError())
                 {
@@ -49,11 +49,11 @@ namespace auvdisk.DiskImage
                     using (var sourceStream = File.OpenRead(source).WithProgress())
                     using (var targetStream = disk.Partitions[1].Open())
                     {
-                        sourceStream.CopyTo(targetStream, new StreamCopyProgressWrapper.ProgressOptions());
+                        sourceStream.CopyTo(targetStream, logger);
                     }
                 }
 
-                logger.Log("Closed VHD, done! It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
+                logger.Log("It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
 
                 return Flow<DiskProbe.ProbeResult>.Ok(probeResult, logger);
             };
@@ -67,18 +67,19 @@ namespace auvdisk.DiskImage
 
         public static Flow<DiskProbe.ProbeResult> ConvertVhdToLoop(string source, string target, Log.ILog logger, bool verbose, int partIdx = -1)
         {
-            var action = () =>
+            var action = (DiskProbe.ProbeResult probeResult) =>
             {
                 logger.Log("Opening VHD using DiscUtils");
-                
-                using (var disk = Vhd.Util.OpenDiskWithDu(source, logger))
-                {
-                    if (disk == null)
-                    {
-                        // Logger already has all the details
-                        return;
-                    }
 
+                var diskResult = Vhd.Util.OpenDiskWithDu(source, logger);
+
+                if (diskResult.IsError())
+                {
+                    return Flows.Err<DiskProbe.ProbeResult>(diskResult.UnwrapErr(), logger);
+                }
+                
+                using (var disk = diskResult.Unwrap())
+                {
                     var dynamicOrDifferencing =
                         disk.Layers.Any((l) => l.IsSparse || l.NeedsParent) || disk.Layers.Count() > 1;
                     
@@ -87,7 +88,7 @@ namespace auvdisk.DiskImage
                         if (Program.IsInteractive && !AnsiConsole.Confirm(
                                 "[yellow]WARNING: Source VHD is differencing or dynamic disk, this was never properly tested, proceed?[/]"))
                         {
-                            return;
+                            return Flows.Err<DiskProbe.ProbeResult>("Cancelled by user", logger);
                         }
                         else
                         {
@@ -108,8 +109,7 @@ namespace auvdisk.DiskImage
 
                     if (parts.Count == 0)
                     {
-                        logger.Error($"Partition not found");
-                        return;
+                        return Flows.Err<DiskProbe.ProbeResult>("Partition not found", logger);
                     }
 
                     var selectedPart = parts.First();
@@ -121,24 +121,26 @@ namespace auvdisk.DiskImage
                     using (var targetStream = new FileStream(target, FileMode.Create))
                     {
                         logger.Log("Copying data from VHD to loop. Depending on disk speed and image size this might take a while");
-                        partStream.CopyTo(targetStream, new StreamCopyProgressWrapper.ProgressOptions());
+                        partStream.CopyTo(targetStream, logger);
                     }
                 }
 
-                logger.Log("Done! It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
+                logger.Log("It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
+
+                return Flows.Ok(probeResult, logger);
             };
 
             return Flow<None>.Ok(None.Value, logger)
                 .WithCheckedSourceExists(source)
                 .WithCheckedDiskType("VHD", source, verbose)
                 .WithCheckedTargetAvailable(target)
-                .WithSideEffect(action);
+                .Bind(action);
         }
 
-        public static Flow<DiskProbe.ProbeResult> ConvertVhdToFixedVhdx(string source, string target, ILog logger,
-            bool verbose)
+        public static Flow<DiskProbe.ProbeResult> ConvertVhdToVhdx(string source, string target, ILog logger,
+            bool verbose, bool fixedVhdx, bool forceZeroFill)
         {
-            var action = () =>
+            var action = (DiskProbe.ProbeResult probeResult) =>
             {
                 // DU is very brittle if VHD constructor is used directly, need to use factory
                 // See auvdisk.test/Vhd/ParentLocatorTest for details
@@ -146,50 +148,66 @@ namespace auvdisk.DiskImage
 
                 using var targetStream =
                     new FileStream(target, FileMode.Create, FileAccess.ReadWrite);
-                using var vhdx = DiscUtils.Vhdx.Disk.InitializeFixed(targetStream, DiscUtils.Streams.Ownership.None, vhd.Capacity)!;
 
-                vhd.Content.WithProgress().CopyTo(vhdx.Content, new StreamCopyProgressWrapper.ProgressOptions());
+                if (fixedVhdx && !forceZeroFill)
+                {
+                    logger.Warning($"Unsafe fast file creation is not implemented here, full zero-fill might take some time");
+                }
+
+                using var vhdx = fixedVhdx  
+                    ? DiscUtils.Vhdx.Disk.InitializeFixed(targetStream, DiscUtils.Streams.Ownership.None, vhd.Capacity)!
+                    : DiscUtils.Vhdx.Disk.InitializeDynamic(targetStream, DiscUtils.Streams.Ownership.None, vhd.Capacity)!;
+                
+                vhd.Content.WithProgress().CopyTo(vhdx.Content, logger);
                 targetStream.Flush();
-                logger.Log("Done.");
+
+                return Flows.Ok(probeResult, logger);
             };
 
             return Flow<None>.Ok(None.Value, logger)
                 .WithCheckedSourceExists(source)
                 .WithCheckedDiskType("VHD", source, verbose)
                 .WithCheckedTargetAvailable(target)
-                .WithSideEffect(action);
+                .Bind(action);
         }
 
-        public static Flow<DiskProbe.ProbeResult> ConvertVhdxToFixedVhd(string source, string target, ILog logger,
-            bool verbose)
+        public static Flow<DiskProbe.ProbeResult> ConvertVhdxToVhd(string source, string target, ILog logger,
+            bool verbose, bool fixedVhd, bool forceZeroFill)
         {
-            var action = () =>
+            var action = (DiskProbe.ProbeResult probeResult) =>
             {
                 // DU is very brittle if VHD constructor is used directly, need to use factory
                 // See auvdisk.test/Vhd/ParentLocatorTest for details
                 using var vhdx = VirtualDisk.OpenDisk(source, "vhdx", FileAccess.Read, "", "");
+                
+                var createResult = fixedVhd 
+                    ? Vhd.Util.CreateFixedVhd(target, (ulong)vhdx.Capacity, logger, forceZeroFill)
+                    : Vhd.Util.CreateDynamicVhd(target, (ulong)vhdx.Capacity, logger);
 
-                using var targetStream =
-                    new FileStream(target, FileMode.Create, FileAccess.ReadWrite);
-                using var vhd =
-                    DiscUtils.Vhd.Disk.InitializeFixed(targetStream, DiscUtils.Streams.Ownership.None, vhdx.Capacity);
+                if (createResult.IsError())
+                {
+                    return Flows.Err<DiskProbe.ProbeResult>(createResult.UnwrapErr(), logger);
+                }
 
-                vhdx.Content.WithProgress().CopyTo(vhd.Content, new StreamCopyProgressWrapper.ProgressOptions());
-                targetStream.Flush();
-                logger.Log("Done.");
+                using var vhd = VirtualDisk.OpenDisk(target, "vhd", FileAccess.ReadWrite, "", "");
+
+                vhdx.Content.WithProgress().CopyTo(vhd.Content, logger);
+                vhd.Content.Flush();
+
+                return Flows.Ok(probeResult, logger);
             };
 
             return Flow<None>.Ok(None.Value, logger)
                 .WithCheckedSourceExists(source)
                 .WithCheckedDiskType("VHDX", source, verbose)
                 .WithCheckedTargetAvailable(target)
-                .WithSideEffect(action);
+                .Bind(action);
         }
 
         public static Flow<DiskProbe.ProbeResult> ConvertQcow2ToRaw(string source, string target, ILog logger,
             bool verbose)
         {
-            var action = () =>
+            var action = (DiskProbe.ProbeResult probeResult) =>
             {
                 logger.Log("Opening source as a qcow2 image");
                 using var fs = File.OpenRead(source);
@@ -198,22 +216,22 @@ namespace auvdisk.DiskImage
                 using var targetStream = File.Open(target, FileMode.Create, FileAccess.ReadWrite);
                 logger.Log("Copying data, this might take a while depending on disk speed and image size...");
 
-                qcow2Stream.CopyTo(targetStream, new StreamCopyProgressWrapper.ProgressOptions()); 
+                qcow2Stream.CopyTo(targetStream, logger); 
                 targetStream.Flush();
 
-                logger.Log("Done.");
+                return probeResult;
             };
 
             return Flow<None>.Ok(None.Value, logger)
                 .WithCheckedSourceExists(source)
                 .WithCheckedDiskType("qcow2", source, verbose)
                 .WithCheckedTargetAvailable(target)
-                .WithSideEffect(action);
+                .Map(action);
         }
 
         public static Flow<DiskProbe.ProbeResult> ConvertImgToVhd(string source, Log.ILog logger, bool verbose)
         {
-            var action = () =>
+            var action = (DiskProbe.ProbeResult probeResult) =>
             {
                 logger.Log("Opening disk image using FileStream");
                 using (var disk = new FileStream(source, FileMode.Open))
@@ -232,18 +250,20 @@ namespace auvdisk.DiskImage
                 }
 
                 logger.Log("Done! It's probably a good idea to rename file to *.vhd now");
+
+                return probeResult;
             };
 
             return Flow<None>.Ok(None.Value, logger)
                 .WithCheckedSourceExists(source)
                 .WithCheckedDiskType("RAW", source, verbose)
-                .WithSideEffect(action);
+                .Map(action);
 
         }
 
         public static Flow<DiskProbe.ProbeResult> ConvertVhdToImg(string source, Log.ILog logger, bool verbose)
         {
-            var action = () =>
+            var action = (DiskProbe.ProbeResult probeResult) =>
             {
                 logger.Log("Opening disk image using FileStream");
 
@@ -255,13 +275,15 @@ namespace auvdisk.DiskImage
                 }
 
                 logger.Log("Done! It's probably a good idea to rename file to *.img or something similar now");
+
+                return probeResult;
             };
 
             return Flow<None>.Ok(None.Value, logger)
                 .WithCheckedSourceExists(source)
                 .WithCheckedDiskType("VHD", source, verbose)
                 .WithCheckedVhdType(source, VirtualHardDiskType.Fixed)
-                .WithSideEffect(action);
+                .Map(action);
         }
     }
 }

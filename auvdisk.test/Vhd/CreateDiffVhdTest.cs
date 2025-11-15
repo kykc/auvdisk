@@ -20,7 +20,8 @@ namespace auvdisk.test.Vhd
             using var disk = DiskImage.Vhd.Util.OpenDiskWithDu(_childPath, logger);
             
             Assert.NotNull(disk);
-            Assert.Equal(2, disk.Layers.Count());
+            Assert.False(disk.IsError());
+            Assert.Equal(2, disk.Unwrap().Layers.Count());
             Assert.True(File.Exists(_childPath));
             Assert.True(Util.IsValidVhd(_childPath));
         }
@@ -36,7 +37,8 @@ namespace auvdisk.test.Vhd
             using var disk = DiskImage.Vhd.Util.OpenDiskWithDu(_grandchildPath, logger);
 
             Assert.NotNull(disk);
-            Assert.Equal(3, disk.Layers.Count());
+            Assert.False(disk.IsError());
+            Assert.Equal(3, disk.Unwrap().Layers.Count());
             Assert.True(File.Exists(_grandchildPath));
             Assert.True(Util.IsValidVhd(_grandchildPath));
         }

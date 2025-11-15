@@ -1,4 +1,4 @@
-using System.Net.WebSockets;
+using DotNext;
 
 namespace auvdisk.Extensions
 {
@@ -31,6 +31,31 @@ namespace auvdisk.Extensions
         public static readonly None Value = new();
     }
 
+    public static class Flows
+    {
+        public static Flow<TSubj> Optional<TSubj>(Optional<TSubj> value, string error, Log.ILog logger) where TSubj: class
+        {
+            return value.HasValue ? Ok(value.Value, logger) : Err<TSubj>(error, logger);
+        }
+        public static Flow<TSubj> Ok<TSubj>(TSubj value, Log.ILog logger) where TSubj: class
+        {
+            return Flow<TSubj>.Ok(value, logger);
+        }
+        
+        public static Flow<TSubj> Err<TSubj>(string error, Log.ILog logger) where TSubj: class
+        {
+            return Flow<TSubj>.Err(error, logger);
+        }
+    }
+
+    public static class Extensions
+    {
+        public static Flow<TSubj> Flow<TSubj>(this Optional<TSubj> subj, string error, Log.ILog logger) where TSubj: class
+        {
+            return subj.HasValue ? Flows.Ok(subj.Value, logger) : Flows.Err<TSubj>(error, logger);
+        }
+    }
+    
     public class Flow<TSubj> : IDisposable
         where TSubj : class
     {
@@ -55,7 +80,13 @@ namespace auvdisk.Extensions
         {
             return new Flow<TSubj>(logger, value, null);
         }
-
+        
+        public Flow<TSubj> Finally(Action action)
+        {
+            action();
+            return this;
+        }
+        
         public static Flow<TSubj> Err(string error, Log.ILog logger)
         {
             return new Flow<TSubj>(logger, error);
@@ -81,6 +112,40 @@ namespace auvdisk.Extensions
                 ? new Flow<TRes>(Logger, mapper(Value!), null)
                 : new Flow<TRes>(Logger, Error ?? "Unexpected error");
         }
+        
+        public Flow<TSubj> CheckDiscardIf<TOther>(Func<TSubj, bool> condition, Func<TSubj, Flow<TOther>> binder) where TOther : class
+        {
+            if (HasValue() && condition(Value!))
+            {
+                var result = binder(Value!);
+
+                return result.HasValue() ? this : Err(result.Error!, Logger);
+            }
+
+            return this;
+        }
+        
+        public Flow<TSubj> CheckDiscard<TOther>(Func<TSubj, Flow<TOther>> binder) where TOther : class
+        {
+            if (HasValue())
+            {
+                var result = binder(Value!);
+
+                return result.HasValue() ? this : Err(result.Error!, Logger);
+            }
+
+            return this;
+        }
+        
+        public Flow<TSubj> WithSideEffect(Action<TSubj> action)
+        {
+            if (HasValue())
+            {
+                action(Value!);
+            }
+
+            return this;
+        }
 
         public Flow<TSubj> WithSideEffect(Action action)
         {
@@ -91,17 +156,7 @@ namespace auvdisk.Extensions
 
             return this;
         }
-
-        public Flow<TSubj> WithSideEffect(Action action, Func<bool> condition)
-        {
-            if (HasValue() && condition())
-            {
-                action();
-            }
-
-            return this;
-        }
-
+        
         public Flow<TRes> MapDispose<TRes>(Func<TSubj, TRes> mapper)
             where TRes : class
         {

@@ -13,8 +13,52 @@ using Spectre.Console;
 
 namespace auvdisk.Extensions
 {
+    interface IProgressData
+    {
+        string Description { get; }
+        string Complete { get; }
+        long TotalBytes { get; }
+        int IncrementBytes { get; set; }
+    }
+    
     internal static class Utils
     {
+        public static void WithProgress(ILog logger, IProgressData startData, Func<Throttle<IProgressData>?, IProgressData> action,
+            bool? forceProgress = null)
+        {
+            if (!Program.IsInteractive || (forceProgress ?? false))
+            {
+                action(null);
+                return;
+            }
+            
+            AnsiConsole.Progress()
+                .Columns(new ElapsedTimeColumn(), new ProgressBarColumn(), new PercentageColumn(), new TaskDescriptionColumn(), new RemainingTimeColumn(), new TransferSpeedColumn(), new DownloadedColumn())
+                .AutoRefresh(false)
+                .AutoClear(false)
+                .HideCompleted(false)
+                .Start(ctx =>
+                {
+                    var task = ctx.AddTask($"[green]{startData.Description.EscapeMarkup()}[/]", maxValue: startData.TotalBytes);
+                    
+                    var throttle = new Throttle<IProgressData>(Update, Program.ProgressReportRate);
+                    
+                    var result = action(throttle);
+                    Update(result);
+                    return;
+
+                    void Update(IProgressData data)
+                    {
+                        task.Description = $"[green]{data.Description.EscapeMarkup()}[/]";
+                        task.Increment(data.IncrementBytes);
+                        data.IncrementBytes = 0;
+                        ctx.Refresh();
+                    }
+                });
+        
+            logger.Log($"[green]{startData.Complete.EscapeMarkup()}[/]");
+        }
+        
         public static TResult? SuppressRef<TException, TResult>(Func<TResult> func, Log.ILog? logger = null)
             where TException : Exception
             where TResult : class
@@ -197,35 +241,66 @@ namespace auvdisk.Extensions
         public static Flow<TSubj> WithCheckedSourceExists<TSubj>(this Flow<TSubj> action, string source)
             where TSubj : class
         {
-            var tryOpenForReading = (TSubj subj) =>
+            return action.WithCheckedSourceExists((_) => source);
+        }
+        
+        public static Flow<TSubj> WithCheckedSourceExists<TSubj>(this Flow<TSubj> action, Func<TSubj, string> source)
+            where TSubj : class
+        {
+            TSubj TryOpenForReading(TSubj subj)
             {
-                File.OpenRead(source)?.Close();
+                File.OpenRead(source(subj))?.Close();
                 return subj;
-            };
+            }
 
             return action.Log("Checking that source file exists")
-                .Check((_) => File.Exists(source), (_) => $"Source file {source} does not exist")
-                .TryMap<TSubj, Exception>(tryOpenForReading);
+                .Check(x => File.Exists(source(x)), (x) => $"Source file {source(x)} does not exist")
+                .TryMap<TSubj, Exception>(TryOpenForReading);
         }
-
-        public static Flow<Value<long>> WithCheckedStreamBoundaries<TSubj>(this Flow<TSubj> action, string path, ulong offset, ulong length)
+        
+        public static Flow<TSubj> WithCheckedStreamBoundaries<TSubj>(this Flow<TSubj> action, Func<TSubj, string> path, Func<TSubj, ulong> offset, Func<TSubj, ulong> length)
             where TSubj : class
         {
             return action.Log("Checking file stream boundaries")
-                .Map((_) => new FileStream(path, FileMode.Open, FileAccess.Read))
-                .MapDispose((fs) => fs.Length.Some())
-                .Check((streamLength) => (ulong)streamLength.Val < offset + length, (_) => "Requested operation exceeds file length");
+                .Map(x => new {opts = x, fs = new FileStream(path(x), FileMode.Open, FileAccess.Read)})
+                .Map(x =>
+                {
+                    var len = x.fs.Length;
+                    x.fs.Dispose();
+                    return new { x.opts, length = len };
+                })
+                .Check(x => (ulong)x.length < offset(x.opts) + length(x.opts), (_) => "Requested operation exceeds file length")
+                .Map(x => x.opts);
         }
 
         public static Flow<TSubj> WithCheckedTargetAvailable<TSubj>(this Flow<TSubj> action, string target) where TSubj : class
         {
-            return action.Log("Checking that target file doesn't exists")
-                .Check((_) => !Path.Exists(target), (_) => $"{target} already exists");
+            return action.WithCheckedTargetAvailable((_) => target);
+        }
+        
+        public static Flow<TSubj> WithCheckedTargetAvailable<TSubj>(this Flow<TSubj> action, Func<TSubj, string> target) where TSubj : class
+        {
+            TSubj TryCreate(TSubj subj)
+            {
+                new FileStream(target(subj), FileMode.CreateNew, FileAccess.ReadWrite).Close();
+                File.Delete(target(subj));
+
+                return subj;
+            }
+            
+            return action.Log("Checking that target file doesn't exist")
+                .Check(subj => !Path.Exists(target(subj)), (subj) => $"{target(subj)} already exists")
+                .TryMap<TSubj, Exception>(TryCreate);
         }
 
         public static Flow<TSubj> WithCheckedSize<TSubj>(this Flow<TSubj> action, string size) where TSubj : class
         {
-            return action.Check((_) => size.ParseByteLength().HasValue, (_) => "Failed to parse size in bytes");
+            return action.WithCheckedSize((_) => size);
+        }
+        
+        public static Flow<TSubj> WithCheckedSize<TSubj>(this Flow<TSubj> action, Func<TSubj, string> size) where TSubj : class
+        {
+            return action.Check((subj) => size(subj).ParseByteLength().HasValue, (_) => "Failed to parse size in bytes");
         }
 
         public static Value<T> Some<T>(this T value) where T: struct => new(value);

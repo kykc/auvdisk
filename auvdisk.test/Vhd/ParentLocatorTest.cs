@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using auvdisk.Extensions;
 
 namespace auvdisk.test.Vhd
 {
@@ -8,12 +9,14 @@ namespace auvdisk.test.Vhd
         [Fact]
         public void TestDiscUtilsLocator()
         {
+            var logger = new LogWatcher();
+            
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) // TODO: generalize to all posix?
             {
                 // Relative with dot
                 Assert.Throws<IOException>(() => new DiscUtils.Vhd.Disk("./testdata/test_gpt_child.vhd", FileAccess.Read));
                 // Relative w/o dot
-                CheckChild(new DiscUtils.Vhd.Disk("testdata/test_gpt_child.vhd", FileAccess.Read));
+                CheckChild(Flows.Ok(new DiscUtils.Vhd.Disk("testdata/test_gpt_child.vhd", FileAccess.Read), logger));
                 // Absolute
                 Assert.Throws<IOException>(() => new DiscUtils.Vhd.Disk(Path.Join(Directory.GetCurrentDirectory(), "testdata", "test_gpt_child.vhd"), FileAccess.Read));
             }
@@ -23,7 +26,7 @@ namespace auvdisk.test.Vhd
                 // Relative with dot
                 Assert.Throws<IOException>(() => new DiscUtils.Vhd.Disk(@".\testdata\test_gpt_child.vhd", FileAccess.Read));
                 // Relative w/o dot
-                CheckChild(new DiscUtils.Vhd.Disk(@"testdata\test_gpt_child.vhd", FileAccess.Read));
+                CheckChild(Flows.Ok(new DiscUtils.Vhd.Disk(@"testdata\test_gpt_child.vhd", FileAccess.Read), logger));
                 // Absolute
                 Assert.Throws<IOException>(() => new DiscUtils.Vhd.Disk(Path.Join(Directory.GetCurrentDirectory(), @"testdata\test_gpt_child.vhd"), FileAccess.Read));
             }
@@ -32,6 +35,8 @@ namespace auvdisk.test.Vhd
         [Fact]
         public void TestDiscUtilsWithFactory()
         {
+            var logger = new LogWatcher();
+            
             List<string> paths =
             [
                 Path.Join(Directory.GetCurrentDirectory(), "testdata", "test_gpt_child.vhd"),
@@ -43,7 +48,8 @@ namespace auvdisk.test.Vhd
 
             foreach (var disk in disks)
             {
-                CheckChild(disk as DiscUtils.Vhd.Disk);
+                var maybeVhd = disk as DiscUtils.Vhd.Disk;
+                CheckChild(Flows.Ok(None.Value, logger).MapOr(_ => maybeVhd, "Disk object is null"));
             }
             
         }
@@ -58,10 +64,11 @@ namespace auvdisk.test.Vhd
             CheckChild(DiskImage.Vhd.Util.OpenDiskWithDu(Path.Join(Directory.GetCurrentDirectory(), "testdata", "test_gpt_child.vhd"), logger));
         }
 
-        private static void CheckChild(DiscUtils.Vhd.Disk? disk)
+        private static void CheckChild(Flow<DiscUtils.Vhd.Disk> disk)
         {
             Assert.NotNull(disk);
-            Assert.Equal(2, disk.Layers.Count());
+            Assert.False(disk.IsError());
+            Assert.Equal(2, disk.Unwrap().Layers.Count());
         }
     }
 }

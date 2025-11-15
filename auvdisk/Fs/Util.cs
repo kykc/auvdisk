@@ -1,15 +1,23 @@
 #if WINDOWS
 using auvdisk.Interop;
+using Win32.TokenPrivileges;
 #endif
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using auvdisk.Bytes;
 using auvdisk.Extensions;
+using auvdisk.Log;
+using Spectre.Console;
 
 namespace auvdisk.Fs
 {
     public static class Util
     {
+#if WINDOWS
+        private static readonly object Lock = new();
+        private static object? Privilege = null;
+#endif
+        
 #pragma warning disable CA1416
         private static bool ResizeFileFastUnsafe(string target, ulong size, Log.ILog logger)
         {
@@ -43,7 +51,7 @@ namespace auvdisk.Fs
             var remainder = difference % (ulong)bufferSize;
             
             stream.Seek(0, SeekOrigin.End);
-            stream.ZeroFill(difference / (ulong)bufferSize, bufferSize, new StreamCopyProgressWrapper.ProgressOptions{ActionName = "Filling", ProgressName = "Filled"});
+            stream.ZeroFill(difference / (ulong)bufferSize, bufferSize, logger);
             
             var remainderBytes = Enumerable.Repeat((byte)0x0, (int)remainder).ToArray();
             stream.Write(remainderBytes, 0, remainderBytes.Length);
@@ -76,12 +84,12 @@ namespace auvdisk.Fs
             return ExtractUuid(fs, logger);
         }
         
-        public static void ExtractFileSegment(string source, string target, ulong offset, ulong length)
+        public static void ExtractFileSegment(string source, string target, ulong offset, ulong length, ILog logger)
         {
             using var rawFileStream = new System.IO.FileStream(source, FileMode.Open, FileAccess.Read);
             using var decoratedStream = new SegmentStream(rawFileStream, (long)offset, (long)length);
             using var targetStream = new System.IO.FileStream(target, FileMode.Create, FileAccess.Write);
-            decoratedStream.CopyTo(targetStream);
+            decoratedStream.WithProgress().CopyTo(targetStream, logger);
         }
         
         public static bool HandleResizeFileUnsafe(string target, ulong size, bool forceZeroFill, Log.ILog logger)
@@ -90,12 +98,14 @@ namespace auvdisk.Fs
             
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !forceZeroFill)
             {
-                if (!Environment.IsPrivilegedProcess)
+                var prompt = () => AnsiConsole.Confirm("Proceed with fast/unsafe method?");
+                
+                if (!Environment.IsPrivilegedProcess && Program.IsInteractive && prompt())
                 {
                     try
                     {
                         string[] args = ["resize-file-unsafe", "--target", target, "--size", size.ToString()];
-                        string self = System.Diagnostics.Process.GetCurrentProcess().MainModule!.FileName;
+                        string self = Process.GetCurrentProcess().MainModule!.FileName;
 
                         int exitCode = 128;
 
@@ -110,6 +120,11 @@ namespace auvdisk.Fs
                         }
 
                         success = exitCode == 0;
+
+                        if (success)
+                        {
+                            logger.Log("Resized file with fast/unsafe method");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -122,17 +137,30 @@ namespace auvdisk.Fs
                     try
                     {
                         logger.Log($"Administrator privileges: {Environment.IsPrivilegedProcess}");
-                        var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
-                        using var privilege =
-                            new Win32.TokenPrivileges.AdjustPrivilege(Win32.TokenPrivileges.PrivilegeName
-                                .SeManageVolumePrivilege);
+                        var currentProcess = Process.GetCurrentProcess();
 
-                        bool canManagerVolume = Win32.TokenPrivileges.PrivilegeProvider.HasPrivilege(null,
-                            currentProcess, Win32.TokenPrivileges.PrivilegeName.SeManageVolumePrivilege);
+                        // Creates a lot of weirdness when many threads run this from UTs.
+                        // This leads to token being held until process finishes "in production"
+                        // However, auvdisk isn't designed to be handing around, so this shouldn't be
+                        // a real issue.
+                        lock (Lock)
+                        {
+                            Privilege ??= new AdjustPrivilege(PrivilegeName.SeManageVolumePrivilege);
 
-                        logger.Log($"SeManageVolumePrivilege: {canManagerVolume}");
+                            if (Program.IsInteractive)
+                            {
+                                var canManagerVolume = PrivilegeProvider.HasPrivilege(null, currentProcess, PrivilegeName.SeManageVolumePrivilege);
 
-                        success = ResizeFileFastUnsafe(target, size, logger);
+                                logger.Log($"SeManageVolumePrivilege: {canManagerVolume}");
+                            }
+
+                            success = ResizeFileFastUnsafe(target, size, logger);
+
+                            if (success)
+                            {
+                                logger.Log("Resized file with fast/unsafe method");
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {

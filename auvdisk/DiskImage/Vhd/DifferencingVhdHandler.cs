@@ -1,24 +1,18 @@
 using auvdisk.Extensions;
+using auvdisk.Log;
 using DiskAccessLibrary.VHD;
-using ShellProgressBar;
 using Spectre.Console;
 
 namespace auvdisk.DiskImage.Vhd
 {
     class DifferencingVhdHandler : IDisposable
     {
-        public class ProgressData
+        public class ProgressData : IProgressData
         {
             public long TotalBytes { get; init; } = 0;
-            public long ProcessedBytes { get; set; } = 0;
-            public double PercentComplete => TotalBytes > 0 ? ProcessedBytes * 1.0 / TotalBytes : 100.0;
-        }
-        
-        public class ProgressOptions
-        {
-            public string ActionName { get; set; } = "Merging";
-            public string ProgressName { get; set; } = "Processed";
-            public int Ticks { get; set; } = 10000;
+            public int IncrementBytes { get; set; } = 0;
+            public string Description => $"Merging...";
+            public string Complete => "Merged";
         }
         
         private const int BytesPerDiskSector = (int)Util.LbaSize;
@@ -70,73 +64,56 @@ namespace auvdisk.DiskImage.Vhd
             }
         }
 
-        public IProgress<ProgressData> GetProgress(ProgressBar progressBar, string actionName = "Copied")
+        public ulong MergeChangedSectorsIntoFixedParent(FileStream target, ILog logger)
         {
-            return progressBar.AsProgress<ProgressData>(
-                t => $"{actionName} {t.ProcessedBytes.HumanizeBytes()} of {t.TotalBytes.HumanizeBytes()}", 
-                t => t.PercentComplete);
-        }
-
-        public ulong MergeChangedSectorsIntoFixedParent(FileStream target, ProgressOptions? progressOpts = null)
-        {
-            ProgressBar? progressBar = null;
-            IProgress<ProgressData>? progress = null;
-            if (progressOpts != null)
-            {
-                // ProgressBar seems to be mangling few last lines on the terminal
-                Console.WriteLine();
-                Console.Out.Flush();
-                
-                progressBar = new ProgressBar(progressOpts.Ticks, $"{progressOpts.ActionName}...");
-                progress = GetProgress(progressBar);
-            }
-
             ulong sectorsPerBlock = _dynamicHeader.BlockSize / BytesPerDiskSector;
             int blockBitmapSectorCount = (int)Math.Ceiling((double)sectorsPerBlock / (BytesPerDiskSector * 8));
             byte[] bitmap = new byte[blockBitmapSectorCount * BytesPerDiskSector];
             byte[] sector = new byte[BytesPerDiskSector];
-            var throttle = new Throttle<ProgressData>((p) => progress?.Report(p), Program.ProgressReportRate);
-            var progressData = new ProgressData { TotalBytes = (long)_vhdFooter.CurrentSize, ProcessedBytes = 0 };
-            ulong foundSectors = 0;
             
-            for (ulong blockIdx = 0; blockIdx < (ulong)_batEntries.Length; ++blockIdx)
-            {
-                var batEntry = _batEntries[blockIdx];
+            var progressData = new ProgressData { TotalBytes = (long)_vhdFooter.CurrentSize };
+            ulong foundSectors = 0;
 
-                if (batEntry == UInt32.MaxValue)
+            Utils.WithProgress(logger, progressData, progress =>
+            {
+                for (ulong blockIdx = 0; blockIdx < (ulong)_batEntries.Length; ++blockIdx)
                 {
-                    progressData.ProcessedBytes += BytesPerDiskSector * (long)sectorsPerBlock;
-                    throttle.Call(progressData);
-                    continue;
+                    var batEntry = _batEntries[blockIdx];
+
+                    if (batEntry == UInt32.MaxValue)
+                    {
+                        progressData.IncrementBytes += (int)(BytesPerDiskSector * sectorsPerBlock);
+                        progress?.Call(progressData);
+                        continue;
+                    }
+                
+                    _file.Seek((long)batEntry * BytesPerDiskSector, SeekOrigin.Begin);
+                    _file.ReadExactly(bitmap);
+
+                    for (ulong sectorIdx = 0; sectorIdx < sectorsPerBlock; ++sectorIdx)
+                    {
+                        byte mask = (byte)(1 << (7 - (int)sectorIdx % 8));
+
+                        if ((bitmap[sectorIdx / 8] & mask) != 0)
+                        {
+                            ++foundSectors;
+                        
+                            var position = (batEntry + (ulong)blockBitmapSectorCount + sectorIdx) * BytesPerDiskSector;
+                            _file.Seek((long)position, SeekOrigin.Begin);
+                            _file.ReadExactly(sector);
+                            ulong absoluteSectorIdx = blockIdx * sectorsPerBlock + sectorIdx;
+                            target.Seek((long)absoluteSectorIdx * BytesPerDiskSector, SeekOrigin.Begin);
+                            target.Write(sector);
+                        }
+                        
+                        progressData.IncrementBytes += BytesPerDiskSector;
+                        progress?.Call(progressData);
+                    }
                 }
                 
-                _file.Seek((long)batEntry * BytesPerDiskSector, SeekOrigin.Begin);
-                _file.ReadExactly(bitmap);
-
-                for (ulong sectorIdx = 0; sectorIdx < sectorsPerBlock; ++sectorIdx)
-                {
-                    byte mask = (byte)(1 << (7 - (int)sectorIdx % 8));
-
-                    if ((bitmap[sectorIdx / 8] & mask) != 0)
-                    {
-                        ++foundSectors;
-                        
-                        var position = (batEntry + (ulong)blockBitmapSectorCount + sectorIdx) * BytesPerDiskSector;
-                        _file.Seek((long)position, SeekOrigin.Begin);
-                        _file.ReadExactly(sector);
-                        ulong absoluteSectorIdx = blockIdx * sectorsPerBlock + sectorIdx;
-                        target.Seek((long)absoluteSectorIdx * BytesPerDiskSector, SeekOrigin.Begin);
-                        target.Write(sector);
-                    }
-                    
-                    progressData.ProcessedBytes += BytesPerDiskSector;
-                    throttle.Call(progressData);
-                }
-            }
+                return progressData;
+            });
             
-            progress?.Report(progressData);
-            progressBar?.Dispose();
-
             return foundSectors;
         }
         
