@@ -104,8 +104,18 @@ namespace auvdisk.DiskImage
                         continue;
                     }
 
-                    var fs = fsInfoList.First().Open(fileStream);
-                    fsList.Add(fs);
+                    DiscFileSystem? fs = null;
+                    try
+                    {
+                        fs = fsInfoList.First().Open(fileStream);
+                    }
+                    catch (Exception ex) when (ex is IOException)
+                    {
+                        logger.Warning($"Failed to open FS on {volume.DeviceId} with error: {ex.Message}");
+                        continue;
+                    }
+                    
+                    fsList.Add(fs!);
                     disposableList.Add(fileStream);
 
                     var parentDeviceCaption = $"{volume.ParentDeviceId ?? "N/A"} <{volume.HardwareModel ?? "N/A"}>";
