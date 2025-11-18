@@ -170,6 +170,7 @@ namespace auvdisk.Interop
                 
                 var result = Flows.Ok(rawOpts, logger)
                     .WithCheckedTargetAvailable((opts) => opts.Target)
+                    .WithCheckedTargetExtension(opts => opts.Target, opts => opts.Vhdx ? ".vhdx" : ".vhd")
                     .MapOr(NormalizeDriveLetter, "Invalid source volume path")
                     .Bind(opts => Interop.Win32.Util.CloneVolumeToVirtualDiskWithVss(opts.Source, opts.Target, logger, opts.Fixed, opts.ZeroFill, opts.Bootable, opts.Vhdx));
                 

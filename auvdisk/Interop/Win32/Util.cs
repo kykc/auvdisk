@@ -146,7 +146,7 @@ namespace auvdisk.Interop.Win32
                     return VolumeManager.GetPhysicalVolumes(stream);
                 }
 
-                string[]? GetMountPoints(string diskIdx, int volumeIdx)
+                string[] GetMountPoints(string diskIdx, int volumeIdx)
                 {
                     return Utils.SuppressRef<ManagementException, string[]>(() =>
                     {
@@ -157,7 +157,7 @@ namespace auvdisk.Interop.Win32
                             .Get().Cast<ManagementObject>().FirstOrDefault();
 
                         return obj?["AccessPaths"] as string[] ?? [];
-                    });
+                    }) ?? [];
                 }
 
                 var disks = searcher.Get().Cast<ManagementObject>()
@@ -178,7 +178,7 @@ namespace auvdisk.Interop.Win32
                         mountPoints: GetMountPoints(d.diskIdx!, volumeIdx))))
                     .Select(v => new PhysicalVolumeInfo(
                         $"\\\\.\\Harddisk{v.diskIdx}Partition{v.volumeIdx + 1}",
-                        v.mountPoints?.ToList() ?? [],
+                        v.mountPoints.ToList(),
                         (ulong)v.volumeInfo.Length,
                         v.bytesPerSector, 
                         v.hardwareModel,
@@ -231,26 +231,40 @@ namespace auvdisk.Interop.Win32
             
             return 
                 Vss.Backup.Make(volume, logger) // Create VSS session
-                .WithSideEffect(vssObj => // pin VSS session and volume stream, need to be very careful with their guaranteed disposal
+                .CheckDiscard(vssObj => // pin VSS session and volume stream, need to be very careful with their guaranteed disposal
                 {
                     vss = vssObj;
-                    snapStream = new BlockDeviceUnbufferedStream(vss.Root);
-                    logger.Log($"Created snapshot {vss.Root} for volume {volume}");
+                    
+                    try
+                    {
+                        snapStream = new BlockDeviceUnbufferedStream(vss.Root);
+                        logger.Log($"Created snapshot {vss.Root} for volume {volume}");
+                        return Flows.Ok(None.Value, logger);
+                    }
+                    catch (Exception e)
+                    {
+                        return new($"Failed to open {vss.Root} stream with error: {e.Message}", logger);
+                    }
                 })
                 .Bind(_ => // Create VHD/VHDx file, prepare target partitions
                 {
-                    return DiskImage.Util.CreateBootableLayout(
-                        target, 512 * 1024 * 1024, (ulong)snapStream!.Length, 
+                    return DiskImage.Util.CreateVdiskWithGptLayout(
+                        target, bootable ? 512UL * 1024 * 1024 : 0UL, (ulong)snapStream!.Length, 
                         logger, forceZeroFill, !createFixed, vhdx);
                 })
-                .WithSideEffect(_ => // Open image with DiscUtils, format EFI partition, clone NTFS partition
+                .CheckDiscard(_ => // Open image with DiscUtils, format EFI partition, clone NTFS partition
                 {
                     using var disk = VirtualDisk.OpenDisk(target, FileAccess.ReadWrite);
-                    logger.Log($"Formatting EFI partition into FAT32");
-                    FatFileSystem.FormatPartition(disk, 0, "BOOT");
-                    var partStream = disk.Partitions.Partitions[1].Open();
+                    
+                    if (bootable)
+                    {
+                        logger.Log($"Formatting EFI partition into FAT32");
+                        FatFileSystem.FormatPartition(disk, 0, "BOOT");
+                    }
 
-                    NtfsClone.Clone(snapStream!, partStream , logger);
+                    var partStream = disk.Partitions.Partitions[bootable ? 1 : 0].Open();
+
+                    return NtfsClone.Clone(snapStream!, partStream , logger);
                 })
                 .CheckDiscardIf(_ => bootable, _ => // If requested, prepare boot files on EFI partition using bcdboot
                 {

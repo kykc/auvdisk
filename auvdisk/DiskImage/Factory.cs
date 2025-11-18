@@ -6,6 +6,7 @@ using DiscUtils;
 using DiscUtils.Streams;
 using DiscUtils.Wim;
 using Spectre.Console;
+using PhysicalVolumeInfo = auvdisk.Interop.PhysicalVolumeInfo;
 
 namespace auvdisk.DiskImage
 {
@@ -71,6 +72,19 @@ namespace auvdisk.DiskImage
 
         public static Flow<FsCollection> MakeFsListFromAvailableVolumes(ILog logger, bool treeOutput = false)
         {
+            string[] MakeTableRow(PhysicalVolumeInfo volume, DiscFileSystem? fs) => 
+            [
+                volume.ParentDeviceId ?? "N/A", 
+                volume.HardwareModel ?? "N/A", 
+                volume.DeviceId, 
+                fs?.FriendlyName ?? "None", 
+                fs?.VolumeLabel ?? "N/A", 
+                volume.MountPoints.Any() ? String.Join(", ", volume.MountPoints) : "N/A", 
+                fs?.GetUuid(new NullLogger()) ?? "", 
+                volume.Size.HasValue ? Utils.HumanizeFilesize(volume.Size.Value, true) : "N/A", 
+                volume.BytesPerSector?.ToString() ?? "N/A"
+            ];
+            
             return Interop.Common.GetVolumes(logger).Map((volumeList) =>
             {
                 var fsList = new List<DiscFileSystem>();
@@ -82,7 +96,14 @@ namespace auvdisk.DiskImage
                 {
                     Stream? fileStream = null;
                     ReadOnlyCollection<DiscUtils.FileSystemInfo>? fsInfoList = null;
-
+                    
+                    var parentDeviceCaption = $"{volume.ParentDeviceId ?? "N/A"} <{volume.HardwareModel ?? "N/A"}>";
+                    
+                    if (!tuiStructure.ContainsKey(parentDeviceCaption))
+                    {
+                        tuiStructure[parentDeviceCaption] = [];
+                    }
+                    
                     try
                     {
                         fileStream = Interop.Common.OpenPartitionByIdReadonly(volume.DeviceId, logger);
@@ -100,7 +121,10 @@ namespace auvdisk.DiskImage
                     }
                     else if (!fsInfoList.Any())
                     {
-                        logger.Warning($"No filesystem found on {volume.DeviceId}, ignoring");
+                        logger.Warning($"No known filesystem found on {volume.DeviceId}");
+                        
+                        tuiStructure[parentDeviceCaption].Add(MakeTableRow(volume, null));
+                        
                         continue;
                     }
 
@@ -117,24 +141,8 @@ namespace auvdisk.DiskImage
                     
                     fsList.Add(fs!);
                     disposableList.Add(fileStream);
-
-                    var parentDeviceCaption = $"{volume.ParentDeviceId ?? "N/A"} <{volume.HardwareModel ?? "N/A"}>";
-
-                    if (!tuiStructure.ContainsKey(parentDeviceCaption))
-                    {
-                        tuiStructure[parentDeviceCaption] = [];
-                    }
                     
-                    tuiStructure[parentDeviceCaption].Add([
-                        volume.ParentDeviceId ?? "N/A",
-                        volume.HardwareModel ?? "N/A",
-                        volume.DeviceId,
-                        fs.FriendlyName,
-                        fs.VolumeLabel,
-                        volume.MountPoints.Any() ? String.Join(", ", volume.MountPoints) : "N/A",
-                        fs?.GetUuid(new NullLogger()) ?? "",
-                        volume.Size.HasValue ? Utils.HumanizeFilesize(volume.Size.Value, true) : "N/A",
-                        volume.BytesPerSector?.ToString() ?? "N/A"]);
+                    tuiStructure[parentDeviceCaption].Add(MakeTableRow(volume, fs));
                 }
 
                 if (Program.IsInteractive)
@@ -145,12 +153,9 @@ namespace auvdisk.DiskImage
                             "Parent Id", "HW Model", "Device Id", "FS Type", "Label", "Mount Points", "UUID", "Size", "Bytes per Sector"
                         ]);
                         
-                        foreach (var driveDevice in tuiStructure.Keys)
+                        foreach (var volumeInfo in tuiStructure.Keys.SelectMany(driveDevice => tuiStructure[driveDevice]))
                         {
-                            foreach (var volumeInfo in tuiStructure[driveDevice])
-                            {
-                                table.AddRow(volumeInfo);
-                            }
+                            table.AddRow(volumeInfo);
                         }
 
                         logger.Log(table);

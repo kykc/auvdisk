@@ -139,6 +139,8 @@ namespace auvdisk.Cli
         public bool Verbose { get; set; } = false;
         [Option('z', "zero-fill", Required = false, Default = false, HelpText = "Explicitly zero-fill created VHD. May help avoiding creation of sparse file")]
         public bool ZeroFill { get; set; } = false;
+        [Option("no-boot", Required = false, Default = false, HelpText = "Do not create EFI Boot partition")]
+        public bool NoBoot { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
@@ -189,24 +191,45 @@ namespace auvdisk.Cli
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("create-fixed-vhd", HelpText = "Create fixed size VHD image")]
-    class CreateFixedVhd
+    class CreateFixedVhd : CreateVdisk
     {
-        [Option('t', "target", Required = true, HelpText = "Target VHD path")]
-        public string Target { get; set; } = "";
-        [Option('s', "size", Required = true, HelpText = "Target VHD size in bytes. Actual file will be 512 bytes longer, as it needs to contain VHD footer")]
-        public string Size { get; set; } = "";
-        [Option('z', "zero-fill", Required = false, Default = false, HelpText = "Explicitly zero-fill created VHD. May help avoiding creation of sparse file")]
+        [Option('z', "zero-fill", Required = false, Default = false, HelpText = "Explicitly zero-fill created virtual disk. May help avoiding creation of sparse file")]
         public bool ZeroFill { get; set; } = false;
+        [Option("vhdx",  Required = false, Default = false, HelpText = "Create VHDx instead of VHD")]
+        public bool Vhdx { get; set; } = false;
+
+        public override bool ZeroFillRequired() => ZeroFill;
+        public override bool IsDynamic() => false;
+        public override bool IsVhdx() => Vhdx;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("create-dynamic-vhd", HelpText = "Create dynamic VHD image")]
-    class CreateDynamicVhd
+    class CreateDynamicVhd : CreateVdisk
     {
-        [Option('t', "target", Required = true, HelpText = "Target VHD path")]
+        [Option("vhdx",  Required = false, Default = false, HelpText = "Create VHDx instead of VHD")]
+        public bool Vhdx { get; set; } = false;
+        
+        public override bool ZeroFillRequired() => false;
+        public override bool IsDynamic() => true;
+        public override bool IsVhdx() => Vhdx;
+    }
+    
+    abstract class CreateVdisk
+    {
+        [Option('t', "target", Required = true, HelpText = "Target file path")]
         public string Target { get; set; } = "";
-        [Option('s', "size", Required = true, HelpText = "Target VHD size in bytes. Actual file will be 512 bytes longer, as it needs to contain VHD footer")]
+        [Option('s', "size", Required = true, HelpText = "Target virtual disk size in bytes")]
         public string Size { get; set; } = "";
+        [Option("partition", Required = false, Default = "", HelpText = "Initialize target Virtual Disk with GPT partition table and create partition layout. Example: `512MiB, 0`")]
+        public string Partition { get; set; } = "";
+        [Option('b', "boot", Required = false, Default = false, HelpText = "Mark first partition as boot with GPT Type GUID (valid only with --partition)")]
+        public bool Boot { get; set; } = false;
+
+
+        public abstract bool ZeroFillRequired();
+        public abstract bool IsDynamic();
+        public abstract bool IsVhdx();
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
@@ -275,8 +298,9 @@ namespace auvdisk.Cli
         public string Target { get; set; } = "";
         [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
         public bool Verbose { get; set; } = false;
-        [Option('f', "fixed", Required = false, Default = false, HelpText = "Force full disk preallocation (fixed VHDx)")]
-        public bool Fixed { get; set;} = false;
+
+        [Option('f', "fixed", Required = false, HelpText = "Force full disk preallocation (fixed VHDx)")]
+        public bool? Fixed { get; set; }
         [Option('z',  "zero", Required = false, Default = false, HelpText = "Force zero-fill (only valid with --fixed)")]
         public bool ZeroFill { get; set; } = false;
     }
@@ -291,8 +315,8 @@ namespace auvdisk.Cli
         public string Target { get; set; } = "";
         [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
         public bool Verbose { get; set; } = false;
-        [Option('f', "fixed", Required = false, Default = false, HelpText = "Force full disk preallocation (fixed VHDx)")]
-        public bool Fixed { get; set;} = false;
+        [Option('f', "fixed", Required = false, HelpText = "Force full disk preallocation (fixed VHDx)")]
+        public bool? Fixed { get; set;}
         [Option('z',  "zero", Required = false, Default = false, HelpText = "Force zero-fill (only valid with --fixed)")]
         public bool ZeroFill { get; set; } = false;
     }
@@ -400,5 +424,11 @@ namespace auvdisk.Cli
     {
         [Option('l', "letter", Required = true, HelpText = "Target drive letter")]
         public string Letter { get; set; } = "";
+    }
+
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("debug-repl", HelpText = "Debug C# REPL", Hidden = true)]
+    public class DebugRepl
+    {
     }
 }

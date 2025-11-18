@@ -60,24 +60,36 @@ namespace auvdisk.Bytes
            
             Utils.WithProgress(logger, progressData, progress =>
             {
-                byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
-                try
-                {
-                    int bytesRead;
-                    while ((bytesRead = Read(buffer, 0, buffer.Length)) != 0)
-                    {
-                        destination.Write(buffer, 0, bytesRead);
-                        progressData.IncrementBytes += bytesRead;
-                        progress?.Call(progressData);
-                    }
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(buffer);
-                }
+                CopyTo(this, destination, logger, progressData, progress, bufferSize);
 
                 return progressData;
             });
+        }
+
+        public static void CopyTo(Stream source, Stream destination, ILog logger, IProgressData progressData, Throttle<IProgressData>? progress,
+            int bufferSize = DefaultCopyBufferSize)
+        {
+            ValidateCopyToArguments(destination, bufferSize);
+            if (!source.CanRead)
+            {
+                throw new NotSupportedException("Stream does not support reading.");
+            }
+            
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
+            try
+            {
+                int bytesRead;
+                while ((bytesRead = source.Read(buffer, 0, buffer.Length)) != 0)
+                {
+                    destination.Write(buffer, 0, bytesRead);
+                    progressData.IncrementBytes += bytesRead;
+                    progress?.Call(progressData);
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
         
         public override void Flush()

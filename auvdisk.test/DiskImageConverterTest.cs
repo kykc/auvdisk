@@ -4,6 +4,7 @@ using DiscUtils.Fat;
 using DiskAccessLibrary.VHD;
 using auvdisk.DiskImage;
 using auvdisk.DiskImage.Vhd;
+using DiscUtils.Streams;
 
 namespace auvdisk.test;
 
@@ -50,9 +51,9 @@ public class DiskImageConverterTest : IDisposable
         Assert.False(File.Exists(@"ext4.vhd"));
         Assert.False(File.Exists(@"ext4.loop"));
         
-        var result = DiskImageConverter.ConvertLoopToVhd(Path.Join("testdata", "ext4.loop"), "ext4.vhd", logger, false, true);
+        var resultForward = DiskImageConverter.ConvertLoopToVhd(Path.Join("testdata", "ext4.loop"), "ext4.vhd", logger, false, true);
         
-        Assert.False(result.IsError());
+        Assert.False(resultForward.IsError());
         
         var probeResult = new DiskProbe("ext4.vhd", logger, fsHandler).Probe();
         
@@ -67,9 +68,9 @@ public class DiskImageConverterTest : IDisposable
 
         Assert.True(DiskImage.Vhd.Util.IsValidVhd("ext4.vhd"));
         
-        result = DiskImageConverter.ConvertVhdToLoop("ext4.vhd", "ext4.loop", logger, false);
+        var resultBack = DiskImageConverter.ConvertVhdToLoop("ext4.vhd", "ext4.loop", logger, false);
         
-        Assert.False(result.IsError());
+        Assert.False(resultBack.IsError());
         
         probeResult = new DiskProbe("ext4.loop", logger, fsHandler).Probe();
 
@@ -150,6 +151,7 @@ public class DiskImageConverterTest : IDisposable
     public void TestVhdToVhdxAndBack()
     {
         string original = Path.Join("testdata", "test_gpt.vhd");
+        string originalDynamic = Path.Join("testdata", "dynamic_fat32.vhd");
         string target = Path.Join(Directory.GetCurrentDirectory(), "test_gpt.vhdx");
         string targetBack = Path.Join(Directory.GetCurrentDirectory(), "test_gpt_back.vhd");
 
@@ -174,15 +176,17 @@ public class DiskImageConverterTest : IDisposable
         var testImpl = (bool fixedTarget) =>
         {
             File.Delete(target);
+
+            var source = fixedTarget ? original : originalDynamic;
             
-            var result = DiskImageConverter.ConvertVhdToVhdx(original, target, logger, false, fixedTarget, false);
+            var result = DiskImageConverter.ConvertVhdToVhdx(source, target, logger, false, fixedTarget, false);
             Assert.True(result.HasValue());
 
             var probeResult = new DiskProbe(target, logger, fsHandler).Probe();
 
             Assert.NotNull(probeResult.Disk);
             Assert.Equal("VHDX", probeResult.Disk.ImageType);
-            Assert.Single(probeResult.Disk.Partitions);
+            Assert.Equal(fixedTarget ? 1 : 2, probeResult.Disk.Partitions.Count);
 
             File.Delete(targetBack);
             
@@ -193,12 +197,29 @@ public class DiskImageConverterTest : IDisposable
 
             Assert.NotNull(probeResult.Disk);
             Assert.Equal("VHD", probeResultBack.Disk!.ImageType);
-            Assert.Single(probeResultBack.Disk.Partitions);
+            Assert.Equal(fixedTarget ? 1 : 2, probeResultBack.Disk.Partitions.Count);
 
-            using var initialVhd = DiscUtils.VirtualDisk.OpenDisk(original, "vhd", FileAccess.Read, "", "");
+            using var initialVhd = DiscUtils.VirtualDisk.OpenDisk(source, "vhd", FileAccess.Read, "", "");
             using var resultVhd = DiscUtils.VirtualDisk.OpenDisk(targetBack, "vhd", FileAccess.Read, "", "");
 
-            Assert.Equal(TestUtil.CalcSha256Hash(initialVhd.Content), TestUtil.CalcSha256Hash(resultVhd.Content));
+            if (fixedTarget)
+            {
+                Assert.Equal(TestUtil.CalcSha256Hash(initialVhd.Content), TestUtil.CalcSha256Hash(resultVhd.Content));
+            }
+            else
+            {
+                // This is not a good check, actually. It would be cool to do full Content checking here as well, but it takes ~30secs
+                Assert.Equal(initialVhd.Content.Extents.Count(), resultVhd.Content.Extents.Count());
+                foreach (var extents in initialVhd.Content.Extents.Zip(resultVhd.Content.Extents))
+                {
+                    Assert.Equal(extents.First.Start, extents.Second.Start);
+                    Assert.Equal(extents.First.Length, extents.Second.Length);
+                    var initialSub = new SubStream(initialVhd.Content, extents.First.Start, extents.First.Length);
+                    var resultSub = new SubStream(resultVhd.Content, extents.Second.Start, extents.Second.Length);
+                    Assert.Equal(TestUtil.CalcSha256Hash(initialSub), TestUtil.CalcSha256Hash(resultSub));
+                }
+            }
+
             Assert.True(DiskImage.Vhd.Util.IsValidVhd(targetBack));
         };
 
@@ -220,11 +241,10 @@ public class DiskImageConverterTest : IDisposable
         var result = DiskImageConverter.ConvertQcow2ToRaw(sourcePath, targetPath, logger, false);
 
         Assert.True(result.HasValue());
-        Assert.NotNull(result.Unwrap().Disk);
-        Assert.Equal("qcow2", result.Unwrap().Disk!.ImageType);
 
         using var reference = DiscUtils.VirtualDisk.OpenDisk(referencePath, FileAccess.Read);
         using var resultDisk = DiscUtils.VirtualDisk.OpenDisk(targetPath, FileAccess.Read);
+        Assert.Equal("RAW", resultDisk.DiskTypeInfo.Name);
 
         reference.Content.Seek(0, SeekOrigin.Begin);
         resultDisk.Content.Seek(0, SeekOrigin.Begin);

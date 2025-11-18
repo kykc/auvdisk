@@ -74,17 +74,6 @@ namespace auvdisk.test
         }
 
         [Fact]
-        public void TestMapDisposeOr()
-        {
-            var disposable = new DisposableDummy();
-
-            var result = Flow<DisposableDummy>.Ok(disposable, Logger).MapDisposeOr(x => x.DummyMember.Some(), "");
-            Assert.True(result.HasValue());
-            Assert.Equal(42, result.Unwrap().Val);
-            Assert.True(disposable.Disposed);
-        }
-
-        [Fact]
         public void TestTryMap()
         {
             var result = Flow<Value<int>>.Ok(42.Some(), Logger)

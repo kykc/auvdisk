@@ -16,63 +16,72 @@ namespace auvdisk.Fs.Ntfs
             public string Complete => "Cloned";
         }
         
-        public static void Clone(Stream source, Stream target, ILog logger)
+        public static Flow<None> Clone(Stream source, Stream target, ILog logger)
         {
-            logger.Log("Copying NTFS partition contents. Only used clusters will be copied.");
-            
-            using var ntfs = new NtfsFileSystem(source);
-
-            ntfs.NtfsOptions.HideSystemFiles = false;
-            ntfs.NtfsOptions.HideHiddenFiles = false;
-            ntfs.NtfsOptions.HideMetafiles = false;
-
-            byte[] volumeBitmap;
-
-            using (var bitmapStream = ntfs.OpenFile(@"$Bitmap", FileMode.Open))
+            try
             {
-                volumeBitmap = bitmapStream.ReadExactly((int)bitmapStream.Length);
-            }
+                logger.Log("Copying NTFS partition contents. Only used clusters will be copied.");
 
-            var clusterSize = (int)ntfs.ClusterSize;
+                using var ntfs = new NtfsFileSystem(source);
 
-            CopyBootSector(source, target, clusterSize);
-            var ranges = BitmapToRanges(volumeBitmap, clusterSize);
-            
-            var progressData = new ProgressData
-            {
-                TotalBytes = ranges.Select(x => x.Length).Aggregate(0L, (a, b) => a + b),
-            };
+                ntfs.NtfsOptions.HideSystemFiles = false;
+                ntfs.NtfsOptions.HideHiddenFiles = false;
+                ntfs.NtfsOptions.HideMetafiles = false;
 
-            const int defaultCopyBufferSize = 81920;
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(defaultCopyBufferSize);
+                byte[] volumeBitmap;
 
-            Utils.WithProgress(logger, progressData, progress =>
-            {
-                try
+                using (var bitmapStream = ntfs.OpenFile(@"$Bitmap", FileMode.Open))
                 {
-                    foreach (var extent in ranges)
+                    volumeBitmap = bitmapStream.ReadExactly((int)bitmapStream.Length);
+                }
+
+                var clusterSize = (int)ntfs.ClusterSize;
+
+                CopyBootSector(source, target, clusterSize);
+                var ranges = BitmapToRanges(volumeBitmap, clusterSize);
+
+                var progressData = new ProgressData
+                {
+                    TotalBytes = ranges.Select(x => x.Length).Aggregate(0L, (a, b) => a + b),
+                };
+
+                const int defaultCopyBufferSize = 81920;
+                byte[] buffer = ArrayPool<byte>.Shared.Rent(defaultCopyBufferSize);
+
+                Utils.WithProgress(logger, progressData, progress =>
+                {
+                    try
                     {
-                        var sub = new SubStream(source, extent.Start, extent.Length);
-                    
-                        int bytesRead;
-                        target.Seek(extent.Start, SeekOrigin.Begin);
-                    
-                        while ((bytesRead = sub.Read(buffer, 0, buffer.Length)) != 0)
+                        foreach (var extent in ranges)
                         {
-                            target.Write(buffer, 0, bytesRead);
+                            var sub = new SubStream(source, extent.Start, extent.Length);
+
+                            int bytesRead;
+                            target.Seek(extent.Start, SeekOrigin.Begin);
+
+                            while ((bytesRead = sub.Read(buffer, 0, buffer.Length)) != 0)
+                            {
+                                target.Write(buffer, 0, bytesRead);
+                            }
+
+                            progressData.IncrementBytes += (int)extent.Length;
+                            progress?.Call(progressData);
                         }
-                        
-                        progressData.IncrementBytes += (int)extent.Length;
-                        progress?.Call(progressData);
                     }
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(buffer);
-                }
-                
-                return progressData;
-            });
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(buffer);
+                    }
+
+                    return progressData;
+                });
+
+                return Flows.Ok(None.Value, logger);
+            }
+            catch (Exception e)
+            {
+                return new($"Failed to clone NTFS volume with error: {e.Message}", logger);
+            }
         }
         
         private static void CopyBootSector(Stream source, Stream target, long bytesPerCluster)

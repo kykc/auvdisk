@@ -13,7 +13,7 @@ using Spectre.Console;
 
 namespace auvdisk.Extensions
 {
-    interface IProgressData
+    public interface IProgressData
     {
         string Description { get; }
         string Complete { get; }
@@ -194,6 +194,21 @@ namespace auvdisk.Extensions
             return false;
         }
 
+        public static bool IfElse(Func<bool> condition, Action actionTrue, Action actionFalse)
+        {
+            if (condition())
+            {
+                actionTrue();
+                
+                return true;
+            }
+            else
+            {
+                actionFalse();
+                return false;
+            }
+        }
+
         public static Table MakeConsoleTable(string[] columns)
         {
             var table = new Table();
@@ -205,43 +220,37 @@ namespace auvdisk.Extensions
 
             return table;
         }
-
-        public static Flow<DiskProbe.ProbeResult> WithCheckedVhdType<TSubj>(this Flow<TSubj> action, string source, VirtualHardDiskType diskType)
+        
+        public static Flow<TSubj> WithCheckedVhdType<TSubj>(this Flow<TSubj> action, Func<TSubj, string> source, Func<TSubj, VirtualHardDiskType> diskType)
             where TSubj : class
         {
             return action.Log($"Checking that source VHD file is of type {diskType}")
-                .MapOr((_) => DiskImage.Vhd.Util.ReadVhdFooterSafe(source), "Failed to read Vhd footer")
-                .Check((footer) => footer.IsValid, (_) => "Invalid VHD footer format")
-                .Check((footer) => footer.DiskType == diskType, (footer) => $"Expected VHD of type {diskType}, got {footer.DiskType}")
-                .Map((footer) => new DiskProbe(source, new NullLogger()).Probe());
+                .MapOr(x => new { footer = DiskImage.Vhd.Util.ReadVhdFooterSafe(source(x)), opts = x }, "Failed to read Vhd footer")
+                .Check(x => x.footer!.IsValid, (_) => "Invalid VHD footer format")
+                .Check(x => x.footer!.DiskType == diskType(x.opts), x => $"Expected VHD of type {diskType(x.opts)}, got {x.footer!.DiskType}")
+                .Map(x => x.opts);
         }
-
-        public static Flow<DiskProbe.ProbeResult> WithCheckedDiskType<TSubj>(this Flow<TSubj> action, string diskType, string source, bool verbose)
+        
+        public static Flow<TSubj> WithCheckedDiskType<TSubj>(this Flow<TSubj> action, Func<TSubj, string> diskType, Func<TSubj, string> source, Func<TSubj, bool> verbose)
             where TSubj : class
         {
-            var probeLogger = verbose ? action.Logger : new Log.NullLogger();
-
-            return action.Log($"Checking that source file contains valid {(diskType == "" ? "disk" : diskType)} image")
-                .Map((_) => new DiskProbe(source, probeLogger, fs => { }).Probe())
-                .Check((res) => res.Disk != null, (res) => $"No {diskType} footer and/or partition table found, exiting")
-                .Check((res) => res.Disk!.ImageType == diskType || diskType == "", (res) => $"Expected {diskType} image file got {res.Disk!.ImageType}, exiting");
+            return action
+                .WithSideEffect(x => action.Log($"Checking that source file contains valid {(diskType(x) == "" ? "disk" : diskType(x))} image"))
+                .Map(x => new {opts = x, probe = new DiskProbe(source(x), verbose(x) ? action.Logger : new NullLogger(), fs => { }).Probe()})
+                .Check((res) => res.probe.Disk != null, x => $"No {diskType(x.opts)} footer and/or partition table found, exiting")
+                .Check((res) => res.probe.Disk!.ImageType == diskType(res.opts) || diskType(res.opts) == "", (res) => $"Expected {diskType(res.opts)} image file got {res.probe.Disk!.ImageType}")
+                .Map(x => x.opts);
         }
-
-        public static Flow<DiskProbe.ProbeResult> WithCheckedFsType<TSubj>(this Flow<TSubj> action, string fsType, string source, bool verbose)
+        
+        public static Flow<TSubj> WithCheckedFsType<TSubj>(this Flow<TSubj> action, Func<TSubj, string> fsType, Func<TSubj, string> source, Func<TSubj, bool> verbose)
             where TSubj : class
         {
-            var probeLogger = verbose ? action.Logger : new Log.NullLogger();
-
-            return action.Log($"Checking that source file contains valid {(fsType == "" ? "filesystem" : fsType)} image")
-                .Map((_) => new DiskProbe(source, probeLogger, fs => { }).Probe())
-                .Check((res) => res.Fs != null, (_) => "No filesystem found, exiting")
-                .Check((res) => res.Fs!.FsType == fsType || fsType == "", (res) => $"Expected {fsType} filesystem, got {res.Fs!.FsType}, exiting");
-        }
-
-        public static Flow<TSubj> WithCheckedSourceExists<TSubj>(this Flow<TSubj> action, string source)
-            where TSubj : class
-        {
-            return action.WithCheckedSourceExists((_) => source);
+            return action
+                .WithSideEffect(x => action.Log($"Checking that source file contains valid {(fsType(x) == "" ? "filesystem" : fsType(x))} image"))
+                .Map(x => new { opts = x, probe = new DiskProbe(source(x), verbose(x) ? action.Logger : new NullLogger() , fs => { }).Probe() })
+                .Check(x => x.probe.Fs != null, (_) => "No filesystem found, exiting")
+                .Check(x => x.probe.Fs!.FsType == fsType(x.opts) || fsType(x.opts) == "", x => $"Expected {fsType(x.opts)} filesystem, got {x.probe.Fs!.FsType}")
+                .Map(x => x.opts);
         }
         
         public static Flow<TSubj> WithCheckedSourceExists<TSubj>(this Flow<TSubj> action, Func<TSubj, string> source)
@@ -272,10 +281,11 @@ namespace auvdisk.Extensions
                 .Check(x => (ulong)x.length < offset(x.opts) + length(x.opts), (_) => "Requested operation exceeds file length")
                 .Map(x => x.opts);
         }
-
-        public static Flow<TSubj> WithCheckedTargetAvailable<TSubj>(this Flow<TSubj> action, string target) where TSubj : class
+        
+        public static Flow<TSubj> WithCheckedPartLayout<TSubj>(this Flow<TSubj> action, Func<TSubj, string> layout) where TSubj : class
         {
-            return action.WithCheckedTargetAvailable((_) => target);
+            return action.LogIf(x => layout(x) != "", "Parsing partition layout string")
+                .CheckDiscardIf(x => layout(x) != "", x => PartitionTable.Util.ParseLayout(layout(x), action.Logger));
         }
         
         public static Flow<TSubj> WithCheckedTargetAvailable<TSubj>(this Flow<TSubj> action, Func<TSubj, string> target) where TSubj : class
@@ -293,11 +303,23 @@ namespace auvdisk.Extensions
                 .TryMap<TSubj, Exception>(TryCreate);
         }
 
-        public static Flow<TSubj> WithCheckedSize<TSubj>(this Flow<TSubj> action, string size) where TSubj : class
+        // Not because I have nothing better to do, but because DiscUtils is picky and is using file extension to guess file type
+        public static Flow<TSubj> WithCheckedTargetExtension<TSubj>(this Flow<TSubj> action, Func<TSubj, string> target,
+            Func<TSubj, string> targetExt) where TSubj : class
         {
-            return action.WithCheckedSize((_) => size);
+            bool CheckExtension(TSubj subj)
+            {
+                var targetValue = target(subj);
+                var correctExt = targetExt(subj);
+                var extension = Path.GetExtension(targetValue);
+
+                return string.Equals(extension, correctExt, StringComparison.InvariantCultureIgnoreCase);
+            }
+
+            return action
+                .Check(CheckExtension, _ => "Target extension is invalid for selected virtual disk type");
         }
-        
+
         public static Flow<TSubj> WithCheckedSize<TSubj>(this Flow<TSubj> action, Func<TSubj, string> size) where TSubj : class
         {
             return action.Check((subj) => size(subj).ParseByteLength().HasValue, (_) => "Failed to parse size in bytes");

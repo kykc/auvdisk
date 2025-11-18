@@ -9,7 +9,7 @@
     <RollForward>LatestMajor</RollForward>
     <LangVersion>Latest</LangVersion>
     <AssemblyName>auvdisk</AssemblyName>
-    <Version>1.9.3</Version>
+    <Version>1.9.4</Version>
     <Authors>Alexander Automatl</Authors>
     <Company>Tomatl Inc</Company>
     <IsWindows Condition="$([MSBuild]::IsOSPlatform('Windows'))">true</IsWindows>
@@ -37,6 +37,11 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="auvdisk.test" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" Version="4.14.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.14.0" />
+    <PackageReference Include="PrettyPrompt" Version="4.1.1" />
   </ItemGroup>
   <ItemGroup Condition="'$(IsWindows)'=='true'">
     <PackageReference Include="AlphaVSS" Version="2.0.3" />

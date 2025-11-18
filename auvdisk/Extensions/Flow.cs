@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using DotNext;
 
 namespace auvdisk.Extensions
@@ -60,17 +61,138 @@ namespace auvdisk.Extensions
             where TRes : class
             where TSubj : class, IDisposable
         {
+            return subj.MapDispose(mapper, _ => subj.Unwrap());
+        }
+
+        public static Flow<TRes> MapDispose<TSubj, TDisposable, TRes>(this Flow<TSubj> subj, Func<TSubj, TRes> mapper, Func<TSubj, TDisposable> disposable)
+            where TRes : class
+            where TSubj : class
+            where TDisposable : IDisposable
+        {
             if (subj.HasValue())
             {
                 var val = mapper(subj.Unwrap());
-                
-                subj.Unwrap().Dispose();
+                disposable(subj.Unwrap()).Dispose();
                 
                 return Flows.Ok(val, subj.Logger);
             }
             else
             {
-                return Flows.Err<TRes>(subj.UnwrapErr(), subj.Logger);
+                return new(subj.UnwrapErr(), subj.Logger);
+            }
+        }
+        
+        public static Flow<Tuple<TSubj, TRes>> Concat<TSubj, TRes>(this Flow<TSubj> subj, Func<TSubj, Flow<TRes>> binder)
+            where TRes : class
+            where TSubj : class
+        {
+            if (subj.HasValue())
+            {
+                var otherValue = binder(subj.Unwrap());
+
+                if (otherValue.HasValue())
+                {
+                    return Flows.Ok(Tuple.Create(subj.Unwrap(), otherValue.Unwrap()), subj.Logger);
+                }
+                else
+                {
+                    return Flows.Err<Tuple<TSubj, TRes>>(otherValue.UnwrapErr(), subj.Logger);
+                }
+            }
+            else
+            {
+                return Flows.Err<Tuple<TSubj, TRes>>(subj.UnwrapErr(), subj.Logger);
+            }
+        }
+
+        public static Flow<Tuple<T1, T2, TNext>> Concat<T1, T2, TNext>(this Flow<Tuple<T1, T2>> subj,
+            Func<Tuple<T1, T2>, Flow<TNext>> binder)
+                where TNext : class
+        {
+            if (subj.HasValue())
+            {
+                var otherValue = binder(subj.Unwrap());
+
+                if (otherValue.HasValue())
+                {
+                    var currentValue = subj.Unwrap();
+
+                    return Flows.Ok(Tuple.Create(currentValue.Item1, currentValue.Item2, otherValue.Unwrap()), subj.Logger);
+                }
+                else
+                {
+                    return Flows.Err<Tuple<T1, T2, TNext>>(otherValue.UnwrapErr(), subj.Logger);
+                }
+            }
+            else
+            {
+                return Flows.Err<Tuple<T1, T2, TNext>>(subj.UnwrapErr(), subj.Logger);
+            }
+        }
+        
+        public static Flow<Tuple<T1, T2, T3, TNext>> Concat<T1, T2, T3, TNext>(this Flow<Tuple<T1, T2, T3>> subj,
+            Func<Tuple<T1, T2, T3>, Flow<TNext>> binder)
+            where TNext : class
+        {
+            if (subj.HasValue())
+            {
+                var otherValue = binder(subj.Unwrap());
+
+                if (otherValue.HasValue())
+                {
+                    var currentValue = subj.Unwrap();
+
+                    return Flows.Ok(Tuple.Create(currentValue.Item1, currentValue.Item2, currentValue.Item3, otherValue.Unwrap()), subj.Logger);
+                }
+                else
+                {
+                    return Flows.Err<Tuple<T1, T2, T3, TNext>>(otherValue.UnwrapErr(), subj.Logger);
+                }
+            }
+            else
+            {
+                return Flows.Err<Tuple<T1, T2, T3, TNext>>(subj.UnwrapErr(), subj.Logger);
+            }
+        }
+        
+        public static Flow<TRes> BindConcat<TSubj, TNew, TRes>(this Flow<TSubj> subj, Func<TSubj, Flow<TNew>> binder, Func<TSubj, TNew, TRes> converter)
+            where TRes : class
+            where TNew: class
+            where TSubj: class
+        {
+            if (subj.HasValue())
+            {
+                var newVal = binder(subj.Unwrap());
+
+                if (newVal.HasValue())
+                {
+                    return Flows.Ok(converter(subj.Unwrap(), newVal.Unwrap()), subj.Logger);
+                }
+                else
+                {
+                    return new(newVal.UnwrapErr(),  subj.Logger);
+                }
+            }
+            else
+            {
+                return new (subj.UnwrapErr(), subj.Logger);
+            }
+        }
+        
+        public static Flow<TRes> MapConcat<TSubj, TNew, TRes>(this Flow<TSubj> subj, Func<TSubj, TNew> transformer, Func<TSubj, TNew, TRes> converter)
+            where TRes : class
+            where TNew: class
+            where TSubj: class
+        {
+            if (subj.HasValue())
+            {
+                var newVal = transformer(subj.Unwrap());
+
+                return Flows.Ok(converter(subj.Unwrap(), newVal), subj.Logger);
+            }
+            else
+            {
+                return new (subj.UnwrapErr(), subj.Logger);
             }
         }
     }
@@ -81,6 +203,13 @@ namespace auvdisk.Extensions
         private TSubj? Value { get; }
         private string? Error { get; }
         public Log.ILog Logger { get; }
+
+        public Flow(string error, Log.ILog logger)
+        {
+            Value = null;
+            Error = error;
+            Logger = logger;
+        }
 
         private Flow(Log.ILog logger, TSubj? value, string? error)
         {
@@ -175,28 +304,7 @@ namespace auvdisk.Extensions
 
             return this;
         }
-
-        public Flow<TRes> MapDisposeOr<TRes>(Func<TSubj, TRes?> mapper, string error)
-            where TRes : class
-        {
-            var result = new Flow<TRes>(Logger, null, Error ?? error);
-
-            if (HasValue())
-            {
-                if (mapper(Value!) is { } newValue)
-                {
-                    result = new Flow<TRes>(Logger, newValue, null);
-                }
-
-                if (Value is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
-            }
-
-            return result;
-        }
-
+        
         public Flow<TRes> Bind<TRes>(Func<TSubj, Flow<TRes>> binder)
             where TRes : class
         {
@@ -229,6 +337,16 @@ namespace auvdisk.Extensions
         public Flow<TSubj> Log(string msg)
         {
             if (HasValue())
+            {
+                Logger.Log(msg);
+            }
+
+            return this;
+        }
+
+        public Flow<TSubj> LogIf(Func<TSubj, bool> condition, string msg)
+        {
+            if (HasValue() && condition(Value!))
             {
                 Logger.Log(msg);
             }

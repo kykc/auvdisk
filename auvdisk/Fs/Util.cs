@@ -47,7 +47,7 @@ namespace auvdisk.Fs
         {
             using var stream = new FileStream(target, FileMode.Open, FileAccess.ReadWrite, FileShare.None).WithProgress();
             var currentSize = stream.Length;
-            Debug.Assert(size > (ulong)currentSize);
+            System.Diagnostics.Debug.Assert(size > (ulong)currentSize);
             var difference = size - (ulong)currentSize;
             var bufferSize = StreamCopyProgressWrapper.DefaultCopyBufferSize;
             var remainder = difference % (ulong)bufferSize;

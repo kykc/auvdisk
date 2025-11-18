@@ -306,7 +306,20 @@ namespace auvdisk.DiskImage
         {
             Logger.Log($"Processing virtual disk of type [yellow]{imageType}[/] with LBA size [yellow]{vdisk.SectorSize}[/] bytes");
 
-            if (vdisk.IsPartitioned)
+            string[] allowUnpartitioned = ["vhd", "vhdx"];
+
+            if (!vdisk.IsPartitioned && allowUnpartitioned.Contains(imageType.ToLowerInvariant()))
+            {
+                return new DiskRecord( 
+                    PartitionTableType: "",
+                    Partitions: new List<PartitionRecord>(),
+                    ImageType: imageType,
+                    SectorSize: (ulong)vdisk.SectorSize,
+                    PartTableGuid: null,
+                    DiskGuid: diskGuid
+                );
+            }
+            else if (vdisk.IsPartitioned)
             {
                 var diskRecord = new DiskRecord( 
                     PartitionTableType: vdisk.Partitions.ToReadableString(),

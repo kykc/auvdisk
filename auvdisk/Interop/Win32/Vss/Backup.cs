@@ -42,7 +42,7 @@ namespace auvdisk.Interop.Win32.Vss
             }
             catch (Exception e)
             {
-                return Flow<Backup>.Err(e.Message, logger);
+                return new(e.Message, logger);
             }
         }
 

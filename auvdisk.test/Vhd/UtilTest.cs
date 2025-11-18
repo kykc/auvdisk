@@ -53,12 +53,12 @@ namespace auvdisk.test.Vhd
 
             var test = (string fixedPath, string dynamicPath, bool vhdx) =>
             {
-                var resultFixed = DiskImage.Util.CreateBootableLayout(fixedPath, BootSize, DataSize, Logger, false, false, vhdx);
+                var resultFixed = DiskImage.Util.CreateVdiskWithGptLayout(fixedPath, BootSize, DataSize, Logger, false, false, vhdx);
                 var probeFixed = new DiskProbe(fixedPath, Logger).Probe();
             
                 CheckLayout(resultFixed, probeFixed, vhdx);
             
-                var resultDynamic = DiskImage.Util.CreateBootableLayout(dynamicPath, BootSize, DataSize, Logger, false, true, vhdx);
+                var resultDynamic = DiskImage.Util.CreateVdiskWithGptLayout(dynamicPath, BootSize, DataSize, Logger, false, true, vhdx);
                 var probeDynamic = new DiskProbe(dynamicPath, Logger).Probe();
             
                 CheckLayout(resultDynamic, probeDynamic, vhdx);

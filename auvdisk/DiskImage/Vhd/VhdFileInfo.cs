@@ -9,6 +9,10 @@ namespace auvdisk.DiskImage.Vhd
         public string Path { get; init; } = "";
         public ulong TotalSectors => CapacityInBytes / BytesPerSector;
         public VirtualHardDiskType DiskType { get; init; }
+
+        private VhdFileInfo()
+        {
+        }
         
         public VhdFileInfo(DiskAccessLibrary.VirtualHardDisk disk)
         {
@@ -37,6 +41,26 @@ namespace auvdisk.DiskImage.Vhd
             BytesPerSector = bytesPerSector;
             Path = path;
             DiskType = footer.DiskType;
+        }
+
+        public static VhdFileInfo? Make(DiscUtils.VirtualDisk disk, string path, VirtualHardDiskType diskType, bool dispose = false)
+        {
+            if (disk.DiskTypeInfo.Name.Equals("vhd", StringComparison.InvariantCultureIgnoreCase))
+            {
+                var result = new VhdFileInfo
+                {
+                    DiskType = diskType,
+                    Path = path,
+                    BytesPerSector = (ulong)disk.BlockSize,
+                    CapacityInBytes = (ulong)disk.Capacity
+                };
+                
+                if (dispose) disk.Dispose();
+                
+                return result;
+            }
+
+            return null;
         }
     }
 }
