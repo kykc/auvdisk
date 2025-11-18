@@ -58,7 +58,7 @@ public static class Util
 
                 PartitionTable.Util.InitializeDisk(disk, (long)offsetLba, list);
 
-                return Flows.Ok(disk, logger);
+                return Flows.Val(disk);
             })
             .MapDispose(_ => new Value<ulong>(dataSizeInBytes));
     }
@@ -82,7 +82,7 @@ public static class Util
                 ? Vhdx.Util.CreateDynamic(target, totalSize, logger)
                 : Vhdx.Util.CreateFixed(target, totalSize, logger, zeroFill);
 
-            return result.Map<VirtualDisk>(x => x);
+            return result.Map(x => x as VirtualDisk);
         }
     }
 }

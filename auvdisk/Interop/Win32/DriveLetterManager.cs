@@ -22,7 +22,7 @@ namespace auvdisk.Interop.Win32
 
                 if (volume == null)
                 {
-                    return Flow<Value<char>>.Err($"Volume not found: {wmiPath}", logger);
+                    return Flow<Value<char>>.Err($"Volume not found: {wmiPath}");
                 }
                 
                 var mountPoint = $"{driveLetter}:\\";
@@ -37,7 +37,7 @@ namespace auvdisk.Interop.Win32
                 if (returnValue == 0)
                 {
                     logger.Log($"Successfully mounted {volumeGuidPath} to {mountPoint}");
-                    return Flow<Value<char>>.Ok(new Value<char>(driveLetter), logger);
+                    return Flow<Value<char>>.Val(new Value<char>(driveLetter));
                 }
                 else
                 {
@@ -54,12 +54,12 @@ namespace auvdisk.Interop.Win32
                         _ => $"Unknown Error <{returnValue}>"
                     };
                     
-                    return Flow<Value<char>>.Err($"Failed to mount {volumeGuidPath} to {mountPoint} with error [{error}]", logger);
+                    return Flow<Value<char>>.Err($"Failed to mount {volumeGuidPath} to {mountPoint} with error [{error}]");
                 }
             }
             catch (Exception ex)
             {
-                return Flow<Value<char>>.Err(ex.Message, logger);
+                return Flow<Value<char>>.Err(ex.Message);
             }
         }
         
@@ -67,11 +67,11 @@ namespace auvdisk.Interop.Win32
         {
             if (!Windows.Win32.PInvoke.DeleteVolumeMountPoint($"{driveLetter}:\\"))
             {
-                return Flow<Value<char>>.Err(new Win32Exception().Message, logger);
+                return Flow<Value<char>>.Err(new Win32Exception().Message);
             }
             
             logger.Log($"Successfully dismounted <{driveLetter}>");
-            return Flow<Value<char>>.Ok(new Value<char>(driveLetter), logger);
+            return Flow<Value<char>>.Val(new Value<char>(driveLetter));
         }
     }
 }

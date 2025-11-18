@@ -64,7 +64,7 @@ namespace auvdisk.DiskImage.Vhd
 
             var maybeFooter = ReadVhdFooterSafe(path);
 
-            return Flow<None>.Ok(None.Value, logger)
+            return Flow<None>.Val(None.Value)
                 .MapOr(_ => maybeFooter, $"Failed to read VHD footer of file {path}")
                 .Check(f => size > f.CurrentSize, f => "Provided size is less or equal to the current VHD size")
                 .Check(f => f.DiskType == VirtualHardDiskType.Fixed, f => "Provided disk is not a fixed VHD file")
@@ -99,12 +99,12 @@ namespace auvdisk.DiskImage.Vhd
             }
             catch (Exception e)
             {
-                return Flows.Err<VhdFileInfo>(e.Message, logger);
+                return Flows.Err<VhdFileInfo>(e.Message);
             }
             
             if (!Fs.Util.HandleResizeFile(path, size, forceZeroFill, logger))
             {
-                return Flow<VhdFileInfo>.Err("Failed to resize VHD file", logger);
+                return Flow<VhdFileInfo>.Err("Failed to resize VHD file");
             }
             
             using var fs = new FileStream(path, FileMode.Open, FileAccess.Write);
@@ -113,7 +113,7 @@ namespace auvdisk.DiskImage.Vhd
             fs.Write(footer.GetBytes());
             fs.Close();
                 
-            return Flow<VhdFileInfo>.Ok(new VhdFileInfo(footer, path, LbaSize), logger);
+            return Flow<VhdFileInfo>.Val(new VhdFileInfo(footer, path, LbaSize));
         }
         
         internal static ulong RoundUp(ulong numToRound, ulong multiple)
@@ -257,7 +257,7 @@ namespace auvdisk.DiskImage.Vhd
 
                 if (parentFooter is not { IsValid: true })
                 {
-                    return Flow<VhdFileInfo>.Err("Failed to read/parse VHD footer", logger);
+                    return Flow<VhdFileInfo>.Err("Failed to read/parse VHD footer");
                 }
                 
                 size = parentFooter.CurrentSize;
@@ -267,7 +267,7 @@ namespace auvdisk.DiskImage.Vhd
 
                 if (absoluteParentPath.Length >= 256 || relativeParentPath.Length >= 256)
                 {
-                    return Flow<VhdFileInfo>.Err("Absolute or relative parent path is longer than 256 characters", logger);
+                    return Flow<VhdFileInfo>.Err("Absolute or relative parent path is longer than 256 characters");
                 }
                 
                 // TODO: support length > 256 symbols?
@@ -346,7 +346,7 @@ namespace auvdisk.DiskImage.Vhd
             stream.Dispose();
             stream.Close();
 
-            return Flow<VhdFileInfo>.Ok(new VhdFileInfo(footer, path, LbaSize), logger);
+            return Flow<VhdFileInfo>.Val(new VhdFileInfo(footer, path, LbaSize));
         }
         
         // Beware, passing strange things in you will get strange things out
@@ -420,14 +420,14 @@ namespace auvdisk.DiskImage.Vhd
 
             if (maybeFooter == null)
             {
-                return Flows.Err<DiscUtils.Vhd.Disk>("Failed to read VHD footer", logger);
+                return Flows.Err<DiscUtils.Vhd.Disk>("Failed to read VHD footer");
             }
 
             var footer = maybeFooter;
 
             if (footer.DiskType != VirtualHardDiskType.Differencing)
             {
-                return Flows.Ok(new DiscUtils.Vhd.Disk(path, FileAccess.Read), logger);
+                return Flows.Val(new DiscUtils.Vhd.Disk(path, FileAccess.Read));
             }
             
             var findParent = (string? maybeLocator, uint platformCode, string currentDiskPath) =>
@@ -490,11 +490,11 @@ namespace auvdisk.DiskImage.Vhd
                         logger.Error($"Locator entry: ({(DynamicDiskHeader.ParentLocatorPlatformCode)locator.Item1.PlatformCode}) ({locator.Item2})");
                     }
 
-                    return Flows.Err<DiscUtils.Vhd.Disk>("Failed to find parent VHD", logger);
+                    return Flows.Err<DiscUtils.Vhd.Disk>("Failed to find parent VHD");
                 }
             }
 
-            return Flows.Ok(new DiscUtils.Vhd.Disk(layers, Ownership.Dispose), logger);
+            return Flows.Val(new DiscUtils.Vhd.Disk(layers, Ownership.Dispose));
         }
 
         public static FileType ConvertVhdTypeFromDalToDu(VirtualHardDiskType type)

@@ -31,6 +31,11 @@ namespace auvdisk
 #else
         public const bool IsWindows = false;
 #endif
+#if DEBUG
+        public const bool IsDebug = true;
+#else
+        public const bool IsDebug = false;
+#endif
         private static void HandleEnvironment()
         {
             if ((Environment.GetEnvironmentVariable("AUVDISK_LOG_LEVEL") ?? "").ToLowerInvariant() == "debug")
@@ -48,11 +53,11 @@ namespace auvdisk
         {
             return (rawOpts) =>
             {
-                var result = Flows.Ok(rawOpts, logger)
+                var result = Flows.Val(rawOpts)
                     .WithCheckedSize(x => x.Size)
-                    .WithCheckedTargetAvailable(x => x.Target)
+                    .WithCheckedTargetAvailable(x => x.Target, logger)
                     .WithCheckedTargetExtension(x => x.Target, x => x.IsVhdx() ? ".vhdx" : ".vhd")
-                    .WithCheckedPartLayout(x => x.Partition)
+                    .WithCheckedPartLayout(x => x.Partition, logger)
                     .Map(x => new { size = x.Size.ParseByteLength()!.Value, opts = x })
                     .BindConcat(
                         x => DiskImage.Util.CreateVdisk(x.opts.Target, x.size, logger, x.opts.IsDynamic(), x.opts.ZeroFillRequired(), x.opts.IsVhdx()),
@@ -66,13 +71,13 @@ namespace auvdisk
                         () => new DiskProbe(x.opts.Target, logger).Probe(), 
                         () => Util.OutputDiagnosticInfo(x.opts.Target, logger)));
 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             };
         }
         
         // Cannot make this work properly out of the box. This allows for tri-state logic in the following manner. Imagine bool? flag -v --verbose:
         // args: [] = Verbose = null
-        // args: ["-v"] = Verbose => Verbose = true (TRes defaultValue to be specific) - this is exactly the case that is being fixed here
+        // args: ["-v"] = Verbose => Verbose = true (TRes defaultValue, to be more specific) - this is exactly the case that is being fixed here
         // args: ["-v", "false"] => Verbose = false
         // args: ["-v", "true"] => Verbose = true
         private static TRes FixCommandLineParserNullable<T, TRes>(Func<T, TRes> mapper, string[] argOpts, T subject, string[] args, TRes defaultValue)
@@ -114,7 +119,7 @@ namespace auvdisk
                     DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Source, logger);
                 }
 
-                return 0;
+                return !result.Disk.IsSome() && !result.Fs.IsSome() ? 1 : 0;
             });
 
             handlers.Register((Cli.VdiskList opts) =>
@@ -137,9 +142,9 @@ namespace auvdisk
                 var fsHandler =
                     DiskProbe.GetListArbitraryDir(opts.Target, logger, opts.Silent, opts.Recursive, filterRegex);
                 var probe = new DiskProbe(opts.Source, probeLogger, fsHandler, opts.PartIdx);
-                probe.Probe();
+                var probeResult = probe.Probe();
 
-                return 0;
+                return !probeResult.Disk.IsSome() && !probeResult.Fs.IsSome() ? 1 : 0;
             });
             
             handlers.Register((Cli.VdiskCat opts) =>
@@ -147,9 +152,9 @@ namespace auvdisk
                 ILog probeLogger = opts.Silent ? new NullLogger() : logger;
                 var probe = new DiskProbe(opts.Source, probeLogger,
                     DiskProbe.GetCatArbitraryFile(opts.Target, logger, opts.Silent), opts.PartIdx);
-                probe.Probe();
+                var probeResult = probe.Probe();
 
-                return 0;
+                return !probeResult.Disk.IsSome() && !probeResult.Fs.IsSome() ? 1 : 0;
             });
 
             handlers.Register((Cli.LoopToVhd opts) =>
@@ -157,7 +162,7 @@ namespace auvdisk
                 var result =
                     DiskImageConverter.ConvertLoopToVhd(opts.Source, opts.Target, logger, opts.Verbose, opts.ZeroFill, opts.NoBoot);
 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.VhdToLoop opts) =>
@@ -165,21 +170,21 @@ namespace auvdisk
                 var result =
                     DiskImageConverter.ConvertVhdToLoop(opts.Source, opts.Target, logger, opts.Verbose, opts.PartIndex);
 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.ImgToVhd opts) =>
             {
                 var result = DiskImageConverter.ConvertImgToVhd(opts.Source, logger, opts.Verbose);
 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.VhdToImg opts) =>
             {
                 var result = DiskImageConverter.ConvertVhdToImg(opts.Source, logger, opts.Verbose);
 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.CreateDiffVhd rawOpts) =>
@@ -190,15 +195,15 @@ namespace auvdisk
                     new DiskProbe(info.Path, logger).Probe();
                 }
 
-                var result = Flow<CreateDiffVhd>.Ok(rawOpts, logger)
-                    .WithCheckedTargetAvailable(opts => opts.Child)
-                    .WithCheckedSourceExists(opts => opts.Parent)
-                    .WithCheckedDiskType(_ => "VHD", opts => opts.Parent, opts => opts.Verbose)
+                var result = Flow<CreateDiffVhd>.Val(rawOpts)
+                    .WithCheckedTargetAvailable(opts => opts.Child, logger)
+                    .WithCheckedSourceExists(opts => opts.Parent, logger)
+                    .WithCheckedDiskType(_ => "VHD", opts => opts.Parent, opts => opts.Verbose, logger)
                     .Bind(x => Util.CreateDifferentialVhd(x.Parent, x.Child, logger))
                     .WithSideEffect(OutputDiskInfo)
-                    .Log("Done.");
+                    .LogOk(logger, "Done.");
 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
 
             handlers.Register(MakeCreateVdiskHandler<CreateFixedVhd>(logger));
@@ -208,27 +213,27 @@ namespace auvdisk
             {
                 var result = DiskImage.Vhd.Merge.PerformMerge(opts.Parent, opts.Child, opts.Target, logger);
 
-                return result.MapDispose(x => None.Value).LogErrorIfAny() ? 1 : 0;
+                return result.MapDispose(x => None.Value).LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.ExtractFile rawOpts) =>
             {
-                var result = Flow<ExtractFile>.Ok(rawOpts, logger)
-                    .WithCheckedSourceExists(x => x.Source)
-                    .WithCheckedTargetAvailable(x => x.Target)
-                    .WithCheckedStreamBoundaries(x => x.Source, x => x.Offset, x => x.Length)
+                var result = Flow<ExtractFile>.Val(rawOpts)
+                    .WithCheckedSourceExists(x => x.Source, logger)
+                    .WithCheckedTargetAvailable(x => x.Target, logger)
+                    .WithCheckedStreamBoundaries(x => x.Source, x => x.Offset, x => x.Length, logger)
                     .WithSideEffect(opts => Fs.Util.ExtractFileSegment(opts.Source, opts.Target, opts.Offset, opts.Length, logger));
 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.DiagVhd rawOpts) =>
             {
-                var result = Flow<DiagVhd>.Ok(rawOpts, logger)
-                    .WithCheckedSourceExists(x => x.Source)
-                    .Map(opts => DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Source, logger).Some());
+                var result = Flow<DiagVhd>.Val(rawOpts)
+                    .WithCheckedSourceExists(x => x.Source, logger)
+                    .Map(opts => DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Source, logger).RefVal());
 
-                return result.LogErrorIfAny() || !result.Unwrap().Val ? 1 : 0;
+                return result.LogErrorIfAny(logger) || !result.UnwrapVal().Val ? 1 : 0;
             });
             
             handlers.Register((Cli.ResizeFixedVhd rawOpts) =>
@@ -239,13 +244,13 @@ namespace auvdisk
                     return new { size, opts };
                 };
 
-                var result = Flow<ResizeFixedVhd>.Ok(rawOpts, logger)
+                var result = Flow<ResizeFixedVhd>.Val(rawOpts)
                     .WithCheckedSize(x => x.Size)
-                    .WithCheckedSourceExists(x => x.Target)
+                    .WithCheckedSourceExists(x => x.Target, logger)
                     .Map(parseSize)
                     .Bind(x => Util.ResizeFixedVhd(x.opts.Target, x.size, logger, rawOpts.ZeroFill));
 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.VhdToVhdx opts) =>
@@ -255,73 +260,63 @@ namespace auvdisk
                 var result =
                     DiskImageConverter.ConvertVhdToVhdx(opts.Source, opts.Target, logger, opts.Verbose, fixedValue, opts.ZeroFill);
 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.VhdxToVhd opts) =>
             {
                 var fixedValue = FixCommandLineParserNullable(x => x.Fixed, ["-f", "--fixed"], opts, args, true);
                 
-                var result = DiskImageConverter.ConvertVhdxToVhd(opts.Source, opts.Target, logger, opts.Verbose, opts.Fixed, opts.ZeroFill);
+                var result = DiskImageConverter.ConvertVhdxToVhd(opts.Source, opts.Target, logger, opts.Verbose, fixedValue, opts.ZeroFill);
 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.GenVmdkWrapper rawOpts) =>
             {
-                bool success = false;
-
-                var action = (GenVmdkWrapper opts) =>
-                {
-                    var vmdk = DiskImage.Vmdk.VmdkFlatWrapper.Create(opts.Source, logger);
-
-                    if (vmdk != null)
+                var result = Flow<GenVmdkWrapper>.Val(rawOpts)
+                    .WithCheckedSourceExists(opts => opts.Source, logger)
+                    .WithCheckedDiskType(_ => "RAW", opts => opts.Source, _ => false, logger)
+                    .MapOr(opts => new { opts, vmdk = DiskImage.Vmdk.VmdkFlatWrapper.Create(opts.Source, logger) }, "Failed to create VMDK wrapper")
+                    .WithSideEffect(x =>
                     {
                         Utils.If(() => logger.Log(new Rule("[green]Resulting VMDK[/]").LeftJustified()),
-                            () => !opts.Silent);
-                        logger.Log(vmdk?.ToString().EscapeMarkup() ?? ""); // On error logger will contain the reason already
+                            () => !x.opts.Silent);
+                        logger.Log(x.vmdk?.ToString().EscapeMarkup() ?? ""); // On error logger will contain the reason already
                         Utils.If(() => logger.Log(new Rule("[green]End of VMDK[/]").LeftJustified()),
-                            () => !opts.Silent);
+                            () => !x.opts.Silent);
                         Utils.If(
                             () => logger.Log(
                                 "Put that into a file, place it into the same folder as the source image and you're good to go"),
-                            () => !opts.Silent);
-                    }
+                            () => !x.opts.Silent);
+                    });
 
-                    success = vmdk != null;
-                };
-
-                var result = Flow<GenVmdkWrapper>.Ok(rawOpts, logger)
-                    .WithCheckedSourceExists(opts => opts.Source)
-                    .WithCheckedDiskType(_ => "RAW", opts => opts.Source, _ => false)
-                    .WithSideEffect(action);
-
-                return result.LogErrorIfAny() && success ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.Qcow2ToRaw opts) =>
             {
                 var result = DiskImageConverter.ConvertQcow2ToRaw(opts.Source, opts.Target, logger, opts.Verbose);
 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.ProbeBcd rawOpts) =>
             {
-                var result = Flow<ProbeBcd>.Ok(rawOpts, logger)
-                    .WithCheckedSourceExists(opts => opts.Source)
+                var result = Flow<ProbeBcd>.Val(rawOpts)
+                    .WithCheckedSourceExists(opts => opts.Source, logger)
                     .WithSideEffect(opts => BCD.Util.ProbeBcd(opts.Source, opts.Verbose, logger));
 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.BrowseVdisk rawOpts) =>
             {
-                var result = Flow<BrowseVdisk>.Ok(rawOpts, logger)
-                    .WithCheckedSourceExists(opts => opts.Source)
+                var result = Flow<BrowseVdisk>.Val(rawOpts)
+                    .WithCheckedSourceExists(opts => opts.Source, logger)
                     .WithSideEffect(opts => Commander.FsCommander.OpenDiskImage(opts.Source, logger));
 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.BrowseVolumes opts) =>
@@ -330,13 +325,13 @@ namespace auvdisk
                 {
                     var result = DiskImage.Factory.MakeFsListFromAvailableVolumes(logger, opts.TreeOutput);
 
-                    return result.LogErrorIfAny() ? 1 : 0;
+                    return result.LogErrorIfAny(logger) ? 1 : 0;
                 }
                 else
                 {
                     var result = Commander.FsCommander.OpenLocalFs(logger);
 
-                    return result.LogErrorIfAny() ? 1 : 0;
+                    return result.LogErrorIfAny(logger) ? 1 : 0;
                 }
             });
 

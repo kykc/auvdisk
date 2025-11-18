@@ -77,8 +77,8 @@ namespace auvdisk.test.Vhd
 
         private void CheckLayout(Flow<Value<ulong>> layoutResult, DiskProbe.ProbeResult probeResult, bool vhdx)
         {
-            Assert.False(layoutResult.IsError());
-            Assert.Equal(vhdx ? DataSize + 1024 * 1024 - 1 : DataSize + 511, layoutResult.Unwrap().Val);
+            Assert.False(layoutResult.IsErr);
+            Assert.Equal(vhdx ? DataSize + 1024 * 1024 - 1 : DataSize + 511, layoutResult.UnwrapVal().Val);
             
             
             Assert.NotNull(probeResult.Disk);

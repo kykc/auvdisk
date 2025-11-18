@@ -14,12 +14,12 @@ namespace auvdisk.Cli
                 var (stdOut, stdErr) = SimpleExec.Command.ReadAsync("dd",
                     ["if=/dev/zero", $"of={filename}", "bs=1", "count=0", $"seek={size.ToString()}"]).GetAwaiter().GetResult();
 
-                return Flows.Ok(new Value<int>(0), logger);
+                return Flows.Val(new Value<int>(0));
             }
             catch (ExitCodeReadException ex)
             {
                 logger.Error(ex.StandardError);
-                return Flows.Err<Value<int>>($"dd exited with non-zero exit code <{ex.ExitCode}>", logger);
+                return Flows.Err<Value<int>>($"dd exited with non-zero exit code <{ex.ExitCode}>");
             }
         }
 
@@ -57,12 +57,12 @@ namespace auvdisk.Cli
                     }
                 }
 
-                return Flow<Value<char>>.Ok(new Value<char>(bootLetter), logger);
+                return Flow<Value<char>>.Val(new Value<char>(bootLetter));
             }
             catch (ExitCodeReadException ex)
             {
                 logger.Error(ex.StandardError);
-                return Flow<Value<char>>.Err($"Bcdboot exited with non-zero exit code <{ex.ExitCode}>", logger);
+                return Flow<Value<char>>.Err($"Bcdboot exited with non-zero exit code <{ex.ExitCode}>");
             }
         }
     }

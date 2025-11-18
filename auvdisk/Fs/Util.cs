@@ -9,6 +9,10 @@ using auvdisk.Cli;
 using auvdisk.DiskImage.Vhd;
 using auvdisk.Extensions;
 using auvdisk.Log;
+using DiscUtils.Ext;
+using DiscUtils.Fat;
+using DiscUtils.Ntfs;
+using DiscUtils.Streams;
 using Spectre.Console;
 
 namespace auvdisk.Fs
@@ -63,22 +67,13 @@ namespace auvdisk.Fs
 
         public static string? ExtractUuid(DiscUtils.DiscFileSystem fs, Log.ILog logger)
         {
-            if (fs is DiscUtils.Ntfs.NtfsFileSystem)
+            return fs switch
             {
-                return Ntfs.UuidExtractor.ExtractUuid(fs, logger);
-            }
-            else if (fs is DiscUtils.Fat.FatFileSystem)
-            {
-                return Fat.UuidExtractor.ExtractUuid(fs, logger);
-            }
-            else if (fs is DiscUtils.Ext.ExtFileSystem)
-            {
-                return Ext.UuidExtractor.ExtractUuid(fs, logger).ToString();
-            }
-            else
-            {
-                return null;
-            }
+                NtfsFileSystem => Ntfs.UuidExtractor.ExtractUuid(fs, logger),
+                FatFileSystem => Fat.UuidExtractor.ExtractUuid(fs, logger),
+                ExtFileSystem => Ext.UuidExtractor.ExtractUuid(fs, logger)?.ToString(),
+                _ => null
+            };
         }
 
         public static string? GetUuid(this DiscUtils.DiscFileSystem fs, Log.ILog logger)
@@ -89,7 +84,7 @@ namespace auvdisk.Fs
         public static void ExtractFileSegment(string source, string target, ulong offset, ulong length, ILog logger)
         {
             using var rawFileStream = new System.IO.FileStream(source, FileMode.Open, FileAccess.Read);
-            using var decoratedStream = new SegmentStream(rawFileStream, (long)offset, (long)length);
+            using var decoratedStream = new SubStream(rawFileStream, Ownership.None, (long)offset, (long)length);
             using var targetStream = new System.IO.FileStream(target, FileMode.CreateNew, FileAccess.Write);
             decoratedStream.WithProgress().CopyTo(targetStream, logger);
         }
@@ -106,9 +101,9 @@ namespace auvdisk.Fs
             
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !forceZeroFill)
             {
-                var prompt = () => AnsiConsole.Confirm("Zero-fill was not requested. Proceed with fast/unsafe method? (You may receive an UAC prompt)");
-                
-                if (!Environment.IsPrivilegedProcess && Program.IsInteractive && prompt())
+                bool Prompt() => AnsiConsole.Confirm("Zero-fill was not requested. Proceed with fast/unsafe method? (You may receive an UAC prompt)");
+
+                if (!Environment.IsPrivilegedProcess && Program.IsInteractive && Prompt())
                 {
                     try
                     {
@@ -190,7 +185,7 @@ namespace auvdisk.Fs
 
                 var ddResult = CliTools.AllocateWithDd(target, size, logger);
 
-                success = !ddResult.IsError() || ResizeFile(target, size, logger);
+                success = !ddResult.IsErr || ResizeFile(target, size, logger);
             }
             else
             {

@@ -16,7 +16,7 @@ namespace auvdisk.Interop.Win32
         {
             if (!File.Exists(vhdPath))
             {
-                return Flow<IEnumerable<VhdVolumeInfo>>.Err($"VHD file {vhdPath} not found", logger);
+                return Flow<IEnumerable<VhdVolumeInfo>>.Err($"VHD file {vhdPath} not found");
             }
             
             // -PassThru returns the disk object
@@ -46,7 +46,7 @@ namespace auvdisk.Interop.Win32
                         logger.Error($"[PS Error] {error}");
                     }
 
-                    return Flow<IEnumerable<VhdVolumeInfo>>.Err("PS Errors found", logger);
+                    return Flow<IEnumerable<VhdVolumeInfo>>.Err("PS Errors found");
                 }
                     
                 var infos = results.Select(x => new VhdVolumeInfo(
@@ -63,11 +63,11 @@ namespace auvdisk.Interop.Win32
                 }
 
                 logger.Log($"Successfully mounted {vhdPath}.");
-                return Flow<IEnumerable<VhdVolumeInfo>>.Ok(infos, logger);
+                return Flow<IEnumerable<VhdVolumeInfo>>.Val(infos);
             }
             catch (Exception ex)
             {
-                return Flow<IEnumerable<VhdVolumeInfo>>.Err(ex.Message, logger);
+                return Flow<IEnumerable<VhdVolumeInfo>>.Err(ex.Message);
             }
         }
         

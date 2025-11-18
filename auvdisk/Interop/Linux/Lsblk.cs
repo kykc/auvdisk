@@ -76,11 +76,11 @@ public static class Lsblk
         }
         catch (ExitCodeReadException ex)
         {
-            return Flow<LsblkRoot>.Err($"Failed to fetch partition list: {ex.StandardError.Trim()}", logger);
+            return Flow<LsblkRoot>.Err($"Failed to fetch partition list: {ex.StandardError.Trim()}");
         }
         catch (Win32Exception ex)
         {
-            return Flow<LsblkRoot>.Err($"Failed to launch lsblk: {ex.Message}", logger);
+            return Flow<LsblkRoot>.Err($"Failed to launch lsblk: {ex.Message}");
         }
 
         var data = JsonSerializer.Deserialize<LsblkRoot>(stdOut);
@@ -93,11 +93,11 @@ public static class Lsblk
                 .Where(x => x.FsType != null && allowedTypes.Contains(x.FsType))
                 .ToList();
 
-            return Flow<LsblkRoot>.Ok(data, logger);
+            return Flow<LsblkRoot>.Val(data);
         }
         else
         {
-            return Flow<LsblkRoot>.Err("Failed to parse lsblk output", logger);
+            return Flow<LsblkRoot>.Err("Failed to parse lsblk output");
         }
     }
 }

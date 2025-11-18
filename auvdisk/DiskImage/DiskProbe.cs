@@ -96,9 +96,9 @@ namespace auvdisk.DiskImage
                 using var vhdDiskResult = Vhd.Util.OpenDiskWithDu(Path, Logger);
                 //using var vhdDisk = new DiscUtils.Vhd.Disk(Path, FileAccess.Read);
 
-                if (vhdDiskResult.HasValue())
+                if (vhdDiskResult.IsVal)
                 {
-                    return new ProbeResult(HandleVirtualDisk(vhdDiskResult.Unwrap(), "VHD", maybeVhdFooter.UniqueId), null);
+                    return new ProbeResult(HandleVirtualDisk(vhdDiskResult.UnwrapVal(), "VHD", maybeVhdFooter.UniqueId), null);
                 }
                 else  
                 {

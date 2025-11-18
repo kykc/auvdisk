@@ -25,13 +25,13 @@ public static class DiskpartScriptMananger
         }
         else
         {
-            return Flows.Err<string>($"Unknown partition type: {partitionType}", logger);
+            return Flows.Err<string>($"Unknown partition type: {partitionType}");
         }
                 
         string result =
             $"\"select disk {diskNumber}\", \"select partition {partitionNumber}\", \"set id={partTypeGuid} override\" | diskpart";
         
-        return Flows.Ok(result, logger);
+        return Flows.Val(result);
     }
 
     public static Flow<ScriptOutput> Execute(string script, ILog logger)
@@ -58,14 +58,14 @@ public static class DiskpartScriptMananger
                 logger.Debug(stdOut);
                 
                 stdErr = $"diskpart exited with non-zero exit code <{lastExitCode}>{Environment.NewLine}{stdErr}";
-                return Flows.Err<ScriptOutput>(stdErr, logger);
+                return Flows.Err<ScriptOutput>(stdErr);
             }
             
-            return Flows.Ok(new ScriptOutput(stdOut, stdErr, lastExitCode.Value), logger);
+            return Flows.Val(new ScriptOutput(stdOut, stdErr, lastExitCode.Value));
         }
         catch (Exception e)
         {
-            return Flows.Err<ScriptOutput>(e.Message, logger);
+            return Flows.Err<ScriptOutput>(e.Message);
         }
     }
 

@@ -214,7 +214,7 @@ namespace auvdisk.DiskImage
             }
             else if (probe.Disk is { ImageType: "VHD" })
             {
-                var disk = Vhd.Util.OpenDiskWithDu(path, logger).Unwrap();
+                var disk = Vhd.Util.OpenDiskWithDu(path, logger).UnwrapVal();
 
                 return new FsCollection(new List<IDisposable> { disk }, GetFileSystems(disk), path);
             }

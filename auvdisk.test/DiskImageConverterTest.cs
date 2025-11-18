@@ -53,7 +53,7 @@ public class DiskImageConverterTest : IDisposable
         
         var resultForward = DiskImageConverter.ConvertLoopToVhd(Path.Join("testdata", "ext4.loop"), "ext4.vhd", logger, false, true);
         
-        Assert.False(resultForward.IsError());
+        Assert.False(resultForward.IsErr);
         
         var probeResult = new DiskProbe("ext4.vhd", logger, fsHandler).Probe();
         
@@ -70,7 +70,7 @@ public class DiskImageConverterTest : IDisposable
         
         var resultBack = DiskImageConverter.ConvertVhdToLoop("ext4.vhd", "ext4.loop", logger, false);
         
-        Assert.False(resultBack.IsError());
+        Assert.False(resultBack.IsErr);
         
         probeResult = new DiskProbe("ext4.loop", logger, fsHandler).Probe();
 
@@ -180,7 +180,7 @@ public class DiskImageConverterTest : IDisposable
             var source = fixedTarget ? original : originalDynamic;
             
             var result = DiskImageConverter.ConvertVhdToVhdx(source, target, logger, false, fixedTarget, false);
-            Assert.True(result.HasValue());
+            Assert.True(result.IsVal);
 
             var probeResult = new DiskProbe(target, logger, fsHandler).Probe();
 
@@ -191,7 +191,7 @@ public class DiskImageConverterTest : IDisposable
             File.Delete(targetBack);
             
             var resultBack = DiskImageConverter.ConvertVhdxToVhd(target, targetBack, logger, false, fixedTarget, false);
-            Assert.True(resultBack.HasValue());
+            Assert.True(resultBack.IsVal);
 
             var probeResultBack = new DiskProbe(targetBack, logger, fsHandler).Probe();
 
@@ -240,7 +240,7 @@ public class DiskImageConverterTest : IDisposable
 
         var result = DiskImageConverter.ConvertQcow2ToRaw(sourcePath, targetPath, logger, false);
 
-        Assert.True(result.HasValue());
+        Assert.True(result.IsVal);
 
         using var reference = DiscUtils.VirtualDisk.OpenDisk(referencePath, FileAccess.Read);
         using var resultDisk = DiscUtils.VirtualDisk.OpenDisk(targetPath, FileAccess.Read);

@@ -221,39 +221,39 @@ namespace auvdisk.Extensions
             return table;
         }
         
-        public static Flow<TSubj> WithCheckedVhdType<TSubj>(this Flow<TSubj> action, Func<TSubj, string> source, Func<TSubj, VirtualHardDiskType> diskType)
+        public static Flow<TSubj> WithCheckedVhdType<TSubj>(this Flow<TSubj> action, Func<TSubj, string> source, Func<TSubj, VirtualHardDiskType> diskType, ILog logger)
             where TSubj : class
         {
-            return action.Log($"Checking that source VHD file is of type {diskType}")
+            return action.LogOk(logger, x => $"Checking that source VHD file is of type {diskType(x)}")
                 .MapOr(x => new { footer = DiskImage.Vhd.Util.ReadVhdFooterSafe(source(x)), opts = x }, "Failed to read Vhd footer")
                 .Check(x => x.footer!.IsValid, (_) => "Invalid VHD footer format")
                 .Check(x => x.footer!.DiskType == diskType(x.opts), x => $"Expected VHD of type {diskType(x.opts)}, got {x.footer!.DiskType}")
                 .Map(x => x.opts);
         }
         
-        public static Flow<TSubj> WithCheckedDiskType<TSubj>(this Flow<TSubj> action, Func<TSubj, string> diskType, Func<TSubj, string> source, Func<TSubj, bool> verbose)
+        public static Flow<TSubj> WithCheckedDiskType<TSubj>(this Flow<TSubj> action, Func<TSubj, string> diskType, Func<TSubj, string> source, Func<TSubj, bool> verbose, ILog logger)
             where TSubj : class
         {
             return action
-                .WithSideEffect(x => action.Log($"Checking that source file contains valid {(diskType(x) == "" ? "disk" : diskType(x))} image"))
-                .Map(x => new {opts = x, probe = new DiskProbe(source(x), verbose(x) ? action.Logger : new NullLogger(), fs => { }).Probe()})
+                .LogOk(logger, x => $"Checking that source file contains valid {(diskType(x) == "" ? "disk" : diskType(x))} image")
+                .Map(x => new {opts = x, probe = new DiskProbe(source(x), verbose(x) ? logger : new NullLogger(), fs => { }).Probe()})
                 .Check((res) => res.probe.Disk != null, x => $"No {diskType(x.opts)} footer and/or partition table found, exiting")
                 .Check((res) => res.probe.Disk!.ImageType == diskType(res.opts) || diskType(res.opts) == "", (res) => $"Expected {diskType(res.opts)} image file got {res.probe.Disk!.ImageType}")
                 .Map(x => x.opts);
         }
         
-        public static Flow<TSubj> WithCheckedFsType<TSubj>(this Flow<TSubj> action, Func<TSubj, string> fsType, Func<TSubj, string> source, Func<TSubj, bool> verbose)
+        public static Flow<TSubj> WithCheckedFsType<TSubj>(this Flow<TSubj> action, Func<TSubj, string> fsType, Func<TSubj, string> source, Func<TSubj, bool> verbose, ILog logger)
             where TSubj : class
         {
             return action
-                .WithSideEffect(x => action.Log($"Checking that source file contains valid {(fsType(x) == "" ? "filesystem" : fsType(x))} image"))
-                .Map(x => new { opts = x, probe = new DiskProbe(source(x), verbose(x) ? action.Logger : new NullLogger() , fs => { }).Probe() })
+                .LogOk(logger, x => $"Checking that source file contains valid {(fsType(x) == "" ? "filesystem" : fsType(x))} image")
+                .Map(x => new { opts = x, probe = new DiskProbe(source(x), verbose(x) ? logger : new NullLogger() , fs => { }).Probe() })
                 .Check(x => x.probe.Fs != null, (_) => "No filesystem found, exiting")
                 .Check(x => x.probe.Fs!.FsType == fsType(x.opts) || fsType(x.opts) == "", x => $"Expected {fsType(x.opts)} filesystem, got {x.probe.Fs!.FsType}")
                 .Map(x => x.opts);
         }
         
-        public static Flow<TSubj> WithCheckedSourceExists<TSubj>(this Flow<TSubj> action, Func<TSubj, string> source)
+        public static Flow<TSubj> WithCheckedSourceExists<TSubj>(this Flow<TSubj> action, Func<TSubj, string> source, ILog logger)
             where TSubj : class
         {
             TSubj TryOpenForReading(TSubj subj)
@@ -262,15 +262,15 @@ namespace auvdisk.Extensions
                 return subj;
             }
 
-            return action.Log("Checking that source file exists")
+            return action.LogOk(logger, "Checking that source file exists")
                 .Check(x => File.Exists(source(x)), (x) => $"Source file {source(x)} does not exist")
-                .TryMap<TSubj, Exception>(TryOpenForReading);
+                .TryMap(TryOpenForReading, (Exception e) => e.Message);
         }
         
-        public static Flow<TSubj> WithCheckedStreamBoundaries<TSubj>(this Flow<TSubj> action, Func<TSubj, string> path, Func<TSubj, ulong> offset, Func<TSubj, ulong> length)
+        public static Flow<TSubj> WithCheckedStreamBoundaries<TSubj>(this Flow<TSubj> action, Func<TSubj, string> path, Func<TSubj, ulong> offset, Func<TSubj, ulong> length, ILog logger)
             where TSubj : class
         {
-            return action.Log("Checking file stream boundaries")
+            return action.LogOk(logger, "Checking file stream boundaries")
                 .Map(x => new {opts = x, fs = new FileStream(path(x), FileMode.Open, FileAccess.Read)})
                 .Map(x =>
                 {
@@ -282,13 +282,13 @@ namespace auvdisk.Extensions
                 .Map(x => x.opts);
         }
         
-        public static Flow<TSubj> WithCheckedPartLayout<TSubj>(this Flow<TSubj> action, Func<TSubj, string> layout) where TSubj : class
+        public static Flow<TSubj> WithCheckedPartLayout<TSubj>(this Flow<TSubj> action, Func<TSubj, string> layout, ILog logger) where TSubj : class
         {
-            return action.LogIf(x => layout(x) != "", "Parsing partition layout string")
-                .CheckDiscardIf(x => layout(x) != "", x => PartitionTable.Util.ParseLayout(layout(x), action.Logger));
+            return action.LogIf(logger, x => layout(x) != "", "Parsing partition layout string")
+                .CheckDiscardIf(x => layout(x) != "", x => PartitionTable.Util.ParseLayout(layout(x), logger));
         }
         
-        public static Flow<TSubj> WithCheckedTargetAvailable<TSubj>(this Flow<TSubj> action, Func<TSubj, string> target) where TSubj : class
+        public static Flow<TSubj> WithCheckedTargetAvailable<TSubj>(this Flow<TSubj> action, Func<TSubj, string> target, ILog logger) where TSubj : class
         {
             TSubj TryCreate(TSubj subj)
             {
@@ -298,9 +298,9 @@ namespace auvdisk.Extensions
                 return subj;
             }
             
-            return action.Log("Checking that target file doesn't exist")
+            return action.LogOk(logger, "Checking that target file doesn't exist")
                 .Check(subj => !Path.Exists(target(subj)), (subj) => $"{target(subj)} already exists")
-                .TryMap<TSubj, Exception>(TryCreate);
+                .TryMap(TryCreate, (Exception e) => e.Message);
         }
 
         // Not because I have nothing better to do, but because DiscUtils is picky and is using file extension to guess file type
@@ -325,7 +325,7 @@ namespace auvdisk.Extensions
             return action.Check((subj) => size(subj).ParseByteLength().HasValue, (_) => "Failed to parse size in bytes");
         }
 
-        public static Value<T> Some<T>(this T value) where T: struct => new(value);
+        public static Value<T> RefVal<T>(this T value) where T: struct => new(value);
 
         public static ulong DivideAndCeil(this ulong value, ulong divisor)
         {

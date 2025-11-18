@@ -428,6 +428,7 @@ namespace auvdisk.Cli
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("debug-repl", HelpText = "Debug C# REPL", Hidden = true)]
+    [NotSupported(!Program.IsDebug)]
     public class DebugRepl
     {
     }

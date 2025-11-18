@@ -48,9 +48,9 @@ namespace auvdisk.Commander
         {
             var fsCollection = Factory.MakeFsListFromAvailableVolumes(logger);
 
-            if (!fsCollection.IsError())
+            if (!fsCollection.IsErr)
             {
-                EntryPoint(fsCollection.Unwrap(), logger);
+                EntryPoint(fsCollection.UnwrapVal(), logger);
             }
 
             return fsCollection.Map((x) => None.Value);

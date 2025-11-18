@@ -1,26 +1,12 @@
-using System.Security.Cryptography.X509Certificates;
+using auvdisk.Log;
 using DotNext;
 
 namespace auvdisk.Extensions
 {
-    public class Value<TSubj>
+    public class Value<TSubj>(TSubj value)
         where TSubj : struct
     {
-        private Value()
-        {
-        }
-
-        public Value(TSubj value)
-        {
-            Val = value;
-        }
-
-        public static Value<TSubj> Some(TSubj value)
-        {
-            return new Value<TSubj>(value);
-        }
-
-        public TSubj Val { get; private set; }
+        public TSubj Val { get; private set; } = value;
     }
 
     public class None
@@ -34,34 +20,54 @@ namespace auvdisk.Extensions
 
     public static class Flows
     {
-        public static Flow<TSubj> Optional<TSubj>(Optional<TSubj> value, string error, Log.ILog logger) where TSubj: class
+        public static Flow<TSubj> Optional<TSubj>(Optional<TSubj> value, string error) where TSubj: class
         {
-            return value.HasValue ? Ok(value.Value, logger) : Err<TSubj>(error, logger);
-        }
-        public static Flow<TSubj> Ok<TSubj>(TSubj value, Log.ILog logger) where TSubj: class
-        {
-            return Flow<TSubj>.Ok(value, logger);
+            return value.HasValue ? Val(value.Value) : Err<TSubj>(error);
         }
         
-        public static Flow<TSubj> Err<TSubj>(string error, Log.ILog logger) where TSubj: class
+        public static Flow<TSubj> Val<TSubj>(TSubj value) where TSubj: class
         {
-            return Flow<TSubj>.Err(error, logger);
+            return Flow<TSubj>.Val(value);
+        }
+
+        public static Flow<TSubj> ValOr<TSubj>(TSubj? value, string error) where TSubj : class
+        {
+            return value != null ? Val(value) : Err<TSubj>(error);
+        }
+        
+        public static Flow<TSubj> Err<TSubj>(string error) where TSubj: class
+        {
+            return Flow<TSubj>.Err(error);
+        }
+
+        public static Flow<Value<TSubj>> RefVal<TSubj>(TSubj value) where TSubj : struct
+        {
+            return Val(value.RefVal());
         }
     }
 
     public static class Extensions
     {
-        public static Flow<TSubj> Flow<TSubj>(this Optional<TSubj> subj, string error, Log.ILog logger) where TSubj: class
+        public static Flow<TSubj> Flow<TSubj>(this Optional<TSubj> subj, string error) where TSubj: class
         {
-            return subj.HasValue ? Flows.Ok(subj.Value, logger) : Flows.Err<TSubj>(error, logger);
+            return subj.HasValue ? Flows.Val(subj.Value) : Flows.Err<TSubj>(error);
+        }
+
+        public static Flow<TSubj> Flow<TSubj>(this TSubj? subj, string error) where TSubj : class
+        {
+            return Flows.ValOr(subj, error);
+        }
+
+        public static bool IsSome<TSubj>(this TSubj? subj) where TSubj : class
+        {
+            return subj != null;
         }
         
-        // Defined as an extension method to be able to put constraints on TSubj : IDisposable
         public static Flow<TRes> MapDispose<TSubj, TRes>(this Flow<TSubj> subj, Func<TSubj, TRes> mapper)
             where TRes : class
             where TSubj : class, IDisposable
         {
-            return subj.MapDispose(mapper, _ => subj.Unwrap());
+            return subj.MapDispose(mapper, _ => subj.UnwrapVal());
         }
 
         public static Flow<TRes> MapDispose<TSubj, TDisposable, TRes>(this Flow<TSubj> subj, Func<TSubj, TRes> mapper, Func<TSubj, TDisposable> disposable)
@@ -69,16 +75,16 @@ namespace auvdisk.Extensions
             where TSubj : class
             where TDisposable : IDisposable
         {
-            if (subj.HasValue())
+            if (subj.IsVal)
             {
-                var val = mapper(subj.Unwrap());
-                disposable(subj.Unwrap()).Dispose();
+                var val = mapper(subj.UnwrapVal());
+                disposable(subj.UnwrapVal()).Dispose();
                 
-                return Flows.Ok(val, subj.Logger);
+                return Flows.Val(val);
             }
             else
             {
-                return new(subj.UnwrapErr(), subj.Logger);
+                return new(subj.UnwrapErr());
             }
         }
         
@@ -86,22 +92,22 @@ namespace auvdisk.Extensions
             where TRes : class
             where TSubj : class
         {
-            if (subj.HasValue())
+            if (subj.IsVal)
             {
-                var otherValue = binder(subj.Unwrap());
+                var otherValue = binder(subj.UnwrapVal());
 
-                if (otherValue.HasValue())
+                if (otherValue.IsVal)
                 {
-                    return Flows.Ok(Tuple.Create(subj.Unwrap(), otherValue.Unwrap()), subj.Logger);
+                    return Flows.Val(Tuple.Create(subj.UnwrapVal(), otherValue.UnwrapVal()));
                 }
                 else
                 {
-                    return Flows.Err<Tuple<TSubj, TRes>>(otherValue.UnwrapErr(), subj.Logger);
+                    return Flows.Err<Tuple<TSubj, TRes>>(otherValue.UnwrapErr());
                 }
             }
             else
             {
-                return Flows.Err<Tuple<TSubj, TRes>>(subj.UnwrapErr(), subj.Logger);
+                return Flows.Err<Tuple<TSubj, TRes>>(subj.UnwrapErr());
             }
         }
 
@@ -109,24 +115,24 @@ namespace auvdisk.Extensions
             Func<Tuple<T1, T2>, Flow<TNext>> binder)
                 where TNext : class
         {
-            if (subj.HasValue())
+            if (subj.IsVal)
             {
-                var otherValue = binder(subj.Unwrap());
+                var otherValue = binder(subj.UnwrapVal());
 
-                if (otherValue.HasValue())
+                if (otherValue.IsVal)
                 {
-                    var currentValue = subj.Unwrap();
+                    var currentValue = subj.UnwrapVal();
 
-                    return Flows.Ok(Tuple.Create(currentValue.Item1, currentValue.Item2, otherValue.Unwrap()), subj.Logger);
+                    return Flows.Val(Tuple.Create(currentValue.Item1, currentValue.Item2, otherValue.UnwrapVal()));
                 }
                 else
                 {
-                    return Flows.Err<Tuple<T1, T2, TNext>>(otherValue.UnwrapErr(), subj.Logger);
+                    return Flows.Err<Tuple<T1, T2, TNext>>(otherValue.UnwrapErr());
                 }
             }
             else
             {
-                return Flows.Err<Tuple<T1, T2, TNext>>(subj.UnwrapErr(), subj.Logger);
+                return Flows.Err<Tuple<T1, T2, TNext>>(subj.UnwrapErr());
             }
         }
         
@@ -134,24 +140,24 @@ namespace auvdisk.Extensions
             Func<Tuple<T1, T2, T3>, Flow<TNext>> binder)
             where TNext : class
         {
-            if (subj.HasValue())
+            if (subj.IsVal)
             {
-                var otherValue = binder(subj.Unwrap());
+                var otherValue = binder(subj.UnwrapVal());
 
-                if (otherValue.HasValue())
+                if (otherValue.IsVal)
                 {
-                    var currentValue = subj.Unwrap();
+                    var currentValue = subj.UnwrapVal();
 
-                    return Flows.Ok(Tuple.Create(currentValue.Item1, currentValue.Item2, currentValue.Item3, otherValue.Unwrap()), subj.Logger);
+                    return Flows.Val(Tuple.Create(currentValue.Item1, currentValue.Item2, currentValue.Item3, otherValue.UnwrapVal()));
                 }
                 else
                 {
-                    return Flows.Err<Tuple<T1, T2, T3, TNext>>(otherValue.UnwrapErr(), subj.Logger);
+                    return Flows.Err<Tuple<T1, T2, T3, TNext>>(otherValue.UnwrapErr());
                 }
             }
             else
             {
-                return Flows.Err<Tuple<T1, T2, T3, TNext>>(subj.UnwrapErr(), subj.Logger);
+                return Flows.Err<Tuple<T1, T2, T3, TNext>>(subj.UnwrapErr());
             }
         }
         
@@ -160,22 +166,22 @@ namespace auvdisk.Extensions
             where TNew: class
             where TSubj: class
         {
-            if (subj.HasValue())
+            if (subj.IsVal)
             {
-                var newVal = binder(subj.Unwrap());
+                var newVal = binder(subj.UnwrapVal());
 
-                if (newVal.HasValue())
+                if (newVal.IsVal)
                 {
-                    return Flows.Ok(converter(subj.Unwrap(), newVal.Unwrap()), subj.Logger);
+                    return Flows.Val(converter(subj.UnwrapVal(), newVal.UnwrapVal()));
                 }
                 else
                 {
-                    return new(newVal.UnwrapErr(),  subj.Logger);
+                    return new(newVal.UnwrapErr());
                 }
             }
             else
             {
-                return new (subj.UnwrapErr(), subj.Logger);
+                return new (subj.UnwrapErr());
             }
         }
         
@@ -184,247 +190,220 @@ namespace auvdisk.Extensions
             where TNew: class
             where TSubj: class
         {
-            if (subj.HasValue())
+            if (subj.IsVal)
             {
-                var newVal = transformer(subj.Unwrap());
+                var newVal = transformer(subj.UnwrapVal());
 
-                return Flows.Ok(converter(subj.Unwrap(), newVal), subj.Logger);
+                return Flows.Val(converter(subj.UnwrapVal(), newVal));
             }
             else
             {
-                return new (subj.UnwrapErr(), subj.Logger);
+                return new (subj.UnwrapErr());
             }
-        }
-    }
-    
-    public class Flow<TSubj> : IDisposable
-        where TSubj : class
-    {
-        private TSubj? Value { get; }
-        private string? Error { get; }
-        public Log.ILog Logger { get; }
-
-        public Flow(string error, Log.ILog logger)
-        {
-            Value = null;
-            Error = error;
-            Logger = logger;
-        }
-
-        private Flow(Log.ILog logger, TSubj? value, string? error)
-        {
-            Value = value;
-            Error = error;
-            Logger = logger;
-        }
-
-        private Flow(Log.ILog logger, string error)
-        {
-            Error = error;
-            Logger = logger;
-        }
-
-        public static Flow<TSubj> Ok(TSubj value, Log.ILog logger)
-        {
-            return new Flow<TSubj>(logger, value, null);
         }
         
-        public Flow<TSubj> Finally(Action action)
+        public static Flow<TSubj> WithSideEffect<TSubj>(this Flow<TSubj> subj, Action<TSubj> action) where TSubj : class
         {
-            action();
-            return this;
-        }
-        
-        public static Flow<TSubj> Err(string error, Log.ILog logger)
-        {
-            return new Flow<TSubj>(logger, error);
-        }
-
-        public Flow<TRes> MapOr<TRes>(Func<TSubj, TRes?> mapper, string error)
-            where TRes : class
-        {
-            if (HasValue() && mapper(Value!) is { } newValue)
+            if (subj.IsVal)
             {
-                return new Flow<TRes>(Logger, newValue, null);
-            }
-            else
-            {
-                return new Flow<TRes>(Logger, Error ?? error);
-            }
-        }
-
-        public Flow<TRes> Map<TRes>(Func<TSubj, TRes> mapper)
-            where TRes : class
-        {
-            return HasValue()
-                ? new Flow<TRes>(Logger, mapper(Value!), null)
-                : new Flow<TRes>(Logger, Error ?? "Unexpected error");
-        }
-        
-        public Flow<TSubj> CheckDiscardIf<TOther>(Func<TSubj, bool> condition, Func<TSubj, Flow<TOther>> binder) where TOther : class
-        {
-            if (HasValue() && condition(Value!))
-            {
-                var result = binder(Value!);
-
-                return result.HasValue() ? this : Err(result.Error!, Logger);
+                action(subj.UnwrapVal());
             }
 
-            return this;
-        }
-        
-        public Flow<TSubj> CheckDiscard<TOther>(Func<TSubj, Flow<TOther>> binder) where TOther : class
-        {
-            if (HasValue())
-            {
-                var result = binder(Value!);
-
-                return result.HasValue() ? this : Err(result.Error!, Logger);
-            }
-
-            return this;
-        }
-        
-        public Flow<TSubj> WithSideEffect(Action<TSubj> action)
-        {
-            if (HasValue())
-            {
-                action(Value!);
-            }
-
-            return this;
+            return subj;
         }
 
-        public Flow<TSubj> WithSideEffect(Action action)
+        public static Flow<TSubj> WithSideEffect<TSubj>(this Flow<TSubj> subj, Action action) where TSubj : class
         {
-            if (HasValue())
+            if (subj.IsVal)
             {
                 action();
             }
 
-            return this;
+            return subj;
         }
         
-        public Flow<TRes> Bind<TRes>(Func<TSubj, Flow<TRes>> binder)
+        public static Flow<TRes> Bind<TSubj, TRes>(this Flow<TSubj> subj, Func<TSubj, Flow<TRes>> binder)
+            where TSubj : class
             where TRes : class
         {
-            if (HasValue())
+            if (subj.IsVal)
             {
-                return binder(Value!);
+                return binder(subj.UnwrapVal());
             }
             else
             {
-                return new Flow<TRes>(Logger, Error ?? "Unexpected error");
+                return new(subj.UnwrapErr());
             }
         }
 
-        public Flow<TRes> TryMap<TRes, TE1>(Func<TSubj, TRes> mapper)
+        public static Flow<TRes> TryMap<TSubj, TRes, TE1>(this Flow<TSubj> subj, Func<TSubj, TRes> mapper, Func<TE1, string> exToString)
+            where TSubj : class
             where TRes : class
             where TE1 : Exception
         {
             try
             {
-                return HasValue()
-                    ? new Flow<TRes>(Logger, mapper(Value!), null)
-                    : new Flow<TRes>(Logger, Error ?? "Unexpected error");
+                return subj.IsVal
+                    ? Flows.Val(mapper(subj.UnwrapVal()))
+                    : new (subj.UnwrapErr());
             }
             catch (TE1 ex)
             {
-                return new Flow<TRes>(Logger, ex.Message);
+                return new(exToString(ex));
             }
         }
 
-        public Flow<TSubj> Log(string msg)
+        public static Flow<TSubj> LogOk<TSubj>(this Flow<TSubj> subj, ILog logger, string msg) where TSubj : class
         {
-            if (HasValue())
+            if (subj.IsVal)
             {
-                Logger.Log(msg);
+                logger.Log(msg);
             }
 
-            return this;
+            return subj;
         }
-
-        public Flow<TSubj> LogIf(Func<TSubj, bool> condition, string msg)
+        
+        public static Flow<TSubj> LogOk<TSubj>(this Flow<TSubj> subj, ILog logger, Func<TSubj, string> msg) where TSubj : class
         {
-            if (HasValue() && condition(Value!))
+            if (subj.IsVal)
             {
-                Logger.Log(msg);
+                logger.Log(msg(subj.UnwrapVal()));
             }
 
-            return this;
+            return subj;
         }
 
-        public Flow<TSubj> Check(Func<TSubj, bool> predicate, Func<TSubj, string> error)
+        public static Flow<TSubj> LogIf<TSubj>(this Flow<TSubj> subj, ILog logger, Func<TSubj, bool> condition, string msg) where TSubj : class
         {
-            if (HasValue())
+            if (subj.IsVal && condition(subj.UnwrapVal()))
             {
-                if (predicate(Value!))
-                {
-                    return this;
-                }
-                else
-                {
-                    return new Flow<TSubj>(Logger, Error ?? error(Value!));
-                }
+                logger.Log(msg);
+            }
+
+            return subj;
+        }
+
+        public static Flow<TSubj> Check<TSubj>(this Flow<TSubj> subj, Func<TSubj, bool> predicate, Func<TSubj, string> error) where TSubj : class
+        {
+            if (subj.IsVal)
+            {
+                return predicate(subj.UnwrapVal()) ? subj : new(error(subj.UnwrapVal()));
             }
             else
             {
-                return this;
+                return subj;
             }
         }
-
-        public TSubj Unwrap()
+        
+        public static Flow<TRes> MapOr<TSubj, TRes>(this Flow<TSubj> subj, Func<TSubj, TRes?> mapper, string error)
+            where TSubj : class
+            where TRes : class
         {
-            if (HasValue())
+            if (subj.IsVal && mapper(subj.UnwrapVal()) is { } newValue)
             {
-                return Value!;
+                return Flows.Val(newValue);
             }
             else
             {
-                throw new NullReferenceException();
+                return new (subj.IsErr ? subj.UnwrapErr() : error);
             }
+        }
+
+        public static Flow<TRes> Map<TSubj, TRes>(this Flow<TSubj> subj, Func<TSubj, TRes> mapper)
+            where TSubj : class
+            where TRes : class
+        {
+            return subj.IsVal
+                ? Flows.Val(mapper(subj.UnwrapVal()))
+                : new (subj.UnwrapErr());
+        }
+        
+        public static Flow<TSubj> CheckDiscardIf<TSubj, TOther>(this Flow<TSubj> subj, Func<TSubj, bool> condition, Func<TSubj, Flow<TOther>> binder) 
+            where TSubj : class
+            where TOther : class
+        {
+            if (!subj.IsVal || !condition(subj.UnwrapVal())) return subj;
+            
+            var result = binder(subj.UnwrapVal());
+
+            return result.IsVal ? subj : new (result.UnwrapErr());
+        }
+        
+        // AKA BindErr
+        public static Flow<TSubj> CheckDiscard<TSubj, TOther>(this Flow<TSubj> subj, Func<TSubj, Flow<TOther>> binder) 
+            where TSubj : class
+            where TOther : class
+        {
+            if (!subj.IsVal) return subj;
+            
+            var result = binder(subj.UnwrapVal());
+
+            return result.IsVal ? subj : new(result.UnwrapErr());
+        }
+        
+        public static Flow<TSubj> Finally<TSubj>(this Flow<TSubj> subj, Action action) where TSubj : class
+        {
+            action();
+            return subj;
+        }
+        
+        public static bool LogErrorIfAny<TSubj>(this Flow<TSubj> subj, ILog logger) where TSubj : class
+        {
+            if (!subj.IsErr) return false;
+            
+            logger.Error(subj.UnwrapErr());
+
+            return true;
+        }
+    }
+    
+    public sealed class Flow<TSubj> : IDisposable
+        where TSubj : class
+    {
+        private readonly TSubj? _value;
+        private readonly string? _error;
+        public bool IsErr => _error != null;
+        public bool IsVal => _value != null;
+
+        // This allows to construct error Flow w/o naming its type explicitly
+        public Flow(string error)
+        {
+            _value = null;
+            _error = error;
+        }
+
+        private Flow(TSubj? value, string? error)
+        {
+            _value = value;
+            _error = error;
+        }
+
+        public static Flow<TSubj> Val(TSubj value)
+        {
+            return new Flow<TSubj>(value, null);
+        }
+        
+        public static Flow<TSubj> Err(string error)
+        {
+            return new Flow<TSubj>(null, error);
+        }
+
+        public TSubj UnwrapVal()
+        {
+            return _value ?? throw new NullReferenceException();
         }
 
         public string UnwrapErr()
         {
-            if (Error != null)
-            {
-                return Error;
-            }
-            else
-            {
-                throw new NullReferenceException();
-            }
-        }
-
-        public bool LogErrorIfAny()
-        {
-            if (Error != null)
-            {
-                Logger.Error(Error);
-
-                return true;
-            }
-
-            return false;
+            return _error ?? throw new NullReferenceException();
         }
 
         public void Dispose()
         {
-            if (Value is IDisposable disposable)
+            if (_value is IDisposable disposable)
             {
                 disposable.Dispose();
             }
-        }
-
-        public bool IsError()
-        {
-            return Error != null;
-        }
-
-        public bool HasValue()
-        {
-            return Value != null;
         }
     }
 }

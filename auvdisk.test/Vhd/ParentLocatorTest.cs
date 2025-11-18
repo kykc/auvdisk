@@ -16,7 +16,7 @@ namespace auvdisk.test.Vhd
                 // Relative with dot
                 Assert.Throws<IOException>(() => new DiscUtils.Vhd.Disk("./testdata/test_gpt_child.vhd", FileAccess.Read));
                 // Relative w/o dot
-                CheckChild(Flows.Ok(new DiscUtils.Vhd.Disk("testdata/test_gpt_child.vhd", FileAccess.Read), logger));
+                CheckChild(Flows.Val(new DiscUtils.Vhd.Disk("testdata/test_gpt_child.vhd", FileAccess.Read)));
                 // Absolute
                 Assert.Throws<IOException>(() => new DiscUtils.Vhd.Disk(Path.Join(Directory.GetCurrentDirectory(), "testdata", "test_gpt_child.vhd"), FileAccess.Read));
             }
@@ -26,7 +26,7 @@ namespace auvdisk.test.Vhd
                 // Relative with dot
                 Assert.Throws<IOException>(() => new DiscUtils.Vhd.Disk(@".\testdata\test_gpt_child.vhd", FileAccess.Read));
                 // Relative w/o dot
-                CheckChild(Flows.Ok(new DiscUtils.Vhd.Disk(@"testdata\test_gpt_child.vhd", FileAccess.Read), logger));
+                CheckChild(Flows.Val(new DiscUtils.Vhd.Disk(@"testdata\test_gpt_child.vhd", FileAccess.Read)));
                 // Absolute
                 Assert.Throws<IOException>(() => new DiscUtils.Vhd.Disk(Path.Join(Directory.GetCurrentDirectory(), @"testdata\test_gpt_child.vhd"), FileAccess.Read));
             }
@@ -49,7 +49,7 @@ namespace auvdisk.test.Vhd
             foreach (var disk in disks)
             {
                 var maybeVhd = disk as DiscUtils.Vhd.Disk;
-                CheckChild(Flows.Ok(None.Value, logger).MapOr(_ => maybeVhd, "Disk object is null"));
+                CheckChild(Flows.Val(None.Value).MapOr(_ => maybeVhd, "Disk object is null"));
             }
             
         }
@@ -67,8 +67,8 @@ namespace auvdisk.test.Vhd
         private static void CheckChild(Flow<DiscUtils.Vhd.Disk> disk)
         {
             Assert.NotNull(disk);
-            Assert.False(disk.IsError());
-            Assert.Equal(2, disk.Unwrap().Layers.Count());
+            Assert.False(disk.IsErr);
+            Assert.Equal(2, disk.UnwrapVal().Layers.Count());
         }
     }
 }

@@ -39,7 +39,7 @@ public class VhdMergeTest : IDisposable
         
         using (var result = DiskImage.Vhd.Merge.PerformMerge(parentPath, childPath, targetPath, logger))
         {
-            var resultDisk = result.Unwrap();
+            var resultDisk = result.UnwrapVal();
 
             Assert.Single(resultDisk.Layers);
 
@@ -53,19 +53,19 @@ public class VhdMergeTest : IDisposable
 
         using (var result = DiskImage.Vhd.Merge.PerformMerge(parentPath, childPath, targetPath, logger))
         {
-            Assert.Throws<NullReferenceException>(() => result.Unwrap());
+            Assert.Throws<NullReferenceException>(() => result.UnwrapVal());
             Assert.Equal($"Target image {targetPath} already exists", result.UnwrapErr());
         }
 
         using (var result = DiskImage.Vhd.Merge.PerformMerge(parentPath + "bork", childPath, targetPath, logger))
         {
-            Assert.Throws<NullReferenceException>(() => result.Unwrap());
+            Assert.Throws<NullReferenceException>(() => result.UnwrapVal());
             Assert.Equal($"{parentPath}bork does not exist", result.UnwrapErr());
         }
 
         using (var result = DiskImage.Vhd.Merge.PerformMerge(parentPath, childPath + "bork", targetPath, logger))
         {
-            Assert.Throws<NullReferenceException>(() => result.Unwrap());
+            Assert.Throws<NullReferenceException>(() => result.UnwrapVal());
             Assert.Equal($"{childPath}bork does not exist", result.UnwrapErr());
         }
     }

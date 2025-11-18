@@ -76,11 +76,11 @@ namespace auvdisk.Fs.Ntfs
                     return progressData;
                 });
 
-                return Flows.Ok(None.Value, logger);
+                return Flows.Val(None.Value);
             }
             catch (Exception e)
             {
-                return new($"Failed to clone NTFS volume with error: {e.Message}", logger);
+                return new($"Failed to clone NTFS volume with error: {e.Message}");
             }
         }
         

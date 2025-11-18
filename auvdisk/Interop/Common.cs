@@ -100,9 +100,9 @@ namespace auvdisk.Interop
                 {
                     var fsListResult = Factory.MakeFsListFromAvailableVolumes(logger, true);
 
-                    if (fsListResult.IsError())
+                    if (fsListResult.IsErr)
                     {
-                        fsListResult.LogErrorIfAny();
+                        fsListResult.LogErrorIfAny(logger);
                         return 1;
                     }
                 }
@@ -124,28 +124,28 @@ namespace auvdisk.Interop
                 
                 var result = DiskpartScriptMananger.GenerateSetidScript(opts.PartitionType, opts.DiskNumber, opts.PartitionNumber, logger);
 
-                if (result.IsError())
+                if (result.IsErr)
                 {
-                    result.LogErrorIfAny();
+                    result.LogErrorIfAny(logger);
                     return 1;
                 }
                 else
                 {
-                    logger.Log($"[green]{result.Unwrap()}[/]");
+                    logger.Log($"[green]{result.UnwrapVal()}[/]");
                     
                     if (opts.Yes || AnsiConsole.Confirm("Execute generated script?"))
                     {
-                        var executeResult = DiskpartScriptMananger.Execute(result.Unwrap(), logger);
+                        var executeResult = DiskpartScriptMananger.Execute(result.UnwrapVal(), logger);
 
-                        if (executeResult.IsError())
+                        if (executeResult.IsErr)
                         {
-                            executeResult.LogErrorIfAny();
+                            executeResult.LogErrorIfAny(logger);
 
                             return 1;
                         }
                         else
                         {
-                            logger.Log(executeResult.Unwrap().StandardOutput);
+                            logger.Log(executeResult.UnwrapVal().StandardOutput);
                         }
                     }
                     
@@ -168,13 +168,13 @@ namespace auvdisk.Interop
                     return null;
                 };
                 
-                var result = Flows.Ok(rawOpts, logger)
-                    .WithCheckedTargetAvailable((opts) => opts.Target)
+                var result = Flows.Val(rawOpts)
+                    .WithCheckedTargetAvailable((opts) => opts.Target, logger)
                     .WithCheckedTargetExtension(opts => opts.Target, opts => opts.Vhdx ? ".vhdx" : ".vhd")
                     .MapOr(NormalizeDriveLetter, "Invalid source volume path")
                     .Bind(opts => Interop.Win32.Util.CloneVolumeToVirtualDiskWithVss(opts.Source, opts.Target, logger, opts.Fixed, opts.ZeroFill, opts.Bootable, opts.Vhdx));
                 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
 
             handlers.Register((MountVhdX rawOpts) =>
@@ -187,7 +187,7 @@ namespace auvdisk.Interop
                 {
                     var result = Interop.Win32.VhdMounter.Mount(rawOpts.Target, logger);
                     
-                    return result.LogErrorIfAny() ? 1 : 0;
+                    return result.LogErrorIfAny(logger) ? 1 : 0;
                 }
             });
 
@@ -196,14 +196,14 @@ namespace auvdisk.Interop
             {
                 var result = Interop.Win32.DriveLetterManager.AddDriveLetterToVolume(rawOpts.Volume, rawOpts.Letter.First(), logger);
                 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
 
             handlers.Register((UnassignVolumeLetter rawOpts) =>
             {
                 var result = Interop.Win32.DriveLetterManager.RemoveDriveLetterFromVolume(rawOpts.Letter.First(), logger);
                 
-                return result.LogErrorIfAny() ? 1 : 0;
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
 #pragma warning restore CA1416
 #endif

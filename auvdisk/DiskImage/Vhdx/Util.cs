@@ -13,7 +13,7 @@ public static class Util
         }
         catch (Exception e)
         {
-            return Flows.Err<DiscUtils.Vhdx.Disk>(e.Message, logger);
+            return Flows.Err<DiscUtils.Vhdx.Disk>(e.Message);
         }
             
         if (!Fs.Util.HandleResizeFile(path, size, forceZeroFill, logger))
@@ -26,7 +26,7 @@ public static class Util
         
         var disk = DiscUtils.Vhdx.Disk.InitializeFixed(targetStream, DiscUtils.Streams.Ownership.Dispose, (long)size)!;
 
-        return Flows.Ok(disk, logger);
+        return Flows.Val(disk);
     }
 
     public static Flow<DiscUtils.Vhdx.Disk> CreateDynamic(string path, ulong size, Log.ILog logger)
@@ -35,6 +35,6 @@ public static class Util
 
         var disk = DiscUtils.Vhdx.Disk.InitializeDynamic(targetStream, DiscUtils.Streams.Ownership.Dispose, (long)size)!;
         
-        return Flows.Ok(disk, logger);
+        return Flows.Val(disk);
     }
 }

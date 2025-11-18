@@ -8,7 +8,6 @@ using DiskLayerModel = (string FullPath, System.Guid? UniqueId, bool IsSparse, b
 namespace auvdisk.DiskImage.Vhd
 {
     using DiskMergeModel = (DiskLayerModel Parent, DiskLayerModel Child, System.Guid? PassedParentId);
-    using DiskMergeTask = (string Parent, string Child);
 
     public static class Merge
     {
@@ -16,15 +15,15 @@ namespace auvdisk.DiskImage.Vhd
         {
             bool skipInteractivity = !Program.IsInteractive;
             
-            return Flow<Value<DiskMergeTask>>
-                .Ok((parent, child).Some(), logger)
-                .Check((t) => File.Exists(t.Val.Parent), (t) => $"{t.Val.Parent} does not exist")
-                .Check((t) => File.Exists(t.Val.Child), (t) => $"{t.Val.Child} does not exist")
-                .Bind((t) => Util.OpenDiskWithDu(t.Val.Child, logger))
+            return Flows
+                .Val(new {parent, child})
+                .Check((t) => File.Exists(t.parent), (t) => $"{t.parent} does not exist")
+                .Check((t) => File.Exists(t.child), (t) => $"{t.child} does not exist")
+                .Bind((t) => Util.OpenDiskWithDu(t.child, logger))
                 .MapDispose((disk) => disk.Layers.Select(LayerToModel).ToList())
                 .Check(CheckHasTwoLayers,
                     (_) => "Target image should consist of exactly 2 layers (fixed parent and sparse child)")
-                .Map<Value<DiskMergeModel>>((layers) => (layers[1], layers[0], Util.ReadVhdFooterSafe(parent)?.UniqueId).Some())
+                .Map(MakeModel)
                 .Check(CheckFixedParentAndSingleChild,
                     (_) => "Invalid image layer configuration. Parent must be fixed, child must be sparse")
                 .Check(CheckParentIdsArePresent, (_) => "Failed to obtain parent image unique id")
@@ -35,7 +34,7 @@ namespace auvdisk.DiskImage.Vhd
                 .WithSideEffect(DoImageCopyIfNeeded)
                 .Check(ConfirmMergeIntoParentIfNeeded, (_) => "Exiting")
                 .Bind(PerformMergeAction);
-
+            
             Flow<DiscUtils.Vhd.Disk> PerformMergeAction(Value<DiskMergeModel> _)
             {
                 var timer = new System.Diagnostics.Stopwatch();
@@ -69,7 +68,12 @@ namespace auvdisk.DiskImage.Vhd
                 fileStream.Dispose();
 
                 return Util.OpenDiskWithDu(target, logger);
-            };
+            }
+            
+            Value<DiskMergeModel> MakeModel(List<DiskLayerModel> layers)
+            {
+                return (layers.Skip(1).First(), layers.First(), Util.ReadVhdFooterSafe(parent)?.UniqueId).RefVal();
+            }
 
             DiskLayerModel LayerToModel(VirtualDiskLayer layer) =>
                 (layer.FullPath, Util.ReadVhdFooterSafe(layer.FullPath)?.UniqueId, layer.IsSparse, layer.NeedsParent);

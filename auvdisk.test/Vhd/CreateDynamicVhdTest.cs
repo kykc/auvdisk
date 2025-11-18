@@ -19,8 +19,8 @@ namespace auvdisk.test.Vhd
             using var disk = DiskImage.Vhd.Util.OpenDiskWithDu(_targetPath, logger);
             
             Assert.NotNull(disk);
-            Assert.False(disk.IsError());
-            Assert.Single(disk.Unwrap().Layers);
+            Assert.False(disk.IsErr);
+            Assert.Single(disk.UnwrapVal().Layers);
             Assert.True(File.Exists(_targetPath));
             Assert.True(Util.IsValidVhd(_targetPath));
         }

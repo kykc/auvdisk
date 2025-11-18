@@ -38,11 +38,11 @@ namespace auvdisk.Interop.Win32.Vss
         {
             try
             {
-                return Flow<Backup>.Ok(new Backup(volumeName), logger);
+                return Flow<Backup>.Val(new Backup(volumeName));
             }
             catch (Exception e)
             {
-                return new(e.Message, logger);
+                return new(e.Message);
             }
         }
 

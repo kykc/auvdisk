@@ -184,7 +184,7 @@ namespace auvdisk.Interop.Win32
                         v.hardwareModel,
                         v.diskIdx?.ToString()));
 
-                return Flow<IEnumerable<PhysicalVolumeInfo>>.Ok(volumes.ToList(), logger);
+                return Flow<IEnumerable<PhysicalVolumeInfo>>.Val(volumes.ToList());
             }
             catch (ManagementException ex)
             {
@@ -195,13 +195,13 @@ namespace auvdisk.Interop.Win32
                     logger.Warning("--> Hint: Please run this application as Administrator.");
                 }
 
-                return Flow<IEnumerable<PhysicalVolumeInfo>>.Err(ex.Message, logger);
+                return Flow<IEnumerable<PhysicalVolumeInfo>>.Err(ex.Message);
             }
             catch (Exception ex)
             {
                 logger.Error($"An unexpected error occurred: {ex.Message}");
 
-                return Flow<IEnumerable<PhysicalVolumeInfo>>.Err(ex.Message, logger);
+                return Flow<IEnumerable<PhysicalVolumeInfo>>.Err(ex.Message);
             }
         }
 
@@ -223,7 +223,7 @@ namespace auvdisk.Interop.Win32
                 return efiVolume
                     .Concat(dataVolume)
                     .Convert(x => new {efi = x.Item1, data = x.Item2, efiTargetLetter})
-                    .Flow($"Failed to detect/find EFI/data volumes", logger);
+                    .Flow($"Failed to detect/find EFI/data volumes");
             };
             
             Vss.Backup? vss = null;
@@ -239,11 +239,11 @@ namespace auvdisk.Interop.Win32
                     {
                         snapStream = new BlockDeviceUnbufferedStream(vss.Root);
                         logger.Log($"Created snapshot {vss.Root} for volume {volume}");
-                        return Flows.Ok(None.Value, logger);
+                        return Flows.Val(None.Value);
                     }
                     catch (Exception e)
                     {
-                        return new($"Failed to open {vss.Root} stream with error: {e.Message}", logger);
+                        return new($"Failed to open {vss.Root} stream with error: {e.Message}");
                     }
                 })
                 .Bind(_ => // Create VHD/VHDx file, prepare target partitions

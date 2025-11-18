@@ -36,19 +36,19 @@ namespace auvdisk.test.Vhd
             var disk = auvdisk.DiskImage.Vhd.Util.CreateFixedVhd(_targetCreateFast, size, logger, false);
 
             Assert.NotNull(disk);
-            Assert.False(disk.IsError());
-            Assert.Equal(size, disk.Unwrap().CapacityInBytes);
+            Assert.False(disk.IsErr);
+            Assert.Equal(size, disk.UnwrapVal().CapacityInBytes);
             Assert.True(Util.IsValidVhd(_targetCreateFast));
 
-            WriteTestData(new VirtualHardDisk(disk.Unwrap().Path), size, logger);
+            WriteTestData(new VirtualHardDisk(disk.UnwrapVal().Path), size, logger);
 
             ulong newsize = 1024UL * 1024UL * 1024UL * 15; // 15 GiB
 
             var resizedDisk = auvdisk.DiskImage.Vhd.Util.ResizeFixedVhd(_targetCreateFast, newsize, logger, false);
 
             Assert.NotNull(resizedDisk);
-            Assert.False(resizedDisk.IsError());
-            Assert.Equal(newsize, resizedDisk.Unwrap().CapacityInBytes);
+            Assert.False(resizedDisk.IsErr);
+            Assert.Equal(newsize, resizedDisk.UnwrapVal().CapacityInBytes);
             Assert.True(Util.IsValidVhd(_targetCreateFast));
 
             CheckTestData(_targetCreateFast, logger);
@@ -66,18 +66,18 @@ namespace auvdisk.test.Vhd
             var disk = auvdisk.DiskImage.Vhd.Util.CreateFixedVhd(_targetCreateZeroFill, size, logger, true);
 
             Assert.NotNull(disk);
-            Assert.False(disk.IsError());
-            Assert.Equal(size, disk.Unwrap().CapacityInBytes);
+            Assert.False(disk.IsErr);
+            Assert.Equal(size, disk.UnwrapVal().CapacityInBytes);
 
-            WriteTestData(new VirtualHardDisk(disk.Unwrap().Path), size, logger);
+            WriteTestData(new VirtualHardDisk(disk.UnwrapVal().Path), size, logger);
 
             ulong newsize = 1024UL * 1024UL * 1024UL; // 1 GiB
 
             var resizedDisk = auvdisk.DiskImage.Vhd.Util.ResizeFixedVhd(_targetCreateZeroFill, newsize, logger, true);
 
             Assert.NotNull(resizedDisk);
-            Assert.False(resizedDisk.IsError());
-            Assert.Equal(newsize, resizedDisk.Unwrap().CapacityInBytes);
+            Assert.False(resizedDisk.IsErr);
+            Assert.Equal(newsize, resizedDisk.UnwrapVal().CapacityInBytes);
 
             CheckTestData(_targetCreateZeroFill, logger);
         }

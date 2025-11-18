@@ -37,10 +37,10 @@ public static class Util
 
         if (tokens.Any(x => !x.HasValue))
         {
-            return new($"Failed to parse layout <{subj}>", logger);
+            return new($"Failed to parse layout <{subj}>");
         }
 
-        return Flows.Ok(tokens.Select(x => x!.Value).ToArray(), logger);
+        return Flows.Val(tokens.Select(x => x!.Value).ToArray());
     }
     
     public static void InitializeDisk(DiscUtils.VirtualDisk disk, long firstUsableLba, List<GuidPartitionEntry> partitionEntries)
@@ -63,11 +63,11 @@ public static class Util
                     using var duDisk = DiscUtils.VirtualDisk.OpenDisk(targetPath, FileAccess.ReadWrite);
                     InitializeDisk(duDisk, 2048L, layout);
 
-                    return Flows.Ok(targetPath, logger);
+                    return Flows.Val(targetPath);
                 }
                 catch (Exception ex)
                 {
-                    return new(ex.Message, logger);
+                    return new(ex.Message);
                 }
             });
     }
@@ -93,24 +93,24 @@ public static class Util
 
         if (partsInfo.Count == 0)
         {
-            return new("Empty partition list", logger);
+            return new("Empty partition list");
         }
         
         if (partsInfo.Take(partsInfo.Count - 1).Any(x => x.LengthInBytes == 0))
         {
-            return new("Partition size cannot be zero", logger);
+            return new("Partition size cannot be zero");
         }
 
         var totalAllocated = partsInfo.Select(x => x.LengthInBytes).Aggregate((x, y) => x + y) + overhead + task.OffsetLba * task.LbaSize;
 
         if (totalAllocated > task.DiskLengthInBytes)
         {
-            return new("Total length of requested partitions exceeds disk size", logger);
+            return new("Total length of requested partitions exceeds disk size");
         }
 
         if (partsInfo.Any(x => x.LengthInBytes % task.LbaSize > 0))
         {
-            return new($"Partition size must be a multiple of LbaSize {task.LbaSize}", logger);
+            return new($"Partition size must be a multiple of LbaSize {task.LbaSize}");
         }
         
         var result = new List<GuidPartitionEntry>();
@@ -148,6 +148,6 @@ public static class Util
             LastLBA = lastPartitionLastLba
         });
 
-        return Flows.Ok(result, logger);
+        return Flows.Val(result);
     }
 }

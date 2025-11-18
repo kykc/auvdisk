@@ -30,9 +30,9 @@ namespace auvdisk.DiskImage
 
                 var createLayoutResult = Util.CreateVdiskWithGptLayout(target, efiBootSize, (ulong)sourceLength, logger, zeroFill);
 
-                if (createLayoutResult.IsError())
+                if (createLayoutResult.IsErr)
                 {
-                    return new(createLayoutResult.UnwrapErr(), logger);
+                    return new(createLayoutResult.UnwrapErr());
                 }
 
                 logger.Log("Opening VHD using DiscUtils");
@@ -53,13 +53,13 @@ namespace auvdisk.DiskImage
                 
                 logger.Log("It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
                 
-                return Flows.Ok(new VhdFileInfo(disk, target, VirtualHardDiskType.Fixed), logger);
+                return Flows.Val(new VhdFileInfo(disk, target, VirtualHardDiskType.Fixed));
             };
 
-            return Flow<None>.Ok(None.Value, logger)
-                .WithCheckedSourceExists(_ => source)
-                .WithCheckedFsType(_ => "", _ => source, _ => verbose) // this will effectively check that filesystem was recognized and will accept any type of FS
-                .WithCheckedTargetAvailable(_ => target)
+            return Flow<None>.Val(None.Value)
+                .WithCheckedSourceExists(_ => source, logger)
+                .WithCheckedFsType(_ => "", _ => source, _ => verbose, logger) // this will effectively check that filesystem was recognized and will accept any type of FS
+                .WithCheckedTargetAvailable(_ => target, logger)
                 .Bind(action);
         }
 
@@ -71,12 +71,12 @@ namespace auvdisk.DiskImage
 
                 var diskResult = Vhd.Util.OpenDiskWithDu(source, logger);
 
-                if (diskResult.IsError())
+                if (diskResult.IsErr)
                 {
-                    return new(diskResult.UnwrapErr(), logger);
+                    return new(diskResult.UnwrapErr());
                 }
                 
-                using (var disk = diskResult.Unwrap())
+                using (var disk = diskResult.UnwrapVal())
                 {
                     var dynamicOrDifferencing =
                         disk.Layers.Any((l) => l.IsSparse || l.NeedsParent) || disk.Layers.Count() > 1;
@@ -86,7 +86,7 @@ namespace auvdisk.DiskImage
                         if (Program.IsInteractive && !AnsiConsole.Confirm(
                                 "[yellow]WARNING: Source VHD is differencing or dynamic disk, this was never properly tested, proceed?[/]"))
                         {
-                            return new("Cancelled by user", logger);
+                            return new("Cancelled by user");
                         }
                         else
                         {
@@ -107,7 +107,7 @@ namespace auvdisk.DiskImage
 
                     if (parts.Count == 0)
                     {
-                        return new("Partition not found", logger);
+                        return new("Partition not found");
                     }
 
                     var selectedPart = parts.First();
@@ -125,13 +125,13 @@ namespace auvdisk.DiskImage
 
                 logger.Log("It might be a good idea to run `e2fsck -f` and `resize2fs` on the target");
 
-                return Flows.Ok(none, logger);
+                return Flows.Val(none);
             };
 
-            return Flow<None>.Ok(None.Value, logger)
-                .WithCheckedSourceExists(_ => source)
-                .WithCheckedDiskType(_ => "VHD", _ => source, _ => verbose)
-                .WithCheckedTargetAvailable(_ => target)
+            return Flow<None>.Val(None.Value)
+                .WithCheckedSourceExists(_ => source, logger)
+                .WithCheckedDiskType(_ => "VHD", _ => source, _ => verbose, logger)
+                .WithCheckedTargetAvailable(_ => target, logger)
                 .Bind(action);
         }
 
@@ -155,12 +155,12 @@ namespace auvdisk.DiskImage
                     ? Vhdx.Util.CreateFixed(target, (ulong)vhd.Capacity, logger, forceZeroFill)
                     : Vhdx.Util.CreateDynamic(target, (ulong)vhd.Capacity, logger);
 
-                if (vhdxResult.IsError())
+                if (vhdxResult.IsErr)
                 {
-                    return new("Failed to create VHDx", logger);
+                    return new("Failed to create VHDx");
                 }
 
-                using var vhdx = vhdxResult.Unwrap();
+                using var vhdx = vhdxResult.UnwrapVal();
                 
                 // This is needed in order to efficiently handle dynamic source disk. Then it will copy only allocated parts.
                 var toCopyLength = vhd.Content.Extents.Select(x => x.Length).Sum();
@@ -179,13 +179,13 @@ namespace auvdisk.DiskImage
                 
                 vhdx.Content.Flush();
 
-                return Flows.Ok(none, logger);
+                return Flows.Val(none);
             };
 
-            return Flow<None>.Ok(None.Value, logger)
-                .WithCheckedSourceExists(_ => source)
-                .WithCheckedDiskType(_ => "VHD", _ => source, _ => verbose)
-                .WithCheckedTargetAvailable(_ => target)
+            return Flow<None>.Val(None.Value)
+                .WithCheckedSourceExists(_ => source, logger)
+                .WithCheckedDiskType(_ => "VHD", _ => source, _ => verbose, logger)
+                .WithCheckedTargetAvailable(_ => target, logger)
                 .Bind(action);
         }
 
@@ -209,9 +209,9 @@ namespace auvdisk.DiskImage
                     ? Vhd.Util.CreateFixedVhd(target, (ulong)vhdx.Capacity, logger, forceZeroFill)
                     : Vhd.Util.CreateDynamicVhd(target, (ulong)vhdx.Capacity, logger);
 
-                if (createResult.IsError())
+                if (createResult.IsErr)
                 {
-                    return new(createResult.UnwrapErr(), logger);
+                    return new(createResult.UnwrapErr());
                 }
 
                 using var vhd = VirtualDisk.OpenDisk(target, "vhd", FileAccess.ReadWrite, "", "");
@@ -233,13 +233,13 @@ namespace auvdisk.DiskImage
                 
                 vhd.Content.Flush();
 
-                return Flows.Ok(VhdFileInfo.Make(vhd, target, fixedVhd.Value ? VirtualHardDiskType.Fixed : VirtualHardDiskType.Dynamic)!, logger);
+                return Flows.Val(VhdFileInfo.Make(vhd, target, fixedVhd.Value ? VirtualHardDiskType.Fixed : VirtualHardDiskType.Dynamic)!);
             };
 
-            return Flow<None>.Ok(None.Value, logger)
-                .WithCheckedSourceExists(_ => source)
-                .WithCheckedDiskType(_ => "VHDX", _ => source, _ => verbose)
-                .WithCheckedTargetAvailable(_ => target)
+            return Flow<None>.Val(None.Value)
+                .WithCheckedSourceExists(_ => source, logger)
+                .WithCheckedDiskType(_ => "VHDX", _ => source, _ => verbose, logger)
+                .WithCheckedTargetAvailable(_ => target, logger)
                 .Bind(action);
         }
 
@@ -261,10 +261,10 @@ namespace auvdisk.DiskImage
                 return none;
             };
 
-            return Flow<None>.Ok(None.Value, logger)
-                .WithCheckedSourceExists(_ => source)
-                .WithCheckedDiskType(_ => "qcow2", _ => source, _ => verbose)
-                .WithCheckedTargetAvailable(_ => target)
+            return Flow<None>.Val(None.Value)
+                .WithCheckedSourceExists(_ => source, logger)
+                .WithCheckedDiskType(_ => "qcow2", _ => source, _ => verbose, logger)
+                .WithCheckedTargetAvailable(_ => target, logger)
                 .Map(action);
         }
 
@@ -293,9 +293,9 @@ namespace auvdisk.DiskImage
                 return none;
             };
 
-            return Flow<None>.Ok(None.Value, logger)
-                .WithCheckedSourceExists(_ => source)
-                .WithCheckedDiskType(_ => "RAW", _ => source, _ => verbose)
+            return Flow<None>.Val(None.Value)
+                .WithCheckedSourceExists(_ => source, logger)
+                .WithCheckedDiskType(_ => "RAW", _ => source, _ => verbose, logger)
                 .Map(action);
         }
 
@@ -317,10 +317,10 @@ namespace auvdisk.DiskImage
                 return none;
             };
 
-            return Flow<None>.Ok(None.Value, logger)
-                .WithCheckedSourceExists(_ => source)
-                .WithCheckedDiskType(_ => "VHD", _ => source, _ => verbose)
-                .WithCheckedVhdType(_ => source, _ => VirtualHardDiskType.Fixed)
+            return Flow<None>.Val(None.Value)
+                .WithCheckedSourceExists(_ => source, logger)
+                .WithCheckedDiskType(_ => "VHD", _ => source, _ => verbose, logger)
+                .WithCheckedVhdType(_ => source, _ => VirtualHardDiskType.Fixed, logger)
                 .Map(action);
         }
     }
