@@ -64,7 +64,15 @@ namespace auvdisk.DiskImage.Vhd
             }
         }
 
-        public ulong MergeChangedSectorsIntoFixedParent(FileStream target, ILog logger)
+        /*
+         * CAUTION: this doesn't handle passed target stream in any "smart" way.
+         * It treats it as if it was a continuous stream of opened fixed VHD
+         * Nevertheless, it can be used for dynamic/differencing disks if
+         * someone provides you with "abstracted" stream which allows sequential
+         * access of the emulated virtual disk contents. DiscUtils VirtualDisk does
+         * exactly that, for example.
+         */
+        public ulong MergeChangedSectorsIntoParent(Stream target, ILog logger)
         {
             ulong sectorsPerBlock = _dynamicHeader.BlockSize / BytesPerDiskSector;
             int blockBitmapSectorCount = (int)Math.Ceiling((double)sectorsPerBlock / (BytesPerDiskSector * 8));

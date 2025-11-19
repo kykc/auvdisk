@@ -233,7 +233,7 @@ namespace auvdisk.Cli
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    [Verb("merge-vhd", HelpText = "Merge differencing VHD into parent. Only fixed parent and a single direct child pair is supported")]
+    [Verb("merge-vhd", HelpText = "Merge differencing VHD into parent. Only fixed/dynamic parent is supported")]
     class MergeVhd
     {
         [Option('p', "parent", Required = true, HelpText = "Parent VHD image")]
@@ -242,6 +242,8 @@ namespace auvdisk.Cli
         public string Child { get; set; } = "";
         [Option('t', "target", Required = true, HelpText = "Target VHD path")]
         public string Target { get; set; } = "";
+        [Option('z', "zero-fill", Required = false, Default = false, HelpText = "Explicitly zero-fill created virtual disk. Effective only if creating new fixed image.")]
+        public bool ZeroFill { get; set; } = false;
     }
     
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]

@@ -1,5 +1,8 @@
+using auvdisk.Bytes;
 using auvdisk.Extensions;
+using auvdisk.Log;
 using DiscUtils;
+using DiscUtils.Streams;
 using DiskAccessLibrary;
 
 namespace auvdisk.DiskImage;
@@ -84,6 +87,28 @@ public static class Util
 
             return result.Map(x => x as VirtualDisk);
         }
+    }
+
+    // Using extents copies only allocated data in case of dynamic VHD or other
+    // underlying type supporting dynamic allocation
+    public static void LazyCopyDiskContents(VirtualDisk source, VirtualDisk destination, ILog logger)
+    {
+        logger.Log("Calculating amount of data to be copied...");
+        var toCopyLength = source.Content.Extents.Select(x => x.Length).Sum();
+        var progressData = new StreamCopyProgressWrapper.ProgressData("Copying", toCopyLength);
+        Utils.WithProgress(logger, progressData, progress =>
+        {
+            foreach (var extent in source.Content.Extents)
+            {
+                var sourceSubstream = new SubStream(source.Content, extent.Start, extent.Length);
+                destination.Content.Seek(extent.Start, SeekOrigin.Begin);
+                StreamCopyProgressWrapper.CopyTo(sourceSubstream, destination.Content, logger, progressData, progress);
+            }
+
+            return progressData;
+        });
+                
+        destination.Content.Flush();
     }
 
     public static bool IsSuccess(this DiskProbe.ProbeResult result)

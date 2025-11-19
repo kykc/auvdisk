@@ -226,7 +226,7 @@ namespace auvdisk
             
             handlers.Register((Cli.MergeVhd opts) =>
             {
-                var result = DiskImage.Vhd.Merge.PerformMerge(opts.Parent, opts.Child, opts.Target, logger);
+                var result = DiskImage.Vhd.Merge.PerformMerge(opts.Parent, opts.Child, opts.Target, logger, opts.ZeroFill);
 
                 return result.MapDispose(x => None.Value).LogErrorIfAny(logger) ? 1 : 0;
             });

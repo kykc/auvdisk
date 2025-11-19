@@ -202,24 +202,8 @@ public class DiskImageConverterTest : IDisposable
             using var initialVhd = DiscUtils.VirtualDisk.OpenDisk(source, "vhd", FileAccess.Read, "", "");
             using var resultVhd = DiscUtils.VirtualDisk.OpenDisk(targetBack, "vhd", FileAccess.Read, "", "");
 
-            if (fixedTarget)
-            {
-                Assert.Equal(TestUtil.CalcSha256Hash(initialVhd.Content), TestUtil.CalcSha256Hash(resultVhd.Content));
-            }
-            else
-            {
-                // This is not a good check, actually. It would be cool to do full Content checking here as well, but it takes ~30secs
-                Assert.Equal(initialVhd.Content.Extents.Count(), resultVhd.Content.Extents.Count());
-                foreach (var extents in initialVhd.Content.Extents.Zip(resultVhd.Content.Extents))
-                {
-                    Assert.Equal(extents.First.Start, extents.Second.Start);
-                    Assert.Equal(extents.First.Length, extents.Second.Length);
-                    var initialSub = new SubStream(initialVhd.Content, extents.First.Start, extents.First.Length);
-                    var resultSub = new SubStream(resultVhd.Content, extents.Second.Start, extents.Second.Length);
-                    Assert.Equal(TestUtil.CalcSha256Hash(initialSub), TestUtil.CalcSha256Hash(resultSub));
-                }
-            }
-
+            Assert.Equal(TestUtil.LazyFastDiskHash(initialVhd), TestUtil.LazyFastDiskHash(resultVhd));
+            
             Assert.True(DiskImage.Vhd.Util.IsValidVhd(targetBack));
         };
 

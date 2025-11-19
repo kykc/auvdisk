@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using DiscUtils.Streams;
 using DiskAccessLibrary.VHD;
 using Microsoft.VisualStudio.TestPlatform.TestHost;
 
@@ -37,5 +38,43 @@ public static class TestUtil
         var sha = SHA256.Create();
         byte[] checksum = sha.ComputeHash(stream);
         return BitConverter.ToString(checksum).Replace("-", String.Empty);
+    }
+    
+    public static uint LazyFastDiskHash(DiscUtils.VirtualDisk disk)
+    {
+        var streams = disk.Content.Extents.Select(x => new SubStream(disk.Content, Ownership.None, x.Start, x.Length));
+        return CalculateAdler32(streams);
+    }
+    
+    internal static uint CalculateAdler32(IEnumerable<Stream> streams)
+    {
+        const uint modAdler = 65521;
+        
+        uint a = 1;
+        uint b = 0;
+        
+        const int bufferSize = 1024 * 1024; // 1MiB 
+        var buffer = new byte[bufferSize];
+
+        foreach (var stream in streams)
+        {
+            int bytesRead;
+            stream.Seek(0, SeekOrigin.Begin);
+
+            while ((bytesRead = stream.Read(buffer, 0, bufferSize)) > 0)
+            {
+                for (int i = 0; i < bytesRead; i++)
+                {
+                    // A is the sum of the data bytes (modulo MOD_ADLER)
+                    a = (a + buffer[i]) % modAdler;
+
+                    // B is the sum of the previous values of A (modulo MOD_ADLER)
+                    b = (b + a) % modAdler;
+                }
+            }
+        }
+
+        // The final checksum is (B * 65536) + A
+        return (b << 16) | a;
     }
 }

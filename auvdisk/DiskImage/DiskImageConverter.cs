@@ -162,22 +162,7 @@ namespace auvdisk.DiskImage
 
                 using var vhdx = vhdxResult.UnwrapVal();
                 
-                // This is needed in order to efficiently handle dynamic source disk. Then it will copy only allocated parts.
-                var toCopyLength = vhd.Content.Extents.Select(x => x.Length).Sum();
-                var progressData = new StreamCopyProgressWrapper.ProgressData("Copying", toCopyLength);
-                Utils.WithProgress(logger, progressData, progress =>
-                {
-                    foreach (var extent in vhd.Content.Extents)
-                    {
-                        var source = new SubStream(vhd.Content, extent.Start, extent.Length);
-                        vhdx.Content.Seek(extent.Start, SeekOrigin.Begin);
-                        StreamCopyProgressWrapper.CopyTo(source, vhdx.Content, logger, progressData, progress);
-                    }
-
-                    return progressData;
-                });
-                
-                vhdx.Content.Flush();
+                Util.LazyCopyDiskContents(vhd, vhdx, logger);
 
                 return Flows.Val(none);
             };
@@ -216,22 +201,7 @@ namespace auvdisk.DiskImage
 
                 using var vhd = VirtualDisk.OpenDisk(target, "vhd", FileAccess.ReadWrite, "", "");
                 
-                // This is needed in order to efficiently handle dynamic source disk. Then it will copy only allocated parts.
-                var toCopyLength = vhdx.Content.Extents.Select(x => x.Length).Sum();
-                var progressData = new StreamCopyProgressWrapper.ProgressData("Copying", toCopyLength);
-                Utils.WithProgress(logger, progressData, progress =>
-                {
-                    foreach (var extent in vhdx.Content.Extents)
-                    {
-                        var source = new SubStream(vhdx.Content, extent.Start, extent.Length);
-                        vhd.Content.Seek(extent.Start, SeekOrigin.Begin);
-                        StreamCopyProgressWrapper.CopyTo(source, vhd.Content, logger, progressData, progress);
-                    }
-
-                    return progressData;
-                });
-                
-                vhd.Content.Flush();
+                Util.LazyCopyDiskContents(vhdx, vhd, logger);
 
                 return Flows.Val(VhdFileInfo.Make(vhd, target, fixedVhd.Value ? VirtualHardDiskType.Fixed : VirtualHardDiskType.Dynamic)!);
             };
