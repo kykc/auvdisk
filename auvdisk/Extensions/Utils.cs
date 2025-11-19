@@ -23,6 +23,14 @@ namespace auvdisk.Extensions
     
     internal static class Utils
     {
+        public static string JoinTo(this string value, params string[] others)
+        {
+            StringBuilder stringBuilder = new StringBuilder(value);
+            foreach (string other in others)
+                stringBuilder.Append(other);
+            return stringBuilder.ToString();
+        }
+        
         public static void WithProgress(ILog logger, IProgressData startData, Func<Throttle<IProgressData>?, IProgressData> action,
             bool? forceProgress = null)
         {
@@ -89,6 +97,16 @@ namespace auvdisk.Extensions
 
                 return null;
             }
+        }
+        
+        public static bool IsSome<TSubj>(this TSubj? subj) where TSubj : class
+        {
+            return subj != null;
+        }
+
+        public static bool IsSome<TSubj>(this TSubj? subj) where TSubj : struct
+        {
+            return subj.HasValue;
         }
 
         public static StreamCopyProgressWrapper WithProgress<TStream>(this TStream subject) where TStream : Stream

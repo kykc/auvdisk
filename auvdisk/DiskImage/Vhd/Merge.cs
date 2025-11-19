@@ -13,8 +13,6 @@ namespace auvdisk.DiskImage.Vhd
     {
         public static Flow<DiscUtils.Vhd.Disk> PerformMerge(string parent, string child, string target, Log.ILog logger)
         {
-            bool skipInteractivity = !Program.IsInteractive;
-            
             return Flows
                 .Val(new {parent, child})
                 .Check((t) => File.Exists(t.parent), (t) => $"{t.parent} does not exist")
@@ -56,7 +54,7 @@ namespace auvdisk.DiskImage.Vhd
                 logger.Log($"Moved {foundSectors} sectors from child image to parent");
 
                 // Interactive mode will have timing on the progress bar
-                if (skipInteractivity)
+                if (!Program.IsInteractive)
                 {
                     logger.Log($"Merge took {timer.ElapsedMilliseconds}ms");
                 }
@@ -96,10 +94,10 @@ namespace auvdisk.DiskImage.Vhd
             {
                 const string msg =
                     "Passed target is different than the parent; full image copy is needed before merge. This might take a while, proceed?";
-                return parent == target || skipInteractivity || AnsiConsole.Confirm(msg);
+                return parent == target || !Program.IsInteractive || AnsiConsole.Confirm(msg);
             }
 
-            void DoImageCopyIfNeeded()
+            void DoImageCopyIfNeeded(Value<DiskMergeModel> _)
             {
                 logger.Log("Copying parent to target...");
                 var timer = new System.Diagnostics.Stopwatch();
@@ -108,14 +106,11 @@ namespace auvdisk.DiskImage.Vhd
                 using var sourceStream = new FileStream(parent, FileMode.Open, FileAccess.Read).WithProgress();
                 using var targetStream = File.OpenWrite(target);
                 
-                if (skipInteractivity)
+                sourceStream.CopyTo(targetStream, logger);
+                
+                if (!Program.IsInteractive)
                 {
-                    sourceStream.CopyTo(targetStream, logger);
                     logger.Log($"Done copying parent to target in {timer.ElapsedMilliseconds}ms");
-                }
-                else
-                {
-                    sourceStream.CopyTo(targetStream, logger);
                 }
             }
 
@@ -123,7 +118,7 @@ namespace auvdisk.DiskImage.Vhd
             {
                 const string msg = "Target and parent are the same file, are you sure to merge child directly into parent?";
 
-                return parent != target || skipInteractivity || AnsiConsole.Confirm(msg);
+                return parent != target || !Program.IsInteractive || AnsiConsole.Confirm(msg);
             }
         }
     }

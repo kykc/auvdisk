@@ -85,4 +85,9 @@ public static class Util
             return result.Map(x => x as VirtualDisk);
         }
     }
+
+    public static bool IsSuccess(this DiskProbe.ProbeResult result)
+    {
+        return result.Disk.IsSome() || result.Fs.IsSome();
+    }
 }

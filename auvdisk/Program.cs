@@ -36,6 +36,8 @@ namespace auvdisk
 #else
         public const bool IsDebug = false;
 #endif
+        public const bool UseCustomHelpRenderer = true;
+        
         private static void HandleEnvironment()
         {
             if ((Environment.GetEnvironmentVariable("AUVDISK_LOG_LEVEL") ?? "").ToLowerInvariant() == "debug")
@@ -102,7 +104,20 @@ namespace auvdisk
 
             var logger = new Log.Logger();
 
-            var cliResult = Parser.Default.ParseArguments(args, Cli.VerbHandlers.GetVerbTypes(true, false).ToArray());
+            ParserResult<object>? cliResult = null;
+
+#pragma warning disable CS0162 // Unreachable code detected
+            if (UseCustomHelpRenderer)
+            {
+                var parser = new Parser(settings => settings.HelpWriter = null);
+                cliResult = parser.ParseArguments(args, Cli.VerbHandlers.GetVerbTypes(true, false).ToArray());
+                cliResult.WithNotParsed(errors => Cli.HelpRenderer.DisplayHelp(cliResult, errors, logger));
+            }
+            else
+            {
+                cliResult = Parser.Default.ParseArguments(args, Cli.VerbHandlers.GetVerbTypes(true, false).ToArray());
+            }
+#pragma warning restore CS0162 // Unreachable code detected
 
             var handlers = new Cli.VerbHandlers();
             
@@ -119,7 +134,7 @@ namespace auvdisk
                     DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Source, logger);
                 }
 
-                return !result.Disk.IsSome() && !result.Fs.IsSome() ? 1 : 0;
+                return result.IsSuccess() ? 0 : 1;
             });
 
             handlers.Register((Cli.VdiskList opts) =>
@@ -144,7 +159,7 @@ namespace auvdisk
                 var probe = new DiskProbe(opts.Source, probeLogger, fsHandler, opts.PartIdx);
                 var probeResult = probe.Probe();
 
-                return !probeResult.Disk.IsSome() && !probeResult.Fs.IsSome() ? 1 : 0;
+                return probeResult.IsSuccess() ? 0 : 1;
             });
             
             handlers.Register((Cli.VdiskCat opts) =>
@@ -154,7 +169,7 @@ namespace auvdisk
                     DiskProbe.GetCatArbitraryFile(opts.Target, logger, opts.Silent), opts.PartIdx);
                 var probeResult = probe.Probe();
 
-                return !probeResult.Disk.IsSome() && !probeResult.Fs.IsSome() ? 1 : 0;
+                return probeResult.IsSuccess() ? 0 : 1;
             });
 
             handlers.Register((Cli.LoopToVhd opts) =>
@@ -368,7 +383,7 @@ namespace auvdisk
 #endif
 
             Interop.Common.RegisterPlatformSpecificVerbs(handlers, logger);
-
+            
             int exitCode = handlers.HandleParserResult(cliResult);
             
             Console.Out.Flush();

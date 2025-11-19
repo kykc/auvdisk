@@ -57,10 +57,15 @@ namespace auvdisk.Extensions
         {
             return Flows.ValOr(subj, error);
         }
-
-        public static bool IsSome<TSubj>(this TSubj? subj) where TSubj : class
+        
+        public static Flow<Value<TSubj>> Flow<TSubj>(this TSubj? subj, string error) where TSubj : struct
         {
-            return subj != null;
+            return subj.HasValue ? Flows.Val(new Value<TSubj>(subj.Value)) : Flows.Err<Value<TSubj>>(error);
+        }
+
+        public static Flow<None> Flow(this bool value, string error)
+        {
+            return value ? Flows.Val(None.Value) : Flows.Err<None>(error); 
         }
         
         public static Flow<TRes> MapDispose<TSubj, TRes>(this Flow<TSubj> subj, Func<TSubj, TRes> mapper)
