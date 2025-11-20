@@ -89,6 +89,43 @@ namespace auvdisk.Fs
             decoratedStream.WithProgress().CopyTo(targetStream, logger);
         }
         
+        // This is not as robust as I would want, but alternative route
+        // is to compare inodes which sadly isn't in .net API, so I would
+        // need to do PInvoke per platform.
+        public static bool AreSameFile(string path1, string path2)
+        {
+            if (!File.Exists(path1) || !File.Exists(path2))
+            {
+                return false;
+            }
+                
+            var fullPath1 = Path.GetFullPath(path1);
+            var fullPath2 = Path.GetFullPath(path2);
+        
+            var fileInfo1 = new FileInfo(fullPath1);
+            var fileInfo2 = new FileInfo(fullPath2);
+                
+            return fileInfo1.Length == fileInfo2.Length
+                   && fileInfo1.CreationTimeUtc == fileInfo2.CreationTimeUtc
+                   && fileInfo1.LastWriteTimeUtc == fileInfo2.LastWriteTimeUtc
+                   && string.Equals(fullPath1, fullPath2, 
+                       OperatingSystem.IsWindows() 
+                           ? StringComparison.OrdinalIgnoreCase 
+                           : StringComparison.Ordinal);
+        }
+
+        public static bool AreSameFile(IEnumerable<string> paths)
+        {
+            var list = paths.ToList();
+
+            return list.Count switch
+            {
+                0 => false,
+                1 => true,
+                _ => list.Zip(list.Skip(1), AreSameFile).All(x => x)
+            };
+        }
+        
         public static bool HandleResizeFile(string target, ulong size, bool forceZeroFill, Log.ILog logger)
         {
             bool success = false;

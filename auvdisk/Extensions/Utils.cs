@@ -200,7 +200,35 @@ namespace auvdisk.Extensions
             }
         }
 
+        public static void WithDebugOutput(Action<string> logger, Action action)
+        {
+            var currentHandler = Program.DebugOutput;
+            Program.DebugOutput = logger;
+            action();
+            Program.DebugOutput = currentHandler;
+        }
+
+        public static void ForEach<T>(this IEnumerable<T> subj, Action<T> action)
+        {
+            foreach (var el in subj)
+            {
+                action(el);
+            }
+        }
+
         public static bool If(Action action, Func<bool> condition)
+        {
+            if (condition())
+            {
+                action();
+
+                return true;
+            }
+
+            return false;
+        }
+        
+        public static bool If(Func<bool> condition, Action action)
         {
             if (condition())
             {

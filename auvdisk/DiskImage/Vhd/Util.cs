@@ -253,6 +253,7 @@ namespace auvdisk.DiskImage.Vhd
             
             if (maybeParentPath != null)
             {
+                Program.DebugOutput($"Creating child {path} for parent {maybeParentPath}");
                 var parentFooter = ReadVhdFooterSafe(maybeParentPath!);
 
                 if (parentFooter is not { IsValid: true })
@@ -308,7 +309,7 @@ namespace auvdisk.DiskImage.Vhd
             footer.DiskType = maybeParentPath != null ? VirtualHardDiskType.Differencing : VirtualHardDiskType.Dynamic;
             footer.DataOffset = LbaSize;
             
-            var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
+            using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
 
             dynamicHeader.TableOffset = LbaSize * 3 + parentLocatorSpaceInBytes;
             dynamicHeader.BlockSize = 1024 * 1024 * 2; // 2MiB
@@ -343,7 +344,6 @@ namespace auvdisk.DiskImage.Vhd
             stream.Seek((long)dynamicHeader.TableOffset, SeekOrigin.Begin);
             stream.Write(bat);
             stream.Write(footerBytes);
-            stream.Dispose();
             stream.Close();
 
             return Flow<VhdFileInfo>.Val(new VhdFileInfo(footer, path, LbaSize));
@@ -430,32 +430,6 @@ namespace auvdisk.DiskImage.Vhd
                 return Flows.Val(new DiscUtils.Vhd.Disk(path, FileAccess.Read));
             }
             
-            var findParent = (string? maybeLocator, uint platformCode, string currentDiskPath) =>
-            {
-                if (maybeLocator != null &&
-                    platformCode == (uint)DynamicDiskHeader.ParentLocatorPlatformCode.WindowsUtf16Absolute)
-                {
-                    if (File.Exists(maybeLocator))
-                    {
-                        return maybeLocator;
-                    }
-                }
-                else if (maybeLocator != null &&
-                         platformCode == (uint)DynamicDiskHeader.ParentLocatorPlatformCode.WindowsUtf16Relative)
-                {
-                    var currentDiskDirName = Path.GetDirectoryName(currentDiskPath);
-                    
-                    var targetPath = Path.Combine(currentDiskDirName ?? "", maybeLocator.Replace('\\', Path.DirectorySeparatorChar));
-
-                    if (File.Exists(targetPath))
-                    {
-                        return targetPath;
-                    }
-                }
-
-                return null;
-            };
-            
             var diskType = footer.DiskType;
             var diskPath = path;
 
@@ -464,28 +438,21 @@ namespace auvdisk.DiskImage.Vhd
             while (diskType == VirtualHardDiskType.Differencing)
             {
                 using var diffHandler = new DifferencingVhdHandler(diskPath);
-                var locatorEntries = diffHandler.ReadParentLocators().ToArray();
-                var found = false;
+                
+                var parentLocations = diffHandler.FindParentLocation().ToList();
+                
+                var found = parentLocations.Any();
 
-                foreach (var locatorEntry in locatorEntries)
+                if (found)
                 {
-                    var maybeLocator = locatorEntry.Item2;
-                    var maybeParentPath = findParent(maybeLocator, locatorEntry.Item1.PlatformCode, diskPath);
-
-                    if (maybeParentPath != null)
-                    {
-                        var layer = new DiskImageFile(maybeParentPath, FileAccess.Read);
-                        layers.Add(layer);
-                        diskType = ConvertVhdTypeFromDuToDal(layer.Information.DiskType);
-                        diskPath = maybeParentPath;
-                        found = true;
-                        break;
-                    }
+                    var layer = new DiskImageFile(parentLocations.First(), FileAccess.Read);
+                    layers.Add(layer);
+                    diskType = ConvertVhdTypeFromDuToDal(layer.Information.DiskType);
+                    diskPath = parentLocations.First();
                 }
-
-                if (!found)
+                else
                 {
-                    foreach (var locator in locatorEntries)
+                    foreach (var locator in diffHandler.ReadParentLocators())
                     {
                         logger.Error($"Locator entry: ({(DynamicDiskHeader.ParentLocatorPlatformCode)locator.Item1.PlatformCode}) ({locator.Item2})");
                     }

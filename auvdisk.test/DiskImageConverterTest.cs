@@ -4,6 +4,7 @@ using DiscUtils.Fat;
 using DiskAccessLibrary.VHD;
 using auvdisk.DiskImage;
 using auvdisk.DiskImage.Vhd;
+using auvdisk.Extensions;
 using DiscUtils.Streams;
 
 namespace auvdisk.test;
@@ -160,21 +161,29 @@ public class DiskImageConverterTest : IDisposable
 
         var logger = new LogWatcher();
 
-        var fsHandler = (DiscFileSystem fs) =>
-        {
-            Assert.Single(fs.GetDirectories(@""));
-            Assert.Contains(fs.GetDirectories(@""), x => x == "test_dir");
-            Assert.Single(fs.GetFiles(""));
-
-            using var stream = fs.OpenFile(@"\test_text.txt", FileMode.Open, FileAccess.Read);
-            var reader = new StreamReader(stream);
-            var text = reader.ReadToEnd();
-
-            Assert.Equal("test_text", text);
-        };
-
         var testImpl = (bool fixedTarget) =>
         {
+            var fsHandler = (DiscFileSystem fs) =>
+            {
+                Assert.Equal(fixedTarget ? 1 : 3, fs.GetDirectories(@"").Count());
+                Assert.Contains(fs.GetDirectories(@""), x => x == "test_dir");
+
+                if (fixedTarget)
+                {
+                    Assert.Single(fs.GetFiles(""));
+                }
+                else
+                {
+                    Assert.Empty(fs.GetFiles(""));
+                }
+
+                using var stream = fs.OpenFile(@"\test_text.txt", FileMode.Open, FileAccess.Read);
+                var reader = new StreamReader(stream);
+                var text = reader.ReadToEnd();
+
+                Assert.Equal("test_text", text);
+            };
+            
             File.Delete(target);
 
             var source = fixedTarget ? original : originalDynamic;

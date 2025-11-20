@@ -23,10 +23,12 @@ namespace auvdisk.DiskImage.Vhd
         private readonly DynamicDiskHeader _dynamicHeader;
         private readonly FileStream _file;
         private readonly uint[] _batEntries; // Block Allocation Table
+        private readonly string _path;
 
         public DifferencingVhdHandler(string path)
         {
             _file = new FileStream(path, FileMode.Open, FileAccess.Read);
+            _path = path;
 
             _file.Seek(-BytesPerDiskSector, SeekOrigin.End);
             byte[] footerBytes = new byte[BytesPerDiskSector];
@@ -182,7 +184,49 @@ namespace auvdisk.DiskImage.Vhd
             {
                 var maybeEntry = DynamicDiskHeader.ReadParentLocator(_file, pl);
                 return (pl, maybeEntry);
-            });
+            }).OrderByDescending(x => x.Item1.PlatformCode);
+            // The OrderByDescending here is a wacky way to prefer relative locator over absolute.
+            // Windows operates this way. More so, Windows overwrites absolute locator to the new location on mount.
+        }
+
+        public IEnumerable<string> FindParentLocation()
+        {
+            string? FindParent(string? maybeLocator, uint platformCode, string currentDiskPath)
+            {
+                if (maybeLocator != null && platformCode == (uint)DynamicDiskHeader.ParentLocatorPlatformCode.WindowsUtf16Absolute)
+                {
+                    if (File.Exists(maybeLocator))
+                    {
+                        return maybeLocator;
+                    }
+                }
+                else if (maybeLocator != null && platformCode == (uint)DynamicDiskHeader.ParentLocatorPlatformCode.WindowsUtf16Relative)
+                {
+                    var currentDiskDirName = Path.GetDirectoryName(currentDiskPath);
+
+                    var targetPath = Path.Combine(currentDiskDirName ?? "", maybeLocator.Replace('\\', Path.DirectorySeparatorChar));
+
+                    if (File.Exists(targetPath))
+                    {
+                        return targetPath;
+                    }
+                }
+
+                return null;
+            }
+            
+            var locatorEntries = ReadParentLocators().ToArray();
+
+            var result = new List<string>();
+            
+            foreach (var locatorEntry in locatorEntries)
+            {
+                var maybeLocator = locatorEntry.Item2;
+                var maybeParentPath = FindParent(maybeLocator, locatorEntry.Item1.PlatformCode, _path);
+                Utils.If(() => maybeParentPath.IsSome(), () => result.Add(maybeParentPath!));
+            }
+            
+            return result;
         }
 
         public bool OutputDiagnosticInfo(Log.ILog logger)
@@ -192,7 +236,7 @@ namespace auvdisk.DiskImage.Vhd
             var checkString = (bool check) =>
             {
                 result = result && check;
-                return check ? "[green]success[/]" : "[red]fail[/]";
+                return check ? "[green]success[/]" : $"[red]fail[/]";
             };
             
             logger.Log(new Rule("[green]VHD Dynamic Header[/]").LeftJustified());
@@ -245,6 +289,11 @@ namespace auvdisk.DiskImage.Vhd
 
             if (_vhdFooter.DiskType == VirtualHardDiskType.Differencing)
             {
+                var checkAllParentLocatorsPointToTheSameFile = Fs.Util.AreSameFile(FindParentLocation());
+                
+                // I'm not including this check into reported result, as I'm trying to mimic what Windows deems as valid VHD.
+                // Windows mounts VHDs with ambiguous locators, preferring relative and overwriting/updating absolute on mount
+                logger.Log($"[yellow]Parent locators point to the same file[/]: {(checkAllParentLocatorsPointToTheSameFile ? "[green]yes[/]" : "[dim]no[/]")}");
                 logger.Log(new Rule("[green]Parent locator entries[/]").LeftJustified());
 
                 foreach (var locator in _dynamicHeader.GetParentLocatorEntries()

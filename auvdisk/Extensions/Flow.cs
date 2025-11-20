@@ -63,6 +63,11 @@ namespace auvdisk.Extensions
             return subj.HasValue ? Flows.Val(new Value<TSubj>(subj.Value)) : Flows.Err<Value<TSubj>>(error);
         }
 
+        public static Flow<TSubj> Flow<TSubj>(this TSubj subj) where TSubj : class
+        {
+            return Flows.Val(subj);
+        }
+
         public static Flow<None> Flow(this bool value, string error)
         {
             return value ? Flows.Val(None.Value) : Flows.Err<None>(error); 
@@ -241,6 +246,21 @@ namespace auvdisk.Extensions
             }
         }
 
+        public static Flow<TRes> TryBind<TSubj, TRes, TEx>(this Flow<TSubj> subj, Func<TSubj, Flow<TRes>> binder, Func<TEx, string> exToString)
+            where TSubj : class
+            where TRes : class
+            where TEx : Exception
+        {
+            try
+            {
+                return subj.Bind(binder);
+            }
+            catch (TEx ex)
+            {
+                return new(exToString(ex));
+            }
+        }
+
         public static Flow<TRes> TryMap<TSubj, TRes, TE1>(this Flow<TSubj> subj, Func<TSubj, TRes> mapper, Func<TE1, string> exToString)
             where TSubj : class
             where TRes : class
@@ -248,9 +268,7 @@ namespace auvdisk.Extensions
         {
             try
             {
-                return subj.IsVal
-                    ? Flows.Val(mapper(subj.UnwrapVal()))
-                    : new (subj.UnwrapErr());
+                return subj.Map(mapper);
             }
             catch (TE1 ex)
             {
@@ -290,7 +308,13 @@ namespace auvdisk.Extensions
 
         public static Flow<TSubj> Check<TSubj>(this Flow<TSubj> subj, Func<TSubj, bool> predicate, Func<TSubj, string> error) where TSubj : class
         {
-            if (subj.IsVal)
+            return subj.CheckIf(_ => true, predicate, error);
+        }
+
+        public static Flow<TSubj> CheckIf<TSubj>(this Flow<TSubj> subj, Func<TSubj, bool> condition, Func<TSubj, bool> predicate, Func<TSubj, string> error)
+            where TSubj : class
+        {
+            if (subj.IsVal && condition(subj.UnwrapVal()))
             {
                 return predicate(subj.UnwrapVal()) ? subj : new(error(subj.UnwrapVal()));
             }

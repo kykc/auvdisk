@@ -233,7 +233,7 @@ namespace auvdisk.Cli
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    [Verb("merge-vhd", HelpText = "Merge differencing VHD into parent. Only fixed/dynamic parent is supported")]
+    [Verb("merge-vhd", HelpText = "Merge differencing VHD into parent. Supports both in-place and new image/branch modes.")]
     class MergeVhd
     {
         [Option('p', "parent", Required = true, HelpText = "Parent VHD image")]

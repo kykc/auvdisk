@@ -162,9 +162,7 @@ namespace auvdisk.DiskImage
 
                 using var vhdx = vhdxResult.UnwrapVal();
                 
-                Util.LazyCopyDiskContents(vhd, vhdx, logger);
-
-                return Flows.Val(none);
+                return Util.LazyCopyDiskContents(vhd, vhdx, logger);
             };
 
             return Flow<None>.Val(None.Value)
@@ -201,9 +199,11 @@ namespace auvdisk.DiskImage
 
                 using var vhd = VirtualDisk.OpenDisk(target, "vhd", FileAccess.ReadWrite, "", "");
                 
-                Util.LazyCopyDiskContents(vhdx, vhd, logger);
+                var copyResult = Util.LazyCopyDiskContents(vhdx, vhd, logger);
 
-                return Flows.Val(VhdFileInfo.Make(vhd, target, fixedVhd.Value ? VirtualHardDiskType.Fixed : VirtualHardDiskType.Dynamic)!);
+                return copyResult.IsErr 
+                    ? new(copyResult.UnwrapErr()) 
+                    : Flows.Val(VhdFileInfo.Make(vhd, target, fixedVhd.Value ? VirtualHardDiskType.Fixed : VirtualHardDiskType.Dynamic)!);
             };
 
             return Flow<None>.Val(None.Value)

@@ -260,7 +260,7 @@ namespace auvdisk.DiskImage
                 {
                     logger.Error(ex.Message);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (TestExceptionFilter.ShouldCatch(ex))
                 {
                     logger.Error("Unexpected exception " + ex.GetType().ToString() + ": " + ex.Message);
                 }
@@ -295,7 +295,7 @@ namespace auvdisk.DiskImage
                 {
                     logger.Error(ex.Message);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (TestExceptionFilter.ShouldCatch(ex))
                 {
                     logger.Error("Unexpected exception " + ex.GetType().ToString() + ": " + ex.Message);
                 }
@@ -430,7 +430,7 @@ namespace auvdisk.DiskImage
 
                         fsRecords.Add(record);
                     }
-                    catch (Exception e)
+                    catch (Exception e) when (TestExceptionFilter.ShouldCatch(e))
                     {
                         Logger.Error($"Failed to read {fsInfo.Name}: {e.Message}");
                     }

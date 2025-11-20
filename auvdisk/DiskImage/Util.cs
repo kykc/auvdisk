@@ -1,9 +1,11 @@
 using auvdisk.Bytes;
+using auvdisk.DiskImage.Vhd;
 using auvdisk.Extensions;
 using auvdisk.Log;
 using DiscUtils;
 using DiscUtils.Streams;
 using DiskAccessLibrary;
+using DiskAccessLibrary.VHD;
 
 namespace auvdisk.DiskImage;
 
@@ -91,8 +93,16 @@ public static class Util
 
     // Using extents copies only allocated data in case of dynamic VHD or other
     // underlying type supporting dynamic allocation
-    public static void LazyCopyDiskContents(VirtualDisk source, VirtualDisk destination, ILog logger)
+    // CAUTION: this function might not do what you want/expect if the passed source is {IsSparse: true, NeedsParent: true},
+    // (like differencing VHD, for example). In this case source.Contents will have all the date including all the parent(s).
+    // There's also not a lot of sanity checks there, things are supposed to be checked on the caller's side
+    public static Flow<None> LazyCopyDiskContents(VirtualDisk source, VirtualDisk destination, ILog logger)
     {
+        if (source.Capacity != destination.Capacity)
+        {
+            return new($"Source/destination disk image capacity mismatch ({source.Capacity} and {destination.Capacity}) when trying to copy image contents");
+        }
+        
         logger.Log("Calculating amount of data to be copied...");
         var toCopyLength = source.Content.Extents.Select(x => x.Length).Sum();
         var progressData = new StreamCopyProgressWrapper.ProgressData("Copying", toCopyLength);
@@ -109,6 +119,28 @@ public static class Util
         });
                 
         destination.Content.Flush();
+
+        return Flows.Val(None.Value);
+    }
+
+    public static Flow<Value<VirtualHardDiskType>> DetectDiskType(VirtualDisk source)
+    {
+        if (source.DiskTypeInfo.Name != "VHD")
+        {
+            return new($"Unexpected disk type <{source.DiskTypeInfo.Name}>");
+        }
+        else
+        {
+            var targetLayer = source.Layers.First();
+
+            return targetLayer.IsSparse switch
+            {
+                false when !targetLayer.NeedsParent => VirtualHardDiskType.Fixed.RefVal().Flow(),
+                true when targetLayer.NeedsParent => VirtualHardDiskType.Differencing.RefVal().Flow(),
+                true when !targetLayer.NeedsParent => VirtualHardDiskType.Dynamic.RefVal().Flow(),
+                _ => new("Unexpected disk type")
+            };
+        }
     }
 
     public static bool IsSuccess(this DiskProbe.ProbeResult result)

@@ -37,6 +37,7 @@ namespace auvdisk
         public const bool IsDebug = false;
 #endif
         public const bool UseCustomHelpRenderer = true;
+        public static Action<string> DebugOutput { get; set; } = _ => { };
         
         private static void HandleEnvironment()
         {

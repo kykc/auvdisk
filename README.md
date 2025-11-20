@@ -42,7 +42,7 @@ packages directly from this repo (see `.gitea/workflows` for some examples on pa
 | create-diff-vhd       | Create differencing VHD image                                                                                                                   |
 | create-fixed-vhd      | Create fixed size VHD image                                                                                                                     |
 | create-dynamic-vhd    | Create dynamic VHD image                                                                                                                        |
-| merge-vhd             | Merge differencing VHD into parent. Only fixed parent and a single direct child pair is supported                                               |
+| merge-vhd             | Merge differencing VHD into parent. Supports both in-place and new image/branch modes.                                                          |
 | extract-file          | Extract file using offset and length in bytes                                                                                                   |
 | diag-vhd              | Output VHD diagnostics info                                                                                                                     |
 | resize-fixed-vhd      | Resize fixed VHD image                                                                                                                          |
