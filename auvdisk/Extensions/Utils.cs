@@ -208,11 +208,18 @@ namespace auvdisk.Extensions
             Program.DebugOutput = currentHandler;
         }
 
-        public static void ForEach<T>(this IEnumerable<T> subj, Action<T> action)
+        public static void ForEach<T>(this IEnumerable<T> subj, Action<T> action, bool parallel = false)
         {
-            foreach (var el in subj)
+            if (parallel)
             {
-                action(el);
+                Parallel.ForEach(subj, action);
+            }
+            else
+            {
+                foreach (var el in subj)
+                {
+                    action(el);
+                }
             }
         }
 

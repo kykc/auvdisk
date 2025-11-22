@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using auvdisk.Cli;
 using auvdisk.DiskImage;
 #if WINDOWS
+using Alphaleonis.Win32.Vss;
 using auvdisk.Fs.Ntfs;
 using auvdisk.Interop.Win32;
 #endif
@@ -209,9 +210,26 @@ namespace auvdisk.Interop
 
             handlers.Register((CheckNtfsLastCluster opts) =>
             {
-                NtfsClone.TestLastNtfsCluster(new BlockDeviceUnbufferedStream(opts.Volume, opts.GrantExtendedIoctl), logger);
+                if (opts.UseVss)
+                {
+                    using var vssResult = Win32.Vss.Backup.Make(opts.Volume, logger);
+                    
+                    var result = vssResult
+                        .Map(vss =>
+                        {
+                            NtfsClone.TestLastNtfsCluster(new BlockDeviceUnbufferedStream(vss.Root, opts.GrantExtendedIoctl), logger);
 
-                return 0;
+                            return None.Value;
+                        });
+                    
+                    return result.LogErrorIfAny(logger) ? 1 : 0;
+                }
+                else
+                {
+                    NtfsClone.TestLastNtfsCluster(new BlockDeviceUnbufferedStream(opts.Volume, opts.GrantExtendedIoctl), logger);
+                    
+                    return 0;
+                }
             });
 #pragma warning restore CA1416
 #endif

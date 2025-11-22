@@ -1,6 +1,6 @@
 using auvdisk.DiskImage;
 
-namespace auvdisk.test
+namespace auvdisk.test.Fs
 {
     [Collection("Sequential")]
     public class FsUtilTest : IDisposable
@@ -21,7 +21,7 @@ namespace auvdisk.test
             
             Assert.True(File.Exists(intermediateVhd));
             
-            Fs.Util.ExtractFileSegment(intermediateVhd, resultLoop,  537919488, 6274560, logger);
+            auvdisk.Fs.Util.ExtractFileSegment(intermediateVhd, resultLoop,  537919488, 6274560, logger);
 
             Assert.True(File.Exists(resultLoop));
 

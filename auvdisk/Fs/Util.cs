@@ -217,9 +217,10 @@ namespace auvdisk.Fs
 
             return success;
         }
-#if WINDOWS
+
         public static T WithVolumeManagerTokenPrivilege<T>(ILog logger, Func<T> func)
         {
+#if WINDOWS
             // Creates a lot of weirdness when many threads run this from UTs.
             // This leads to token being held until process finishes "in production"
             // However, auvdisk isn't designed to be hanging around, so this shouldn't be
@@ -238,6 +239,10 @@ namespace auvdisk.Fs
                 
                 return func();
             }
+#else
+            logger.Warning("Token privilege requests are ignored on non-Windows platform");
+            return func();
+#endif
         }
 
         public static void WithVolumeManagerTokenPrivilege(ILog logger, Action func)
@@ -248,6 +253,5 @@ namespace auvdisk.Fs
                 return 0;
             });
         }
-#endif
     }
 }

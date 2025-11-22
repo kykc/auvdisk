@@ -9,6 +9,7 @@ using DiscUtils.Fat;
 using DiscUtils.Streams;
 using DotNext.Collections.Generic;
 using System.Management;
+using System.Text.RegularExpressions;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Storage.FileSystem;
@@ -220,6 +221,11 @@ namespace auvdisk.Interop.Win32
 
         public static long? GetVolumeCapacity(string volumeId)
         {
+            if (volumeId.StartsWith(@"\\.\") && volumeId.Length <= @"\\.\C:\".Length)
+            {
+                volumeId = volumeId.Substring(@"\\.\".Length);
+            }
+            
             var query = volumeId.Length <= 3 // "C:\" and other variants 
                 ? $"SELECT Capacity FROM Win32_Volume WHERE DriveLetter = \"{volumeId.Substring(0, 1).ToUpper()}:\"" 
                 : $"SELECT Capacity FROM Win32_Volume WHERE DeviceID = \"{CrudeNormalizeDeviceId(volumeId)}\"";

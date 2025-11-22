@@ -446,5 +446,7 @@ namespace auvdisk.Cli
         public string Volume { get; set; } = "";
         [Option('x', "extended-ioctl", Required = false, Default = false, HelpText = "Grant FSCTL_ALLOW_EXTENDED_DASD_IO on volume opening")]
         public bool GrantExtendedIoctl { get; set; } = false;
+        [Option("vss", Required = false, Default = false, HelpText = "Use VSS")]
+        public bool UseVss { get; set; } = false;
     }
 }

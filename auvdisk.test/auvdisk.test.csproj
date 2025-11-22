@@ -9,6 +9,7 @@
         <RootNamespace>auvdisk.test</RootNamespace>
         <TargetFrameworks>net8.0</TargetFrameworks>
         <TargetFrameworks Condition="'$(NETCoreSdkVersion)' >= '9.0.0'">$(TargetFrameworks);net9.0</TargetFrameworks>
+        <IsWindows Condition="$([MSBuild]::IsOSPlatform('Windows'))">true</IsWindows>
         <!--
         This template uses native xUnit.net command line options when using 'dotnet run' and
         VSTest by default when using 'dotnet test'. For more information on how to enable support
@@ -30,7 +31,9 @@
         <PackageReference Include="xunit.v3" Version="3.1.0"/>
         <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5"/>
     </ItemGroup>
-
+    <PropertyGroup Condition="'$(IsWindows)'=='true'">
+        <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
+    </PropertyGroup>
     <ItemGroup>
       <ProjectReference Include="..\auvdisk\auvdisk.csproj" />
     </ItemGroup>

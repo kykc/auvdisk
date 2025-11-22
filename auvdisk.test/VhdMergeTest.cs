@@ -5,7 +5,6 @@ using DiscUtils;
 
 namespace auvdisk.test;
 
-[Collection("Sequential")]
 public class VhdMergeTest : IDisposable
 {
     private readonly ITestOutputHelper _output;

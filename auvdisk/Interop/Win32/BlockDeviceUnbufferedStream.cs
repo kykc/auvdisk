@@ -34,7 +34,7 @@ namespace auvdisk.Interop.Win32
         // volume: 106006835200 which is 4096 shorter
         // This needs further investigation, but in some cases caller knows that passed path is a volume and can get proper reliable
         // length from WMI win32_volume
-        // UPDATE: it's more complicated than that. I'll leave the parameter `length` for now, but the root of the issue see NtfsClone.ReconstructLastCluster
+        // UPDATE: it's more complicated than that. I'll leave the parameter `length` for now, but for the root of the issue see NtfsClone.ReconstructLastCluster
         public BlockDeviceUnbufferedStream(string path, bool fsCtlAllowExtendedIo = false, long? length = null) :
             this(Windows.Win32.PInvoke.CreateFile(
                 path,

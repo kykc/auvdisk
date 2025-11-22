@@ -6,6 +6,7 @@ using auvdisk.Log;
 using DiscUtils.Ntfs;
 using DiscUtils.Streams;
 using DotNext.Collections.Generic;
+using Spectre.Console;
 
 namespace auvdisk.Fs.Ntfs
 {
@@ -44,6 +45,7 @@ namespace auvdisk.Fs.Ntfs
             }
             
             var clusterSize = (int)ntfs.ClusterSize;
+            var expectedDiff = source.Length % clusterSize > 0 ? source.Length % clusterSize : clusterSize;
             logger.Log($"Cluster size: {clusterSize}");
             logger.Log($"Volume capacity: {source.Length}");
             var ranges = BitmapToRanges(volumeBitmap, clusterSize);
@@ -56,9 +58,11 @@ namespace auvdisk.Fs.Ntfs
             int bytesRead = source.Read(lastExtentBytes, 0, lastExtentBytes.Length);
 
             bool result = bytesRead == lastExtentBytes.Length;
-            logger.Log($"Extent: {lastExtent}");
+            logger.Log($"Extent: {lastExtent.ToString().EscapeMarkup()}");
             logger.Log($"Bytes read: {bytesRead}");
             logger.Log($"Extent length: {lastExtentBytes.Length}");
+            logger.Log($"Expected unavailable byte count: {expectedDiff}");
+            logger.Log($"Unavailable bytes: {lastExtent.Length - bytesRead}");
             logger.Log($"Result: {(result ? "[green]success[/]" : "[red]failure[/]")}");
             
             var lastClusterBytes = ReconstructLastCluster(source, clusterSize, ntfs.SectorSize, logger);
@@ -153,7 +157,7 @@ namespace auvdisk.Fs.Ntfs
                                 progress?.Call(progressData);
                             }
 
-                            if (progressData.ExtentBytes != extent.Length && isLastExtent(idx))
+                            if (progressData.ExtentBytes != extent.Length && isLastExtent(idx) && (extent.Length - progressData.ExtentBytes) == clusterSize)
                             {
                                 warnings.Add(
                                     "Failed to read last cluster of the volume. This may happen for various reasons, more info here: " + 
@@ -167,12 +171,15 @@ namespace auvdisk.Fs.Ntfs
                             else if (progressData.ExtentBytes != extent.Length)
                             {
                                 var warning =
-                                    $"Failed to copy extent in full. Start: {extent.Start}, length:{extent.Length}, written:{progressData.ExtentBytes}, diff:{extent.Length - progressData.ExtentBytes}";
+                                    $"Failed to copy extent in full, filling with zeros. Start: {extent.Start}, length:{extent.Length}, " + 
+                                    $"written:{progressData.ExtentBytes}, diff:{extent.Length - progressData.ExtentBytes}, last extent: {isLastExtent(idx)}";
                                 warnings.Add(warning);
                                 // We report this, so "fix up" the progress not to hang at 99%
                                 // Otherwise this might lead to an impression that action was interrupted, while in reality it wasn't.
                                 // One might say that we indeed processed those bytes by failing to copy them...
-                                progressData.IncrementBytes += (extent.Length - progressData.ExtentBytes);
+                                var zeros = new byte[extent.Length - progressData.ExtentBytes];
+                                target.Write(zeros, 0, zeros.Length);
+                                progressData.IncrementBytes += zeros.Length;
                             }
                         }
                     }
