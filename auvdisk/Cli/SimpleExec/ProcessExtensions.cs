@@ -104,7 +104,7 @@ internal static class ProcessExtensions
             process.Kill(!ignoreProcessTree);
         }
 #pragma warning disable CA1031 // Do not catch general exception types
-        catch (Exception)
+        catch (Exception ex) when (Program.ExceptionFilter(ex))
 #pragma warning restore CA1031 // Do not catch general exception types
         {
             return false;

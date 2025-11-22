@@ -21,6 +21,8 @@ namespace auvdisk.test.Vhd
                 Assert.Throws<IOException>(() => new DiscUtils.Vhd.Disk(Path.Join(Directory.GetCurrentDirectory(), "testdata", "test_gpt_child.vhd"), FileAccess.Read));
             }
 
+            // NOTE: those tests would fail if you place your working copy in D:\automatl\auvdisk
+            // because then absolute locators would actually point to the right file
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 // Relative with dot

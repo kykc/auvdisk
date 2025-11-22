@@ -64,7 +64,7 @@ to the FS APIs the only way to write tests was to include some binary image blob
 allergic to binary blobs of unknown origin you should probably avoid building the tests. But I swear that those
 are harmless test images without any shady xz-style code injections.
 
-To run the tests simply run `dotnet run` from the tests project directory or look into xUnit documentation on how to
+To run the tests simply run `dotnet test` from the tests project directory or look into xUnit documentation on how to
 integrate them with your favorite IDE.
 
 ## Used libraries

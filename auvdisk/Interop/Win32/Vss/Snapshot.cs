@@ -17,7 +17,7 @@ namespace auvdisk.Interop.Win32.Vss
                 _backup = backup;
                 _setId = backup.StartSnapshotSet();
             }
-            catch (Exception)
+            catch (Exception ex) when(Program.ExceptionFilter(ex))
             {
                 Dispose();
                 throw;

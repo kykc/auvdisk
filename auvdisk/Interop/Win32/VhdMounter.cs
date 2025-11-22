@@ -65,7 +65,7 @@ namespace auvdisk.Interop.Win32
                 logger.Log($"Successfully mounted {vhdPath}.");
                 return Flow<IEnumerable<VhdVolumeInfo>>.Val(infos);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (Program.ExceptionFilter(ex))
             {
                 return Flow<IEnumerable<VhdVolumeInfo>>.Err(ex.Message);
             }
@@ -100,7 +100,7 @@ namespace auvdisk.Interop.Win32
                     return true;
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (Program.ExceptionFilter(ex))
             {
                 logger.Error($"Dismount failed: {ex.Message}");
                 return false;

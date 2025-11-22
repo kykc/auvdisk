@@ -65,7 +65,7 @@ public static class Util
 
                     return Flows.Val(targetPath);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (Program.ExceptionFilter(ex))
                 {
                     return new(ex.Message);
                 }

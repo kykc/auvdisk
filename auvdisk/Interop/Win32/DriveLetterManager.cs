@@ -57,7 +57,7 @@ namespace auvdisk.Interop.Win32
                     return Flow<Value<char>>.Err($"Failed to mount {volumeGuidPath} to {mountPoint} with error [{error}]");
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when(Program.ExceptionFilter(ex))
             {
                 return Flow<Value<char>>.Err(ex.Message);
             }

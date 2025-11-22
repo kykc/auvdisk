@@ -181,7 +181,7 @@ namespace auvdisk.Commander
                 list.SetSource(items);
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (Program.ExceptionFilter(ex))
             {
                 MessageBox.ErrorQuery("Error", $"Failed to load directory: {ex.Message}", "OK");
                 return false;
@@ -269,7 +269,7 @@ namespace auvdisk.Commander
                 viewDialog.Add(textView, closeButton);
                 Application.Run(viewDialog);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (Program.ExceptionFilter(ex))
             {
                 MessageBox.ErrorQuery("Error", $"Failed to view file: {ex.Message}", "OK");
             }
@@ -308,7 +308,7 @@ namespace auvdisk.Commander
                 viewDialog.Add(textView, closeButton);
                 Application.Run(viewDialog);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (Program.ExceptionFilter(ex))
             {
                 MessageBox.ErrorQuery("Error", $"Failed to view file info: {ex.Message}", "OK");
             }
@@ -360,7 +360,7 @@ namespace auvdisk.Commander
                 }
 
             }
-            catch (Exception ex)
+            catch (Exception ex) when (Program.ExceptionFilter(ex))
             {
                 MessageBox.ErrorQuery("Error", $"Copy failed: {ex.Message}", "OK");
             }

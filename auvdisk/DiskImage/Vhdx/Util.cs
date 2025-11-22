@@ -11,7 +11,7 @@ public static class Util
             // "touch" file
             new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None).Close();
         }
-        catch (Exception e)
+        catch (Exception e) when (Program.ExceptionFilter(e))
         {
             return Flows.Err<DiscUtils.Vhdx.Disk>(e.Message);
         }

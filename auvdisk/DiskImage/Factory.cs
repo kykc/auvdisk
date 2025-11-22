@@ -70,7 +70,7 @@ namespace auvdisk.DiskImage
             return fsList.Select((x, idx) => new KeyValuePair<string, DiscFileSystem>(GetFsName(idx, x), x)).ToDictionary();
         }
 
-        public static Flow<FsCollection> MakeFsListFromAvailableVolumes(ILog logger, bool treeOutput = false)
+        public static Flow<FsCollection> MakeFsListFromAvailableVolumes(ILog logger, bool treeOutput = false, bool humanize = false)
         {
             string[] MakeTableRow(PhysicalVolumeInfo volume, DiscFileSystem? fs) => 
             [
@@ -80,8 +80,8 @@ namespace auvdisk.DiskImage
                 fs?.FriendlyName ?? "None", 
                 fs?.VolumeLabel ?? "N/A", 
                 volume.MountPoints.Any() ? String.Join(", ", volume.MountPoints) : "N/A", 
-                fs?.GetUuid(new NullLogger()) ?? "", 
-                volume.Size.HasValue ? Utils.HumanizeFilesize(volume.Size.Value, true) : "N/A", 
+                fs?.GetUuid(new NullLogger()) ?? "",
+                (humanize ? volume.Size?.HumanizeBytes() : volume.Size?.ToString()) ?? "N/A",
                 volume.BytesPerSector?.ToString() ?? "N/A"
             ];
             

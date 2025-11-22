@@ -18,7 +18,7 @@ namespace auvdisk.Extensions
         string Description { get; }
         string Complete { get; }
         long TotalBytes { get; }
-        int IncrementBytes { get; set; }
+        long IncrementBytes { get; set; }
     }
     
     internal static class Utils
@@ -343,7 +343,7 @@ namespace auvdisk.Extensions
 
                 return subj;
             }
-            
+
             return action.LogOk(logger, "Checking that target file doesn't exist")
                 .Check(subj => !Path.Exists(target(subj)), (subj) => $"{target(subj)} already exists")
                 .TryMap(TryCreate, (Exception e) => e.Message);

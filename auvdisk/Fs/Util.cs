@@ -166,7 +166,7 @@ namespace auvdisk.Fs
                             logger.Log("Resized file with fast/unsafe method");
                         }
                     }
-                    catch (Exception ex)
+                    catch (Exception ex) when (Program.ExceptionFilter(ex))
                     {
                         logger.Warning($"Failed to start elevated process with error {ex.Message}");
                     }
@@ -178,34 +178,20 @@ namespace auvdisk.Fs
                     {
                         logger.Log("Resizing file with  fast/unsafe method");
                         logger.Log($"Administrator privileges: {Environment.IsPrivilegedProcess}");
-                        var currentProcess = Process.GetCurrentProcess();
-
-                        // Creates a lot of weirdness when many threads run this from UTs.
-                        // This leads to token being held until process finishes "in production"
-                        // However, auvdisk isn't designed to be hanging around, so this shouldn't be
-                        // a real issue.
-                        lock (Lock)
+                        
+                        WithVolumeManagerTokenPrivilege(logger, () =>
                         {
-                            Privilege ??= new AdjustPrivilege(PrivilegeName.SeManageVolumePrivilege);
-
-                            if (Program.IsInteractive)
-                            {
-                                var canManagerVolume = PrivilegeProvider.HasPrivilege(null, currentProcess, PrivilegeName.SeManageVolumePrivilege);
-
-                                logger.Log($"SeManageVolumePrivilege: {canManagerVolume}");
-                            }
-
                             success = ResizeFileFastUnsafe(target, size, logger);
 
                             if (success)
                             {
                                 logger.Log("Resized file with fast/unsafe method");
                             }
-                        }
+                        });
                     }
-                    catch (Exception ex)
+                    catch (Exception ex) when (Program.ExceptionFilter(ex))
                     {
-                        logger.Error(Spectre.Console.Markup.Escape(ex.Message));
+                        logger.Error(ex.Message.EscapeMarkup());
                     }
                 }
 #endif
@@ -231,5 +217,37 @@ namespace auvdisk.Fs
 
             return success;
         }
+#if WINDOWS
+        public static T WithVolumeManagerTokenPrivilege<T>(ILog logger, Func<T> func)
+        {
+            // Creates a lot of weirdness when many threads run this from UTs.
+            // This leads to token being held until process finishes "in production"
+            // However, auvdisk isn't designed to be hanging around, so this shouldn't be
+            // a real issue.
+            lock (Lock)
+            {
+                Privilege ??= new AdjustPrivilege(PrivilegeName.SeManageVolumePrivilege);
+                
+                if (Program.IsInteractive)
+                {
+                    var currentProcess = Process.GetCurrentProcess();
+                    var canManagerVolume = PrivilegeProvider.HasPrivilege(null, currentProcess, PrivilegeName.SeManageVolumePrivilege);
+
+                    logger.Log($"SeManageVolumePrivilege: {canManagerVolume}");
+                }
+                
+                return func();
+            }
+        }
+
+        public static void WithVolumeManagerTokenPrivilege(ILog logger, Action func)
+        {
+            WithVolumeManagerTokenPrivilege(logger, () =>
+            {
+                func();
+                return 0;
+            });
+        }
+#endif
     }
 }

@@ -63,7 +63,7 @@ public static class DiskpartScriptMananger
             
             return Flows.Val(new ScriptOutput(stdOut, stdErr, lastExitCode.Value));
         }
-        catch (Exception e)
+        catch (Exception e) when(Program.ExceptionFilter(e))
         {
             return Flows.Err<ScriptOutput>(e.Message);
         }

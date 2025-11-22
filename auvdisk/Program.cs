@@ -7,7 +7,6 @@ using CommandLine;
 using auvdisk.DiskImage;
 using auvdisk.Cli;
 using auvdisk.DiskImage.Vhd;
-using auvdisk.Interop;
 using auvdisk.Log;
 using Common.Logging;
 using DiscUtils;
@@ -38,6 +37,8 @@ namespace auvdisk
 #endif
         public const bool UseCustomHelpRenderer = true;
         public static Action<string> DebugOutput { get; set; } = _ => { };
+        
+        public static Func<Exception, bool> ExceptionFilter { get; set; } = TestExceptionFilter.ShouldCatch;
         
         private static void HandleEnvironment()
         {
@@ -104,7 +105,7 @@ namespace auvdisk
             Patches.PatchManager.ApplyPatches();
 
             var logger = new Log.Logger();
-
+            
             ParserResult<object>? cliResult = null;
 
 #pragma warning disable CS0162 // Unreachable code detected
@@ -339,7 +340,7 @@ namespace auvdisk
             {
                 if (opts.List)
                 {
-                    var result = DiskImage.Factory.MakeFsListFromAvailableVolumes(logger, opts.TreeOutput);
+                    var result = DiskImage.Factory.MakeFsListFromAvailableVolumes(logger, opts.TreeOutput, opts.Humanize);
 
                     return result.LogErrorIfAny(logger) ? 1 : 0;
                 }

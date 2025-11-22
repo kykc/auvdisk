@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using auvdisk.Cli;
 using auvdisk.DiskImage;
 #if WINDOWS
+using auvdisk.Fs.Ntfs;
 using auvdisk.Interop.Win32;
 #endif
 using Spectre.Console;
@@ -204,6 +205,13 @@ namespace auvdisk.Interop
                 var result = Interop.Win32.DriveLetterManager.RemoveDriveLetterFromVolume(rawOpts.Letter.First(), logger);
                 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
+            });
+
+            handlers.Register((CheckNtfsLastCluster opts) =>
+            {
+                NtfsClone.TestLastNtfsCluster(new BlockDeviceUnbufferedStream(opts.Volume, opts.GrantExtendedIoctl), logger);
+
+                return 0;
             });
 #pragma warning restore CA1416
 #endif

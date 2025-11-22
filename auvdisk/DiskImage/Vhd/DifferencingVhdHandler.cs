@@ -10,7 +10,7 @@ namespace auvdisk.DiskImage.Vhd
         public class ProgressData : IProgressData
         {
             public long TotalBytes { get; init; } = 0;
-            public int IncrementBytes { get; set; } = 0;
+            public long IncrementBytes { get; set; } = 0;
             public string Description => $"Merging...";
             public string Complete => "Merged";
         }

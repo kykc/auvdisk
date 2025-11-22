@@ -14,3 +14,4 @@ FlushFileBuffers
 GET_LENGTH_INFORMATION
 ReadFile
 DeleteVolumeMountPoint
+PARTITION_INFORMATION_EX

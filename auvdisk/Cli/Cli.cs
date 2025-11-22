@@ -82,6 +82,8 @@ namespace auvdisk.Cli
 
         [Option('t', "tree", Required = false, Default = false, HelpText = "Tree output")]
         public bool TreeOutput { get; set; } = false;
+        [Option('h', "humanize", Required = false, Default = false, HelpText = "Humanize large byte lengths to be human-readable")]
+        public bool Humanize { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
@@ -433,5 +435,16 @@ namespace auvdisk.Cli
     [NotSupported(!Program.IsDebug)]
     public class DebugRepl
     {
+    }
+    
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("check-ntfs-last-cluster", HelpText = "Check NTFS Last Cluster", Hidden = true)]
+    [NotSupported(!Program.IsWindows)]
+    public class CheckNtfsLastCluster
+    {
+        [Option('v', "volume", Required = true, HelpText = "Path volume (example: \\\\?\\Volume{0deefc43-02e6-40d8-8978-e4874fb4b405}\\ or \\\\.\\X:). Can be found using `browse-volumes --list`")]
+        public string Volume { get; set; } = "";
+        [Option('x', "extended-ioctl", Required = false, Default = false, HelpText = "Grant FSCTL_ALLOW_EXTENDED_DASD_IO on volume opening")]
+        public bool GrantExtendedIoctl { get; set; } = false;
     }
 }

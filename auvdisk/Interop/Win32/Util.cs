@@ -123,7 +123,7 @@ namespace auvdisk.Interop.Win32
                 {
                     Marshal.ThrowExceptionForHR(Marshal.GetHRForLastWin32Error());
                 }
-                catch (Exception e)
+                catch (Exception e) when (Program.ExceptionFilter(e))
                 {
                     logger.Error(e.Message);
                     return null;
@@ -168,7 +168,7 @@ namespace auvdisk.Interop.Win32
                     .Select(d => (d.hardwareModel, d.diskId, d.diskIdx, d.bytesPerSector, volumes: GetVolumes(d.diskId!)));
 
                 var volumes = disks
-                    .SelectMany(d => d.volumes .Select((v, volumeIdx) => (
+                    .SelectMany(d => d.volumes.Select((v, volumeIdx) => (
                         volumeIdx,
                         d.diskId,
                         d.diskIdx,
@@ -197,12 +197,46 @@ namespace auvdisk.Interop.Win32
 
                 return Flow<IEnumerable<PhysicalVolumeInfo>>.Err(ex.Message);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (Program.ExceptionFilter(ex))
             {
                 logger.Error($"An unexpected error occurred: {ex.Message}");
 
                 return Flow<IEnumerable<PhysicalVolumeInfo>>.Err(ex.Message);
             }
+        }
+
+        // Can't find a way to do this properly
+        private static string CrudeNormalizeDeviceId(string query)
+        {
+            var result = query;
+
+            if (result.StartsWith(@"\\.\"))
+            {
+                result = $@"\\?\{result.Substring(4)}";
+            }
+
+            return (result.TrimEnd('\\') + @"\").Replace(@"\", @"\\");
+        }
+
+        public static long? GetVolumeCapacity(string volumeId)
+        {
+            var query = volumeId.Length <= 3 // "C:\" and other variants 
+                ? $"SELECT Capacity FROM Win32_Volume WHERE DriveLetter = \"{volumeId.Substring(0, 1).ToUpper()}:\"" 
+                : $"SELECT Capacity FROM Win32_Volume WHERE DeviceID = \"{CrudeNormalizeDeviceId(volumeId)}\"";
+            
+            var obj = new ManagementObjectSearcher(@"root\CIMV2", query)
+                .Get().Cast<ManagementObject>().FirstOrDefault();
+
+            if (!obj.IsSome()) return null;
+            
+            var maybeCapacity = obj?["Capacity"];
+
+            if (maybeCapacity.IsSome())
+            {
+                return (long)(ulong)maybeCapacity!;
+            }
+
+            return null;
         }
 
         public static Stream OpenVolumeByDeviceIdReadOnly(string deviceId, ILog logger)
@@ -237,11 +271,11 @@ namespace auvdisk.Interop.Win32
                     
                     try
                     {
-                        snapStream = new BlockDeviceUnbufferedStream(vss.Root);
+                        snapStream = new BlockDeviceUnbufferedStream(vss.Root, true);
                         logger.Log($"Created snapshot {vss.Root} for volume {volume}");
                         return Flows.Val(None.Value);
                     }
-                    catch (Exception e)
+                    catch (Exception e) when (Program.ExceptionFilter(e))
                     {
                         return new($"Failed to open {vss.Root} stream with error: {e.Message}");
                     }

@@ -3,6 +3,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 #if WINDOWS
+using Windows.Win32;
+using Windows.Win32.Foundation;
 using Windows.Win32.Storage.FileSystem;
 using Windows.Win32.System.Ioctl;
 using Microsoft.Win32.SafeHandles;
@@ -24,8 +26,16 @@ namespace auvdisk.Interop.Win32
         private readonly SafeFileHandle _handle;
         private IntPtr _bufferAllocHandle;
         private readonly IntPtr _buffer;
+        private readonly long? _length;
 
-        public BlockDeviceUnbufferedStream(string path) :
+        // Ability to provide external length is needed because volume is at least sometimes of different size than partition
+        // Example:
+        // partition: 106006839296 (reported by ioctl and many other places, WMI included)
+        // volume: 106006835200 which is 4096 shorter
+        // This needs further investigation, but in some cases caller knows that passed path is a volume and can get proper reliable
+        // length from WMI win32_volume
+        // UPDATE: it's more complicated than that. I'll leave the parameter `length` for now, but the root of the issue see NtfsClone.ReconstructLastCluster
+        public BlockDeviceUnbufferedStream(string path, bool fsCtlAllowExtendedIo = false, long? length = null) :
             this(Windows.Win32.PInvoke.CreateFile(
                 path,
                 (uint)FileAccess.Read,
@@ -33,14 +43,14 @@ namespace auvdisk.Interop.Win32
                 null,
                 FILE_CREATION_DISPOSITION.OPEN_EXISTING,
                 0,
-                null))
+                null), fsCtlAllowExtendedIo, length)
         {
-            //if (!NativeMethods.DeviceIoControl(_handle, NativeMethods.EIOControlCode.FsctlAllowExtendedDasdIo, null, 0, out _, 0, out _, IntPtr.Zero))
         }
-
-        public BlockDeviceUnbufferedStream(SafeFileHandle handle)
+        
+        public BlockDeviceUnbufferedStream(SafeFileHandle handle, bool fsCtlAllowExtendedIo = false, long? length = null)
         {
             _handle = handle;
+            _length = length;
 
             if (_handle.IsInvalid)
             {
@@ -51,6 +61,21 @@ namespace auvdisk.Interop.Win32
             _buffer = new IntPtr(((_bufferAllocHandle.ToInt64() + Alignment - 1) / Alignment) * Alignment);
 
             _position = 0;
+
+            if (fsCtlAllowExtendedIo)
+            {
+                unsafe
+                {
+                    // ReSharper disable once InconsistentNaming
+                    const uint FSCTL_ALLOW_EXTENDED_DASD_IO = 0x00090083;
+                    uint bytesReturned = 0;
+                    if (!PInvoke.DeviceIoControl((HANDLE)_handle.DangerousGetHandle(), FSCTL_ALLOW_EXTENDED_DASD_IO, null, 0,
+                            (void*)IntPtr.Zero, 0, &bytesReturned))
+                    {
+                        throw new Win32Exception();
+                    }
+                }
+            }
         }
 
         protected override void Dispose(bool disposing)
@@ -73,23 +98,19 @@ namespace auvdisk.Interop.Win32
 
         public override bool CanSeek => true;
 
-        public override long Length
-        {
-            get
-            {
-                unsafe
-                {
-                    var buffer = new byte[sizeof(GET_LENGTH_INFORMATION)];
-                    if (!Windows.Win32.PInvoke.DeviceIoControl(_handle, IOCTL_DISK_GET_LENGTH_INFO, null, buffer, null))
-                    {
-                        throw new Win32Exception();
-                    }
-                    GET_LENGTH_INFORMATION lengthInfo = Bytes.Util.Deserialize<GET_LENGTH_INFORMATION>(buffer);
-                    // TODO: if I want this to be more generic it might be a good idea to fallback to GetFileSizeEx here
+        public override long Length => _length ?? GetIoctlDeviceLength(_handle);
 
-                    return lengthInfo.Length;
-                }
+        public static unsafe long GetIoctlDeviceLength(SafeFileHandle handle)
+        {
+            var buffer = new byte[sizeof(GET_LENGTH_INFORMATION)];
+            if (!Windows.Win32.PInvoke.DeviceIoControl(handle, IOCTL_DISK_GET_LENGTH_INFO, null, buffer, null))
+            {
+                throw new Win32Exception();
             }
+            
+            GET_LENGTH_INFORMATION lengthInfo = Bytes.Util.Deserialize<GET_LENGTH_INFORMATION>(buffer);
+
+            return lengthInfo.Length;
         }
 
         public override long Position
@@ -111,7 +132,7 @@ namespace auvdisk.Interop.Win32
                 var alignedStart = (_position / Alignment) * Alignment;
                 var alignmentOffset = (int)(_position - alignedStart);
 
-                if (!Windows.Win32.PInvoke.SetFilePointerEx(_handle, alignedStart, out var newPos, 0))
+                if (!Windows.Win32.PInvoke.SetFilePointerEx(_handle, alignedStart, out var _, 0))
                 {
                     throw new Win32Exception();
                 }

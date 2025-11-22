@@ -174,7 +174,7 @@ public class CSharpRepl
                 Console.WriteLine($"Compilation error: {ex.Message}");
                 Console.ResetColor();
             }
-            catch (Exception ex)
+            catch (Exception ex) when (Program.ExceptionFilter(ex))
             {
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine($"Runtime error: {ex.Message}");

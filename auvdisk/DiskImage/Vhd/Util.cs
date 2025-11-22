@@ -36,7 +36,7 @@ namespace auvdisk.DiskImage.Vhd
                     return header.IsValid ? header : null;
                 }
             }
-            catch (Exception)
+            catch (Exception ex) when(Program.ExceptionFilter(ex))
             {
                 // ignored
             }
@@ -97,7 +97,7 @@ namespace auvdisk.DiskImage.Vhd
                 // "touch" file
                 new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None).Close();
             }
-            catch (Exception e)
+            catch (Exception e) when (Program.ExceptionFilter(e))
             {
                 return Flows.Err<VhdFileInfo>(e.Message);
             }

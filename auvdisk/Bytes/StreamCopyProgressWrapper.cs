@@ -16,7 +16,7 @@ namespace auvdisk.Bytes
         public class ProgressData(string actionName, long totalBytes) : IProgressData
         {
             public long TotalBytes { get; init; } = totalBytes;
-            public int IncrementBytes { get; set; } = 0;
+            public long IncrementBytes { get; set; } = 0;
             public string Description => $"{actionName}...";
             public string Complete => "Done.";
         }

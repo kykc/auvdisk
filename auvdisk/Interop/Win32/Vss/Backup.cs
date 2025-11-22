@@ -26,7 +26,7 @@ namespace auvdisk.Interop.Win32.Vss
                 _snap.AddVolume(Path.GetPathRoot(volumeName)!);
                 PreBackup();
             }
-            catch (Exception)
+            catch (Exception ex) when (Program.ExceptionFilter(ex))
             {
                 _backup?.AbortBackup();
                 Dispose();
@@ -40,7 +40,7 @@ namespace auvdisk.Interop.Win32.Vss
             {
                 return Flow<Backup>.Val(new Backup(volumeName));
             }
-            catch (Exception e)
+            catch (Exception e) when (Program.ExceptionFilter(e))
             {
                 return new(e.Message);
             }

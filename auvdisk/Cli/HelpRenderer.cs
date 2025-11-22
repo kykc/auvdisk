@@ -165,7 +165,7 @@ public static class HelpRenderer
         {
             return formatter(error);
         }
-        catch (Exception)
+        catch (Exception e) when (Program.ExceptionFilter(e))
         {
             return "";
         }
