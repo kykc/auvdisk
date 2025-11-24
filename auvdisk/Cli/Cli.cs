@@ -189,6 +189,8 @@ namespace auvdisk.Cli
         public string Child { get; set; } = "";
         [Option('v', "verbose", Required = false, Default = false, HelpText = "Verbose output from disk prober")]
         public bool Verbose { get; set; } = false;
+        [Option("vhdx",  Required = false, Default = false, HelpText = "Create VHDx instead of VHD")]
+        public bool Vhdx { get; set; } = false;
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]

@@ -336,11 +336,11 @@ namespace auvdisk.Extensions
             return subj.BindConcat(binder, (left, _) => left, switchContext);
         }
         
-        public static Flow<TSubj> Finally<TSubj>(this Flow<TSubj> subj, Action action) where TSubj : class
+        public static Flow<TSubj> Finally<TSubj>(this Flow<TSubj> subj, Action<IFlowContext> action) where TSubj : class
         {
             try
             {
-                action();
+                action(subj.Context);
                 return subj;
             }
             catch (Exception ex) when (subj.Context.ShouldCatch(ex))

@@ -282,7 +282,7 @@ namespace auvdisk.Interop.Win32
                     using var disk = VirtualDisk.OpenDisk(state.opts.target, FileAccess.ReadWrite);
                     var partStream = disk.Partitions.Partitions[state.opts.bootable ? 1 : 0].Open();
                     
-                    return NtfsClone.Clone(state.snapStream, partStream , state.opts.logger)
+                    return Flows.Val(None.Value)
                         .HandleAll()
                         .BindErrIf(_ => state.opts.bootable, [SuppressMessage("ReSharper", "AccessToDisposedClosure")] (_) =>
                         {
@@ -290,7 +290,8 @@ namespace auvdisk.Interop.Win32
                             FatFileSystem.FormatPartition(disk, 0, "BOOT");
                             return Flows.Val(None.Value);
                         })
-                        .PopCtx();
+                        .PopCtx()
+                        .Bind(_ => NtfsClone.Clone(state.snapStream, partStream , state.opts.logger));
                 })
                 .BindErrIf(state => state.opts.bootable, state => // If requested, prepare boot files on EFI partition using bcdboot
                 {

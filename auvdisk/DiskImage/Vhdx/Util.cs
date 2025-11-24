@@ -1,4 +1,6 @@
 using auvdisk.Extensions;
+using DiscUtils.Streams;
+using DiscUtils.Vhdx;
 
 namespace auvdisk.DiskImage.Vhdx;
 
@@ -38,5 +40,25 @@ public static class Util
         
         // Do not trust third-party libraries and their null-annotations
         return Flows.ValOr(disk, "Failed to create dynamic VHDx image");
+    }
+
+    // TODO: investigate VHDx parent locators. Need to check what DU writes here and is it sensible enough
+    public static Flow<DiscUtils.Vhdx.Disk> CreateDifferencing(string path, string parentPath, Log.ILog logger)
+    {
+        return Flows.Val(None.Value)
+            .HandleAll()
+            .Map(_ => new DiskImageFile(parentPath, FileAccess.ReadWrite))
+            .MapConcat(
+                _ => new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite),
+                (parentDisk, subjectStream) => new { parentDisk, subjectStream })
+            .MapOr(state =>
+            {
+                string parentAbsolutePath = Path.GetFullPath(parentPath);
+                string parentRelativePath = Vhd.Util.NormalizeRelativePathToParent(Path.GetFullPath(path), Path.GetFullPath(parentPath));
+
+                return Disk.InitializeDifferencing(state.subjectStream, Ownership.Dispose, state.parentDisk, Ownership.Dispose,
+                    parentAbsolutePath, parentRelativePath, DateTime.UtcNow);
+            }, "Failed to create differencing VHDx image file")
+            .PopCtx();
     }
 }

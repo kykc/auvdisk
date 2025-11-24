@@ -89,6 +89,22 @@ public static class Util
         }
     }
 
+    public static Flow<VirtualDisk> CreateDiffVdisk(string path, string parentPath, ILog logger, bool vhdx = false)
+    {
+        if (!vhdx)
+        {
+            var result = Vhd.Util.CreateDifferentialVhd(parentPath, path, logger);
+
+            return result.Bind(vhdInfo => Vhd.Util.OpenDiskWithDu(vhdInfo.Path, logger)).Map(VirtualDisk (x) => x);
+        }
+        else
+        {
+            var result = Vhdx.Util.CreateDifferencing(path, parentPath, logger);
+
+            return result.Map(VirtualDisk (x) => x);
+        }
+    }
+
     // Using extents copies only allocated data in case of dynamic VHD or other
     // underlying type supporting dynamic allocation
     // CAUTION: this function might not do what you want/expect if the passed source is {IsSparse: true, NeedsParent: true},

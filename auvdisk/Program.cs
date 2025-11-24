@@ -54,7 +54,7 @@ namespace auvdisk
         {
             return (rawOpts) =>
             {
-                var result = Flows.Val(rawOpts)
+                using var result = Flows.Val(rawOpts)
                     .WithCtx(ctx)
                     .WithCheckedSize(x => x.Size)
                     .WithCheckedTargetAvailable(x => x.Target, logger)
@@ -214,19 +214,19 @@ namespace auvdisk
             
             handlers.Register((Cli.CreateDiffVhd rawOpts) =>
             {
-                void OutputDiskInfo(VhdFileInfo info)
-                {
-                    Util.OutputDiagnosticInfo(info.Path, logger);
-                    new DiskProbe(info.Path, logger).Probe();
-                }
-
-                var result = Flows.Val(rawOpts)
+                using var result = Flows.Val(rawOpts)
                     .WithCtx(flowCtx)
                     .WithCheckedTargetAvailable(opts => opts.Child, logger)
                     .WithCheckedSourceExists(opts => opts.Parent, logger)
-                    .WithCheckedDiskType(_ => "VHD", opts => opts.Parent, opts => opts.Verbose, logger)
-                    .Bind(x => Util.CreateDifferentialVhd(x.Parent, x.Child, logger))
-                    .SideEffect(OutputDiskInfo)
+                    .WithCheckedDiskType(opts => opts.Vhdx ? "VHDX" : "VHD", opts => opts.Parent, opts => opts.Verbose, logger)
+                    .WithCheckedTargetExtension(opts => opts.Child, opts => opts.Vhdx ? ".vhdx" : ".vhd")
+                    .WithCheckedTargetExtension(opts => opts.Parent, opts => opts.Vhdx ? ".vhdx" : ".vhd")
+                    .BindConcat(opts => DiskImage.Util.CreateDiffVdisk(opts.Child, opts.Parent, logger, opts.Vhdx), (opts, disk) => new {opts, disk})
+                    .MapDispose(state => state.opts, state => state.disk)
+                    .SideEffect(opts => Utils.IfElse(
+                        () => opts.Vhdx, 
+                        () => new DiskProbe(opts.Child, logger).Probe(), 
+                        () => Util.OutputDiagnosticInfo(opts.Child, logger)))
                     .LogOk(logger, "Done.");
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
