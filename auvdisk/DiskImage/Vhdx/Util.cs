@@ -26,7 +26,8 @@ public static class Util
         
         var disk = DiscUtils.Vhdx.Disk.InitializeFixed(targetStream, DiscUtils.Streams.Ownership.Dispose, (long)size)!;
 
-        return Flows.Val(disk);
+        // Do not trust third-party libraries and their null-annotations
+        return Flows.ValOr(disk, "Failed to create fixed VHDx image");
     }
 
     public static Flow<DiscUtils.Vhdx.Disk> CreateDynamic(string path, ulong size, Log.ILog logger)
@@ -35,6 +36,7 @@ public static class Util
 
         var disk = DiscUtils.Vhdx.Disk.InitializeDynamic(targetStream, DiscUtils.Streams.Ownership.Dispose, (long)size)!;
         
-        return Flows.Val(disk);
+        // Do not trust third-party libraries and their null-annotations
+        return Flows.ValOr(disk, "Failed to create dynamic VHDx image");
     }
 }

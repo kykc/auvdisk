@@ -7,12 +7,6 @@ namespace auvdisk.test
 
     public class TestFixture : IDisposable
     {
-        public TestFixture()
-        {
-            DiscUtils.Complete.SetupHelper.SetupComplete();
-            Program.IsInteractive = false;
-        }
-
         public void Dispose()
         {
         }

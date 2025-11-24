@@ -262,6 +262,11 @@ namespace auvdisk.Extensions
             }
         }
 
+        public static T IfElse<T>(Func<bool> condition, Func<T> actionTrue, Func<T> actionFalse)
+        {
+            return condition() ? actionTrue() : actionFalse();
+        }
+
         public static Table MakeConsoleTable(string[] columns)
         {
             var table = new Table();
@@ -317,7 +322,9 @@ namespace auvdisk.Extensions
 
             return action.LogOk(logger, "Checking that source file exists")
                 .Check(x => File.Exists(source(x)), (x) => $"Source file {source(x)} does not exist")
-                .TryMap(TryOpenForReading, (Exception e) => e.Message);
+                .HandleAll()
+                .Map(TryOpenForReading)
+                .PopCtx();
         }
         
         public static Flow<TSubj> WithCheckedStreamBoundaries<TSubj>(this Flow<TSubj> action, Func<TSubj, string> path, Func<TSubj, ulong> offset, Func<TSubj, ulong> length, ILog logger)
@@ -338,7 +345,7 @@ namespace auvdisk.Extensions
         public static Flow<TSubj> WithCheckedPartLayout<TSubj>(this Flow<TSubj> action, Func<TSubj, string> layout, ILog logger) where TSubj : class
         {
             return action.LogIf(logger, x => layout(x) != "", "Parsing partition layout string")
-                .CheckDiscardIf(x => layout(x) != "", x => PartitionTable.Util.ParseLayout(layout(x), logger));
+                .BindErrIf(x => layout(x) != "", x => PartitionTable.Util.ParseLayout(layout(x), logger));
         }
         
         public static Flow<TSubj> WithCheckedTargetAvailable<TSubj>(this Flow<TSubj> action, Func<TSubj, string> target, ILog logger) where TSubj : class
@@ -353,7 +360,17 @@ namespace auvdisk.Extensions
 
             return action.LogOk(logger, "Checking that target file doesn't exist")
                 .Check(subj => !Path.Exists(target(subj)), (subj) => $"{target(subj)} already exists")
-                .TryMap(TryCreate, (Exception e) => e.Message);
+                .HandleAll()
+                .Map(TryCreate)
+                .PopCtx();
+        }
+
+        public static Flow<TSubj> WithSuperUserRights<TSubj>(this Flow<TSubj> action) where TSubj : class
+        {
+            // ReSharper disable once HeuristicUnreachableCode
+            const string suName = Program.IsWindows ? "administrator" : "root";
+            
+            return action.Check(_ => Environment.IsPrivilegedProcess, _ => $"This action requires {suName} privileges");
         }
 
         // Not because I have nothing better to do, but because DiscUtils is picky and is using file extension to guess file type

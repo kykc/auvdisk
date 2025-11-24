@@ -6,10 +6,8 @@ using auvdisk.Cli;
 using auvdisk.Extensions;
 using auvdisk.Log;
 using DiscUtils.Fat;
-using DiscUtils.Streams;
 using DotNext.Collections.Generic;
 using System.Management;
-using System.Text.RegularExpressions;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Storage.FileSystem;
@@ -101,7 +99,7 @@ namespace auvdisk.Interop.Win32
                     endOfFileResult, setFileInfoResult.ToString(), setFileDataLengthResult.ToString(),
                     closeResult, isSuccess);
                 
-                logger.Debug(Markup.Escape(result.ToString()));
+                logger.Debug(result.ToString().EscapeMarkup());
 
                 return result;
             }
@@ -185,7 +183,7 @@ namespace auvdisk.Interop.Win32
                         v.hardwareModel,
                         v.diskIdx?.ToString()));
 
-                return Flow<IEnumerable<PhysicalVolumeInfo>>.Val(volumes.ToList());
+                return Flows.Val(volumes.ToList().AsEnumerable());
             }
             catch (ManagementException ex)
             {
@@ -196,13 +194,13 @@ namespace auvdisk.Interop.Win32
                     logger.Warning("--> Hint: Please run this application as Administrator.");
                 }
 
-                return Flow<IEnumerable<PhysicalVolumeInfo>>.Err(ex.Message);
+                return new(ex.Message);
             }
             catch (Exception ex) when (Program.ExceptionFilter(ex))
             {
                 logger.Error($"An unexpected error occurred: {ex.Message}");
 
-                return Flow<IEnumerable<PhysicalVolumeInfo>>.Err(ex.Message);
+                return new(ex.Message);
             }
         }
 
@@ -251,80 +249,63 @@ namespace auvdisk.Interop.Win32
         }
 
         [SuppressMessage("ReSharper", "ConvertToLambdaExpression")]
-        public static Flow<Value<ulong>> CloneVolumeToVirtualDiskWithVss(string volume, string target, ILog logger, bool createFixed = false, bool forceZeroFill = false, bool bootable = false, bool vhdx = false)
+        public static Flow<None> CloneVolumeToVirtualDiskWithVss(string volume, string target, ILog logger, bool createFixed = false, bool forceZeroFill = false, bool bootable = false, bool vhdx = false)
         {
             var findVolumes = (IEnumerable<VhdMounter.VhdVolumeInfo> volumes) =>
             {
                 const char efiTargetLetter = 'X'; // TODO: ideally, check that it is not already taken
-                
-                var efiVolume = volumes.Where(v => v.FileSystem == "FAT32").FirstOrNone();
-                var dataVolume = volumes.Where(v => v.FileSystem == "NTFS").FirstOrNone();
+
+                var vhdVolumeInfos = volumes.ToList();
+                var efiVolume = vhdVolumeInfos.Where(v => v.FileSystem == "FAT32").FirstOrNone();
+                var dataVolume = vhdVolumeInfos.Where(v => v.FileSystem == "NTFS").FirstOrNone();
 
                 return efiVolume
                     .Concat(dataVolume)
                     .Convert(x => new {efi = x.Item1, data = x.Item2, efiTargetLetter})
                     .Flow($"Failed to detect/find EFI/data volumes");
             };
-            
-            Vss.Backup? vss = null;
-            Stream? snapStream = null;
-            
-            return 
-                Vss.Backup.Make(volume, logger) // Create VSS session
-                .CheckDiscard(vssObj => // pin VSS session and volume stream, need to be very careful with their guaranteed disposal
-                {
-                    vss = vssObj;
-                    
-                    try
-                    {
-                        snapStream = new BlockDeviceUnbufferedStream(vss.Root, true);
-                        logger.Log($"Created snapshot {vss.Root} for volume {volume}");
-                        return Flows.Val(None.Value);
-                    }
-                    catch (Exception e) when (Program.ExceptionFilter(e))
-                    {
-                        return new($"Failed to open {vss.Root} stream with error: {e.Message}");
-                    }
-                })
-                .Bind(_ => // Create VHD/VHDx file, prepare target partitions
-                {
-                    return DiskImage.Util.CreateVdiskWithGptLayout(
-                        target, bootable ? 512UL * 1024 * 1024 : 0UL, (ulong)snapStream!.Length, 
-                        logger, forceZeroFill, !createFixed, vhdx);
-                })
-                .CheckDiscard(_ => // Open image with DiscUtils, format EFI partition, clone NTFS partition
-                {
-                    using var disk = VirtualDisk.OpenDisk(target, FileAccess.ReadWrite);
-                    
-                    if (bootable)
-                    {
-                        logger.Log($"Formatting EFI partition into FAT32");
-                        FatFileSystem.FormatPartition(disk, 0, "BOOT");
-                    }
 
-                    var partStream = disk.Partitions.Partitions[bootable ? 1 : 0].Open();
-
-                    return NtfsClone.Clone(snapStream!, partStream , logger);
-                })
-                .CheckDiscardIf(_ => bootable, _ => // If requested, prepare boot files on EFI partition using bcdboot
+            var request = new { volume, target, createFixed, forceZeroFill, bootable, vhdx, logger };
+            
+            // Pinned to the scope, as there are IDisposable values inside: Backup and BlockDeviceUnbufferedStream
+            using var result = Flows.Val(request)
+                .BindConcat(opts => Vss.Backup.Make(opts.volume, opts.logger), (opts, vss) => new { opts, vss })
+                .Handle((Exception e) => e.Message)
+                .MapConcat(state => new BlockDeviceUnbufferedStream(state.vss.Root, true), (state, snapStream) => new { state.vss, state.opts, snapStream })
+                .PopCtx()
+                .LogOk(logger, state => $"Created snapshot {state.vss.Root} for volume {state.opts.volume}")
+                .BindErr(state => DiskImage.Util.CreateVdiskWithGptLayout(
+                    state.opts.target, state.opts.bootable ? 512UL * 1024 * 1024 : 0UL, (ulong)state.snapStream.Length, 
+                    state.opts.logger, state.opts.forceZeroFill, !state.opts.createFixed, state.opts.vhdx))
+                .BindErr(state =>
                 {
-                    return VhdMounter.Mount(target, logger)
+                    using var disk = VirtualDisk.OpenDisk(state.opts.target, FileAccess.ReadWrite);
+                    var partStream = disk.Partitions.Partitions[state.opts.bootable ? 1 : 0].Open();
+                    
+                    return NtfsClone.Clone(state.snapStream, partStream , state.opts.logger)
+                        .HandleAll()
+                        .BindErrIf(_ => state.opts.bootable, [SuppressMessage("ReSharper", "AccessToDisposedClosure")] (_) =>
+                        {
+                            logger.Log($"Formatting EFI partition into FAT32");
+                            FatFileSystem.FormatPartition(disk, 0, "BOOT");
+                            return Flows.Val(None.Value);
+                        })
+                        .PopCtx();
+                })
+                .BindErrIf(state => state.opts.bootable, state => // If requested, prepare boot files on EFI partition using bcdboot
+                {
+                    return VhdMounter.Mount(state.opts.target, state.opts.logger)
                         .Bind(findVolumes)
-                        .CheckDiscard(v => DriveLetterManager.AddDriveLetterToVolume(v.efi.Path, v.efiTargetLetter, logger))
-                        .Bind(v => CliTools.ExecuteBcdBoot(v.efiTargetLetter, v.data.DriveLetter ?? 'C', logger)) // ugly fallback to C, but I don't have better solution at the moment
-                        .Bind(l => DriveLetterManager.RemoveDriveLetterFromVolume(l.Val, logger))
-                        .Check(_ => VhdMounter.Dismount(target, logger), (_) => $"Failed to dismount {target}");
+                        .BindErr(v => DriveLetterManager.AddDriveLetterToVolume(v.efi.Path, v.efiTargetLetter, state.opts.logger))
+                        .Bind(v => CliTools.ExecuteBcdBoot(v.efiTargetLetter, v.data.DriveLetter ?? 'C', state.opts.logger)) // ugly fallback to C, but I don't have better solution at the moment
+                        .Bind(l => DriveLetterManager.RemoveDriveLetterFromVolume(l.Val, state.opts.logger))
+                        .Check(_ => VhdMounter.Dismount(state.opts.target, state.opts.logger), (_) => $"Failed to dismount {state.opts.target}");
                 })
-                .Finally(() =>
-                {
-                    if (vss != null)
-                    {
-                        logger.Log($"Closing snapshot {vss.Root} for volume {volume}");
-                    }
+                .LogOk(logger, state => $"Closing snapshot {state.vss.Root} for volume {state.opts.volume}")
+                .MapDispose(state => new {state.opts, state.vss}, state => state.snapStream)
+                .MapDispose(state => state.opts, state => state.vss);
 
-                    snapStream?.Dispose();
-                    vss?.Dispose();
-                });
+            return result.IsErr ? new(result.UnwrapErr()) : Flows.Val(None.Value);
         }
     }
 }

@@ -13,11 +13,6 @@ namespace auvdisk.test.Vhd
             Path.Join(Directory.GetCurrentDirectory(), "test_create_fixed_fast.vhd");
         private readonly string _targetCreateZeroFill =
             Path.Join(Directory.GetCurrentDirectory(), "test_create_fixed_zerofill.vhd");
-
-        public CreateResizeFixedVhdTest()
-        {
-            Program.IsInteractive = false;
-        }
         
         [Fact]
         public void TestCreateResizeFast()

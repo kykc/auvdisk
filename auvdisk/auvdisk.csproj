@@ -9,7 +9,7 @@
     <RollForward>LatestMajor</RollForward>
     <LangVersion>Latest</LangVersion>
     <AssemblyName>auvdisk</AssemblyName>
-    <Version>1.9.10</Version>
+    <Version>1.9.11</Version>
     <Authors>Alexander Automatl</Authors>
     <Company>Tomatl Inc</Company>
     <IsWindows Condition="$([MSBuild]::IsOSPlatform('Windows'))">true</IsWindows>
@@ -21,6 +21,7 @@
     <PackageReference Include="Common.Logging" Version="3.4.1" />
     <PackageReference Include="DiskAccessLibrary" Version="1.6.4.3" />
     <PackageReference Include="DotNext" Version="5.25.1" />
+    <PackageReference Include="JetBrains.Annotations" Version="2025.2.2" />
     <PackageReference Include="Lib.Harmony" Version="2.4.1" />
     <PackageReference Include="LTRData.DiscUtils" Version="1.0.69" />
     <PackageReference Include="SimpleExec" Version="12.0.0" />

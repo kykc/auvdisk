@@ -56,7 +56,7 @@ namespace auvdisk.DiskImage
                 return Flows.Val(new VhdFileInfo(disk, target, VirtualHardDiskType.Fixed));
             };
 
-            return Flow<None>.Val(None.Value)
+            return Flows.Val(None.Value)
                 .WithCheckedSourceExists(_ => source, logger)
                 .WithCheckedFsType(_ => "", _ => source, _ => verbose, logger) // this will effectively check that filesystem was recognized and will accept any type of FS
                 .WithCheckedTargetAvailable(_ => target, logger)
@@ -128,7 +128,7 @@ namespace auvdisk.DiskImage
                 return Flows.Val(none);
             };
 
-            return Flow<None>.Val(None.Value)
+            return Flows.Val(None.Value)
                 .WithCheckedSourceExists(_ => source, logger)
                 .WithCheckedDiskType(_ => "VHD", _ => source, _ => verbose, logger)
                 .WithCheckedTargetAvailable(_ => target, logger)
@@ -165,7 +165,7 @@ namespace auvdisk.DiskImage
                 return Util.LazyCopyDiskContents(vhd, vhdx, logger);
             };
 
-            return Flow<None>.Val(None.Value)
+            return Flows.Val(None.Value)
                 .WithCheckedSourceExists(_ => source, logger)
                 .WithCheckedDiskType(_ => "VHD", _ => source, _ => verbose, logger)
                 .WithCheckedTargetAvailable(_ => target, logger)
@@ -206,7 +206,7 @@ namespace auvdisk.DiskImage
                     : Flows.Val(VhdFileInfo.Make(vhd, target, fixedVhd.Value ? VirtualHardDiskType.Fixed : VirtualHardDiskType.Dynamic)!);
             };
 
-            return Flow<None>.Val(None.Value)
+            return Flows.Val(None.Value)
                 .WithCheckedSourceExists(_ => source, logger)
                 .WithCheckedDiskType(_ => "VHDX", _ => source, _ => verbose, logger)
                 .WithCheckedTargetAvailable(_ => target, logger)
@@ -231,7 +231,7 @@ namespace auvdisk.DiskImage
                 return none;
             };
 
-            return Flow<None>.Val(None.Value)
+            return Flows.Val(None.Value)
                 .WithCheckedSourceExists(_ => source, logger)
                 .WithCheckedDiskType(_ => "qcow2", _ => source, _ => verbose, logger)
                 .WithCheckedTargetAvailable(_ => target, logger)
@@ -263,7 +263,7 @@ namespace auvdisk.DiskImage
                 return none;
             };
 
-            return Flow<None>.Val(None.Value)
+            return Flows.Val(None.Value)
                 .WithCheckedSourceExists(_ => source, logger)
                 .WithCheckedDiskType(_ => "RAW", _ => source, _ => verbose, logger)
                 .Map(action);
@@ -287,7 +287,7 @@ namespace auvdisk.DiskImage
                 return none;
             };
 
-            return Flow<None>.Val(None.Value)
+            return Flows.Val(None.Value)
                 .WithCheckedSourceExists(_ => source, logger)
                 .WithCheckedDiskType(_ => "VHD", _ => source, _ => verbose, logger)
                 .WithCheckedVhdType(_ => source, _ => VirtualHardDiskType.Fixed, logger)

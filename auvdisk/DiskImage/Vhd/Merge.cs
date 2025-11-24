@@ -1,15 +1,14 @@
-using auvdisk.Bytes;
 using Spectre.Console;
 using auvdisk.Extensions;
-using auvdisk.Log;
 using DiscUtils;
 using DiskAccessLibrary.VHD;
+using JetBrains.Annotations;
 
 namespace auvdisk.DiskImage.Vhd
 {
     public static class Merge
     {
-        private record DiskLayerModel(string FullPath, System.Guid? UniqueId, bool IsSparse, bool NeedsParent);
+        private record DiskLayerModel(string FullPath, System.Guid? UniqueId, [UsedImplicitly] bool IsSparse, [UsedImplicitly] bool NeedsParent);
         private record DiskMergeModel(DiskLayerModel Parent, DiskLayerModel Child, VHDFooter PassedParentFooter, List<DiskLayerModel> AllLayers);
         
         public static Flow<DiscUtils.VirtualDisk> PerformMerge(string parent, string child, string target, Log.ILog logger, bool zeroFill = false)
@@ -30,7 +29,7 @@ namespace auvdisk.DiskImage.Vhd
                     (model) => $"Child image points to {model.Parent.UniqueId} while {model.PassedParentFooter.UniqueId} was passed")
                 .CheckIf(_ => !inPlaceMode, CheckTargetAvailable, (_) => $"Target image {target} already exists")
                 .CheckIf(_ => !inPlaceMode, ConfirmImageCopy, (_) => "Exiting")
-                .CheckDiscardIf(_ => !inPlaceMode, PerformImageCopy)
+                .BindErrIf(_ => !inPlaceMode, PerformImageCopy)
                 .CheckIf(_ => inPlaceMode, ConfirmMergeIntoParent, (_) => "Exiting")
                 .Bind(PerformMergeAction);
             
@@ -111,7 +110,7 @@ namespace auvdisk.DiskImage.Vhd
                 timer.Start();
 
                 return outerModel.Flow()
-                    .CheckDiscard(model =>
+                    .BindErr(model =>
                     {
                         return model.PassedParentFooter.DiskType switch
                         {
@@ -122,7 +121,7 @@ namespace auvdisk.DiskImage.Vhd
                             var otherType => new($"Unexpected disk type <{otherType}>")
                         };
                     })
-                    .CheckDiscard(model =>
+                    .BindErr(model =>
                     {
                         // NEVER use paths from parent locators here for the `target`
                         // we need to write to the file requested by the user
@@ -141,13 +140,7 @@ namespace auvdisk.DiskImage.Vhd
                             return DiskImage.Util.LazyCopyDiskContents(sourceDisk, targetDisk, logger);
                         }
                     })
-                    .WithSideEffect(_ =>
-                    {
-                        if (!Program.IsInteractive)
-                        {
-                            logger.Log($"Done copying parent to target in {timer.ElapsedMilliseconds}ms");
-                        }
-                    });
+                    .LogIf(logger, _ => !Program.IsInteractive, $"Done copying parent to target in {timer.ElapsedMilliseconds}ms");
             }
 
             bool ConfirmMergeIntoParent(DiskMergeModel layers)

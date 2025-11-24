@@ -1,5 +1,5 @@
+using System.ComponentModel;
 using auvdisk.Extensions;
-using auvdisk.Log;
 
 namespace auvdisk.test
 {
@@ -15,24 +15,24 @@ namespace auvdisk.test
         [Fact]
         public void TestMap()
         {
-            var res = Flow<Value<int>>.Val(2.RefVal()).Map(x => ((double)x.Val).RefVal());
+            var res = Flows.Val(2.RefVal()).Map(x => ((double)x.Val).RefVal());
             Assert.True(res.IsVal);
 
             bool sideEffectWasExecuted = false;
-            res = res.WithSideEffect(() => sideEffectWasExecuted = true);
+            res.SideEffect(_ => sideEffectWasExecuted = true);
             Assert.True(sideEffectWasExecuted);
 
-            res = Flow<Value<int>>.Err("Divide by zero").Map<Value<int>, Value<double>>(x => throw new InvalidOperationException());
+            res = Flows.Err<Value<int>>("Divide by zero").Map<Value<int>, Value<double>>(_ => throw new InvalidOperationException());
             Assert.False(res.IsVal);
             Assert.Equal("Divide by zero", res.UnwrapErr());
 
-            res.WithSideEffect(() => throw new InvalidOperationException());
+            res.SideEffect(_ => throw new InvalidOperationException());
         }
 
         [Fact]
         public void TestMapOr()
         {
-            var res = Flow<Value<int>>.Val(3.RefVal()).MapOr(x => x.Val % 2 == 0 ? ((double)x.Val).RefVal() : null, "Number is odd");
+            var res = Flows.Val(3.RefVal()).MapOr(x => x.Val % 2 == 0 ? ((double)x.Val).RefVal() : null, "Number is odd");
             Assert.Throws<NullReferenceException>(() => res.UnwrapVal());
             Assert.Equal("Number is odd", res.UnwrapErr());
 
@@ -47,26 +47,26 @@ namespace auvdisk.test
             var disposable = new DisposableDummy();
             bool sideEffectWasExecuted = false;
 
-            var result = Flow<DisposableDummy>.Val(disposable).MapDispose(x => x.DummyMember.RefVal());
+            var result = Flows.Val(disposable).MapDispose(x => x.DummyMember.RefVal());
             Assert.True(result.IsVal);
             Assert.Equal(42, result.UnwrapVal().Val);
             Assert.True(disposable.Disposed);
 
-            result = Flow<Value<int>>.Val(42.RefVal()).Map(x => (x.Val * 2).RefVal());
+            result = Flows.Val(42.RefVal()).Map(x => (x.Val * 2).RefVal());
             Assert.True(result.IsVal);
             Assert.Equal(42 * 2, result.UnwrapVal().Val);
             Assert.Throws<NullReferenceException>(() => result.UnwrapErr());
             Assert.False(result.IsErr);
             result.LogErrorIfAny(Logger);
             Assert.Empty(Logger.GetError());
-            result.WithSideEffect(() => sideEffectWasExecuted = true);
+            result.SideEffect(_ => sideEffectWasExecuted = true);
             Assert.True(sideEffectWasExecuted);
-            result = Flow<Value<int>>.Err("Divide by zero").Map<Value<int>, Value<int>>(x => throw new InvalidOperationException());
+            result = Flows.Err<Value<int>>("Divide by zero").Map<Value<int>, Value<int>>(_ => throw new InvalidOperationException());
             Assert.False(result.IsVal);
             Assert.Throws<NullReferenceException>(() => result.UnwrapVal());
             Assert.Equal("Divide by zero", result.UnwrapErr());
             Assert.True(result.IsErr);
-            result.WithSideEffect(() => sideEffectWasExecuted = false);
+            result.SideEffect(_ => sideEffectWasExecuted = false);
             Assert.True(sideEffectWasExecuted);
             result.LogErrorIfAny(Logger);
             Assert.Single(Logger.GetError());
@@ -74,23 +74,51 @@ namespace auvdisk.test
         }
 
         [Fact]
+        public void TestContextDisposables()
+        {
+            var result = Flows.Val(new DisposableDummy())
+                .MapConcat(_ => 42.RefVal(), (left, right) => new { left, right });
+
+            Assert.Single(result.Context.GetDisposables());
+            
+            result.Dispose();
+            Assert.Empty(result.Context.GetDisposables());
+            result.Dispose();
+            
+            var result2 = Flows.Val(None.Value)
+                .Map(_ => new DisposableDummy())
+                .GetContext((ctx) => Assert.Single(ctx.GetDisposables()))
+                .MapConcat(_ => 42.RefVal(), (left, right) => new { left, right })
+                .MapDispose(state => state.right, state => state.left);
+            
+            Assert.Empty(result2.Context.GetDisposables());
+            result2.Dispose();
+        }
+        
+        [Fact]
         public void TestTryMap()
         {
             Func<Value<int>, string> MakeMapper<TEx>() where TEx : Exception, new()
             {
                 return _ => throw new TEx();
             }
-
-            var result = Flow<Value<int>>.Val(42.RefVal())
-                .TryMap(MakeMapper<InvalidOperationException>(), (InvalidOperationException e) => e.Message);
+            
+            var result = Flows.Val(42.RefVal())
+                .Handle((InvalidOperationException e) => e.Message)
+                .Map(MakeMapper<InvalidOperationException>())
+                .PopCtx();
 
             Assert.False(result.IsVal);
             Assert.Throws<DivideByZeroException>(() =>
-                Flow<Value<int>>.Val(42.RefVal())
-                    .TryMap(MakeMapper<DivideByZeroException>(), (InvalidOperationException e) => e.Message));
+                Flows.Val(42.RefVal())
+                    .Handle((InvalidOperationException e) => e.Message)
+                    .Map(MakeMapper<DivideByZeroException>())
+                    .PopCtx());
 
-            result = Flow<Value<int>>.Err("Divide by zero")
-                .TryMap(MakeMapper<NullReferenceException>(), (InvalidOperationException e) => e.Message);
+            result = Flows.Err<Value<int>>("Divide by zero")
+                .Handle((InvalidOperationException e) => e.Message)
+                .Map(MakeMapper<NullReferenceException>())
+                .PopCtx();
 
             Assert.False(result.IsVal);
         }
@@ -103,12 +131,95 @@ namespace auvdisk.test
             Assert.True(result.IsVal);
             Assert.Equal("42", result.UnwrapVal());
 
-            result = Flows.RefVal(42).Bind((x) => Flow<string>.Err("Divide by zero"));
+            result = Flows.RefVal(42).Bind(_ => Flows.Err<string>("Divide by zero"));
             Assert.False(result.IsVal);
             Assert.Throws<NullReferenceException>(() => result.UnwrapVal());
 
-            result = result.Bind<string, string>((x) => throw new NullReferenceException());
+            result = result.Bind<string, string>(_ => throw new NullReferenceException());
             Assert.Equal("Divide by zero", result.UnwrapErr());
+        }
+
+        [Fact]
+        public void TestContextPop()
+        {
+            var result = Flows.Val(None.Value)
+                .Handle((InvalidOperationException e) => e.Message)
+                .SideEffect(_ => throw new InvalidOperationException());
+            
+            DefaultFlowContext? ctx = result.Context as DefaultFlowContext;
+            
+            Assert.NotNull(ctx);
+            Assert.Single(ctx.Others);
+            Assert.True(result.IsErr);
+            
+            var result2 = Flows.Val(None.Value)
+                .Handle((InvalidOperationException e) => e.Message)
+                .Map(_ => 42.RefVal())
+                .PopCtx();
+            
+            ctx = result2.Context as DefaultFlowContext;
+            
+            Assert.NotNull(ctx);
+            Assert.Empty(ctx.Others);
+            Assert.True(result2.IsVal);
+            
+            Assert.Throws<InvalidOperationException>(() => result2 = result2.SideEffect(_ => throw new InvalidOperationException()));
+            Assert.True(result2.IsVal); // Unhandled exception, result2 value didn't change
+
+            result2 = result2.Handle((InvalidOperationException e) => e.Message).SideEffect(_ => throw new InvalidOperationException());
+            Assert.True(result2.IsErr); // Now it contains error, as exception was handled
+            
+            // This throws, as ArgumentNullException wasn't added
+            Assert.Throws<ArgumentNullException>(() => Flows.Val(None.Value)
+                .Handle((InvalidOperationException e) => e.Message)
+                .SideEffect(_ => throw new ArgumentNullException()));
+        }
+
+        [Fact]
+        public void TestContextPopWithDisposable()
+        {
+            var result = Flows.Val(None.Value)
+                .HandleAll()
+                .Map(_ => new DisposableDummy())
+                .PopCtx();
+            
+            result.Dispose();
+            Assert.True(result.UnwrapVal().Disposed);
+
+            var set = new HashSet<int>();
+            set.Add(42);
+            set.Add(42);
+            Assert.Single(set);
+        }
+
+        [Fact]
+        public void TestContext()
+        {
+            IFlowContext context = new DefaultFlowContext()
+                .Handle((NullReferenceException ex) => ex.Message);
+            
+            context = context.With(new DefaultFlowContext());
+
+            try
+            {
+                throw new NullReferenceException();
+            }
+            catch (Exception ex) when (context.ShouldCatch(ex))
+            {
+                Assert.True(true);
+            }
+
+            Assert.Throws<InvalidEnumArgumentException>(() =>
+            {
+                try
+                {
+                    throw new InvalidEnumArgumentException();
+                }
+                catch (Exception ex) when (context.ShouldCatch(ex))
+                {
+                    Assert.True(false);
+                }
+            });
         }
     }
 }

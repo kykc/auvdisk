@@ -1,6 +1,5 @@
-using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using auvdisk.Extensions;
 using CommandLine;
@@ -9,11 +8,7 @@ using auvdisk.Cli;
 using auvdisk.DiskImage.Vhd;
 using auvdisk.Log;
 using Common.Logging;
-using DiscUtils;
-using DiscUtils.Streams;
-using DiskAccessLibrary;
 using Spectre.Console;
-using Terminal.Gui;
 using ILog = auvdisk.Log.ILog;
 using Util = auvdisk.DiskImage.Vhd.Util;
 
@@ -24,7 +19,6 @@ namespace auvdisk
     {
         public static readonly TimeSpan ProgressReportRate = TimeSpan.FromMilliseconds(200);
         public static bool IsInteractive = true;
-        public static LogLevel LogLevel { get; private set; } = LogLevel.Info;
 #if WINDOWS
         public const bool IsWindows = true;
 #else
@@ -35,6 +29,9 @@ namespace auvdisk
 #else
         public const bool IsDebug = false;
 #endif
+        [SuppressMessage("ReSharper", "HeuristicUnreachableCode")] 
+        public static LogLevel LogLevel { get; private set; } = IsDebug ? LogLevel.Debug : LogLevel.Info;
+        
         public const bool UseCustomHelpRenderer = true;
         public static Action<string> DebugOutput { get; set; } = _ => { };
         
@@ -53,11 +50,12 @@ namespace auvdisk
             }
         }
 
-        private static Func<T, int> MakeCreateVdiskHandler<T>(ILog logger) where T: CreateVdisk
+        private static Func<T, int> MakeCreateVdiskHandler<T>(ILog logger, IFlowContext ctx) where T: CreateVdisk
         {
             return (rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
+                    .WithCtx(ctx)
                     .WithCheckedSize(x => x.Size)
                     .WithCheckedTargetAvailable(x => x.Target, logger)
                     .WithCheckedTargetExtension(x => x.Target, x => x.IsVhdx() ? ".vhdx" : ".vhd")
@@ -67,10 +65,10 @@ namespace auvdisk
                         x => DiskImage.Util.CreateVdisk(x.opts.Target, x.size, logger, x.opts.IsDynamic(), x.opts.ZeroFillRequired(), x.opts.IsVhdx()),
                         (x, y) => new { x.size, vdisk = y, x.opts })
                     .MapDispose(x => new { x.size, x.opts }, x => x.vdisk)
-                    .CheckDiscardIf(
+                    .BindErrIf(
                         x => x.opts.Partition != "",
                         x => PartitionTable.Util.InitializeDisk(x.opts.Target, x.size, x.opts.Partition, x.opts.Boot, logger))
-                    .WithSideEffect(x => Utils.IfElse(
+                    .SideEffect(x => Utils.IfElse(
                         x.opts.IsVhdx, 
                         () => new DiskProbe(x.opts.Target, logger).Probe(), 
                         () => Util.OutputDiagnosticInfo(x.opts.Target, logger)));
@@ -106,27 +104,31 @@ namespace auvdisk
 
             var logger = new Log.Logger();
             
-            ParserResult<object>? cliResult = null;
+            var flowCtx = new DefaultFlowContext();
+            var unexpectedExceptionHandler = (Exception ex) =>
+            {
+                logger.Debug($"[yellow][[DEBUG]][/] [red]Unhandled exception [underline]<{ex.GetType().ToString().EscapeMarkup()}>[/] with message:[/] [yellow]{ex.Message.EscapeMarkup()}[/]");
+                logger.Debug(ex.StackTrace?.EscapeMarkup() ?? "Stack trace missing");
 
-#pragma warning disable CS0162 // Unreachable code detected
-            if (UseCustomHelpRenderer)
-            {
-                var parser = new Parser(settings => settings.HelpWriter = null);
-                cliResult = parser.ParseArguments(args, Cli.VerbHandlers.GetVerbTypes(true, false).ToArray());
-                cliResult.WithNotParsed(errors => Cli.HelpRenderer.DisplayHelp(cliResult, errors, logger));
-            }
-            else
-            {
-                cliResult = Parser.Default.ParseArguments(args, Cli.VerbHandlers.GetVerbTypes(true, false).ToArray());
-            }
-#pragma warning restore CS0162 // Unreachable code detected
+                return ex.Message;
+            };
+            flowCtx.Handle(unexpectedExceptionHandler, _ => true);
+
+            var cliResult = Utils.IfElse(() => UseCustomHelpRenderer,
+                () =>
+                {
+                    var parser = new Parser(settings => settings.HelpWriter = null);
+                    var result = parser.ParseArguments(args, Cli.VerbHandlers.GetVerbTypes(true, false).ToArray());
+                    return result.WithNotParsed(errors => Cli.HelpRenderer.DisplayHelp(result, errors, logger));
+                },
+                () => Parser.Default.ParseArguments(args, Cli.VerbHandlers.GetVerbTypes(true, false).ToArray()));
 
             var handlers = new Cli.VerbHandlers();
             
             handlers.Register((Cli.VdiskProbe opts) =>
             {
                 var recursiveHandler =
-                    DiskProbe.GetWalkFsRecursive((fs, f) => logger.Log("/" + f.FormatDuPath()));
+                    DiskProbe.GetWalkFsRecursive((_, f) => logger.Log("/" + f.FormatDuPath()));
 
                 var probe = new DiskProbe(opts.Source, logger, opts.Recursive ? recursiveHandler : null, opts.PartIdx);
                 var result = probe.Probe();
@@ -174,32 +176,38 @@ namespace auvdisk
                 return probeResult.IsSuccess() ? 0 : 1;
             });
 
-            handlers.Register((Cli.LoopToVhd opts) =>
+            handlers.Register((Cli.LoopToVhd rawOpts) =>
             {
-                var result =
-                    DiskImageConverter.ConvertLoopToVhd(opts.Source, opts.Target, logger, opts.Verbose, opts.ZeroFill, opts.NoBoot);
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
+                    .Bind(opts => DiskImageConverter.ConvertLoopToVhd(opts.Source, opts.Target, logger, opts.Verbose, opts.ZeroFill, opts.NoBoot));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
-            handlers.Register((Cli.VhdToLoop opts) =>
+            handlers.Register((Cli.VhdToLoop rawOpts) =>
             {
-                var result =
-                    DiskImageConverter.ConvertVhdToLoop(opts.Source, opts.Target, logger, opts.Verbose, opts.PartIndex);
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
+                    .Bind(opts => DiskImageConverter.ConvertVhdToLoop(opts.Source, opts.Target, logger, opts.Verbose, opts.PartIndex));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
-            handlers.Register((Cli.ImgToVhd opts) =>
+            handlers.Register((Cli.ImgToVhd rawOpts) =>
             {
-                var result = DiskImageConverter.ConvertImgToVhd(opts.Source, logger, opts.Verbose);
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
+                    .Bind(opts => DiskImageConverter.ConvertImgToVhd(opts.Source, logger, opts.Verbose));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
-            handlers.Register((Cli.VhdToImg opts) =>
+            handlers.Register((Cli.VhdToImg rawOpts) =>
             {
-                var result = DiskImageConverter.ConvertVhdToImg(opts.Source, logger, opts.Verbose);
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
+                    .Bind(opts => DiskImageConverter.ConvertVhdToImg(opts.Source, logger, opts.Verbose));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
@@ -212,41 +220,45 @@ namespace auvdisk
                     new DiskProbe(info.Path, logger).Probe();
                 }
 
-                var result = Flow<CreateDiffVhd>.Val(rawOpts)
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
                     .WithCheckedTargetAvailable(opts => opts.Child, logger)
                     .WithCheckedSourceExists(opts => opts.Parent, logger)
                     .WithCheckedDiskType(_ => "VHD", opts => opts.Parent, opts => opts.Verbose, logger)
                     .Bind(x => Util.CreateDifferentialVhd(x.Parent, x.Child, logger))
-                    .WithSideEffect(OutputDiskInfo)
+                    .SideEffect(OutputDiskInfo)
                     .LogOk(logger, "Done.");
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
 
-            handlers.Register(MakeCreateVdiskHandler<CreateFixedVhd>(logger));
-            handlers.Register(MakeCreateVdiskHandler<CreateDynamicVhd>(logger));
+            handlers.Register(MakeCreateVdiskHandler<CreateFixedVhd>(logger, flowCtx));
+            handlers.Register(MakeCreateVdiskHandler<CreateDynamicVhd>(logger, flowCtx));
             
-            handlers.Register((Cli.MergeVhd opts) =>
+            handlers.Register((Cli.MergeVhd rawOpts) =>
             {
-                var result = DiskImage.Vhd.Merge.PerformMerge(opts.Parent, opts.Child, opts.Target, logger, opts.ZeroFill);
-
-                return result.MapDispose(x => None.Value).LogErrorIfAny(logger) ? 1 : 0;
+                return Flows.Val(rawOpts)
+                    .Bind(opts => DiskImage.Vhd.Merge.PerformMerge(opts.Parent, opts.Child, opts.Target, logger, opts.ZeroFill))
+                    .MapDispose(_ => None.Value)
+                    .LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.ExtractFile rawOpts) =>
             {
-                var result = Flow<ExtractFile>.Val(rawOpts)
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
                     .WithCheckedSourceExists(x => x.Source, logger)
                     .WithCheckedTargetAvailable(x => x.Target, logger)
                     .WithCheckedStreamBoundaries(x => x.Source, x => x.Offset, x => x.Length, logger)
-                    .WithSideEffect(opts => Fs.Util.ExtractFileSegment(opts.Source, opts.Target, opts.Offset, opts.Length, logger));
+                    .SideEffect(opts => Fs.Util.ExtractFileSegment(opts.Source, opts.Target, opts.Offset, opts.Length, logger));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.DiagVhd rawOpts) =>
             {
-                var result = Flow<DiagVhd>.Val(rawOpts)
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
                     .WithCheckedSourceExists(x => x.Source, logger)
                     .Map(opts => DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Source, logger).RefVal());
 
@@ -261,7 +273,8 @@ namespace auvdisk
                     return new { size, opts };
                 };
 
-                var result = Flow<ResizeFixedVhd>.Val(rawOpts)
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
                     .WithCheckedSize(x => x.Size)
                     .WithCheckedSourceExists(x => x.Target, logger)
                     .Map(parseSize)
@@ -270,32 +283,36 @@ namespace auvdisk
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
-            handlers.Register((Cli.VhdToVhdx opts) =>
+            handlers.Register((Cli.VhdToVhdx rawOpts) =>
             {
-                var fixedValue = FixCommandLineParserNullable(x => x.Fixed, ["-f", "--fixed"], opts, args, true);
+                var fixedValue = FixCommandLineParserNullable(x => x.Fixed, ["-f", "--fixed"], rawOpts, args, true);
                 
-                var result =
-                    DiskImageConverter.ConvertVhdToVhdx(opts.Source, opts.Target, logger, opts.Verbose, fixedValue, opts.ZeroFill);
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
+                    .Bind(opts => DiskImageConverter.ConvertVhdToVhdx(opts.Source, opts.Target, logger, opts.Verbose, fixedValue, opts.ZeroFill));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
-            handlers.Register((Cli.VhdxToVhd opts) =>
+            handlers.Register((Cli.VhdxToVhd rawOpts) =>
             {
-                var fixedValue = FixCommandLineParserNullable(x => x.Fixed, ["-f", "--fixed"], opts, args, true);
+                var fixedValue = FixCommandLineParserNullable(x => x.Fixed, ["-f", "--fixed"], rawOpts, args, true);
                 
-                var result = DiskImageConverter.ConvertVhdxToVhd(opts.Source, opts.Target, logger, opts.Verbose, fixedValue, opts.ZeroFill);
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
+                    .Bind(opts => DiskImageConverter.ConvertVhdxToVhd(opts.Source, opts.Target, logger, opts.Verbose, fixedValue, opts.ZeroFill));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.GenVmdkWrapper rawOpts) =>
             {
-                var result = Flow<GenVmdkWrapper>.Val(rawOpts)
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
                     .WithCheckedSourceExists(opts => opts.Source, logger)
                     .WithCheckedDiskType(_ => "RAW", opts => opts.Source, _ => false, logger)
                     .MapOr(opts => new { opts, vmdk = DiskImage.Vmdk.VmdkFlatWrapper.Create(opts.Source, logger) }, "Failed to create VMDK wrapper")
-                    .WithSideEffect(x =>
+                    .SideEffect(x =>
                     {
                         Utils.If(() => logger.Log(new Rule("[green]Resulting VMDK[/]").LeftJustified()),
                             () => !x.opts.Silent);
@@ -311,48 +328,58 @@ namespace auvdisk
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
-            handlers.Register((Cli.Qcow2ToRaw opts) =>
+            handlers.Register((Cli.Qcow2ToRaw rawOpts) =>
             {
-                var result = DiskImageConverter.ConvertQcow2ToRaw(opts.Source, opts.Target, logger, opts.Verbose);
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
+                    .Bind(opts => DiskImageConverter.ConvertQcow2ToRaw(opts.Source, opts.Target, logger, opts.Verbose));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.ProbeBcd rawOpts) =>
             {
-                var result = Flow<ProbeBcd>.Val(rawOpts)
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
                     .WithCheckedSourceExists(opts => opts.Source, logger)
-                    .WithSideEffect(opts => BCD.Util.ProbeBcd(opts.Source, opts.Verbose, logger));
+                    .SideEffect(opts => BCD.Util.ProbeBcd(opts.Source, opts.Verbose, logger));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
             handlers.Register((Cli.BrowseVdisk rawOpts) =>
             {
-                var result = Flow<BrowseVdisk>.Val(rawOpts)
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
                     .WithCheckedSourceExists(opts => opts.Source, logger)
-                    .WithSideEffect(opts => Commander.FsCommander.OpenDiskImage(opts.Source, logger));
+                    .SideEffect(opts => Commander.FsCommander.OpenDiskImage(opts.Source, logger));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
             
-            handlers.Register((Cli.BrowseVolumes opts) =>
+            handlers.Register((Cli.BrowseVolumes rawOpts) =>
             {
-                if (opts.List)
+                if (rawOpts.List)
                 {
-                    var result = DiskImage.Factory.MakeFsListFromAvailableVolumes(logger, opts.TreeOutput, opts.Humanize);
+                    var result = Flows.Val(rawOpts)
+                        .WithCtx(flowCtx)
+                        .WithSuperUserRights()
+                        .Bind(opts => DiskImage.Factory.MakeFsListFromAvailableVolumes(logger, opts.TreeOutput, opts.Humanize));
 
                     return result.LogErrorIfAny(logger) ? 1 : 0;
                 }
                 else
                 {
-                    var result = Commander.FsCommander.OpenLocalFs(logger);
+                    var result = Flows.Val(rawOpts)
+                        .WithCtx(flowCtx)
+                        .WithSuperUserRights()
+                        .Bind(_ => Commander.FsCommander.OpenLocalFs(logger));
 
                     return result.LogErrorIfAny(logger) ? 1 : 0;
                 }
             });
 
-            handlers.Register((OutMarkdownHelp opts) =>
+            handlers.Register((OutMarkdownHelp _) =>
             {
                 var types = VerbHandlers.GetVerbTypes(false, true)
                     .Select(t => t.GetCustomAttribute<VerbAttribute>())
@@ -360,7 +387,7 @@ namespace auvdisk
                     .Select(v => new
                     {
                         VerbName = v!.Name,
-                        HelpText = v!.HelpText,
+                        v.HelpText,
                     });
 
                 Console.WriteLine(Text.MarkdownGenerator.ToMarkdownTable(types, logger));
@@ -368,23 +395,32 @@ namespace auvdisk
                 return 0;
             });
 
-            handlers.Register((ResizeFileUnsafe opts) =>
+            handlers.Register((ResizeFileUnsafe rawOpts) =>
             {
-                var success = Fs.Util.HandleResizeFile(opts.Target, opts.Size, opts.ZeroFill, logger);
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
+                    .Check(opts => Fs.Util.HandleResizeFile(opts.Target, opts.Size, opts.ZeroFill, logger), _ => "Failed to resize file");
 
-                return success ? 0 : 1;
+                return result.IsVal ? 0 : 1;
             });
             
 #if DEBUG
-            handlers.Register((DebugRepl opts) =>
+            handlers.Register((DebugRepl _) =>
             {
                 Dbg.CSharpRepl.EntryPoint();
 
                 return 0;
             });
+
+            handlers.Register([SuppressMessage("ReSharper", "ConvertToLambdaExpression")](Notepad rawOpts) =>
+            {
+                using var result = Flows.Val(rawOpts).Map(_ => None.Value);
+
+                return 0;
+            });
 #endif
 
-            Interop.Common.RegisterPlatformSpecificVerbs(handlers, logger);
+            Interop.Common.RegisterPlatformSpecificVerbs(handlers, logger, flowCtx);
             
             int exitCode = handlers.HandleParserResult(cliResult);
             

@@ -40,7 +40,7 @@ namespace auvdisk.Log
         {
             if (LogLevel <= LogLevel.Debug)
             {
-                AnsiConsole.WriteLine(debug);
+                AnsiConsole.MarkupLine(debug);
             }
         }
 

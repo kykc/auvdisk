@@ -16,13 +16,6 @@ public static class Util
     /// 1. EFI boot
     /// 2. "data" partition
     /// </summary>
-    /// <param name="target"></param>
-    /// <param name="bootSizeInBytes"></param>
-    /// <param name="dataSizeInBytes"></param>
-    /// <param name="logger"></param>
-    /// <param name="zeroFill"></param>
-    /// <param name="dynamic"></param>
-    /// <param name="vhdx">Create VHDx instead of VHD</param>
     /// <returns>size in bytes of the data partition</returns>
     public static Flow<Value<ulong>> CreateVdiskWithGptLayout(string target, ulong bootSizeInBytes, ulong dataSizeInBytes, Log.ILog logger, bool zeroFill = false, bool dynamic = false, bool vhdx = false)
     {
@@ -37,12 +30,15 @@ public static class Util
         ulong totalSize = offsetLba * Vhd.Util.LbaSize + overheadSize + bootSizeInBytes + dataSizeInBytes;
         logger.Log($"Total size of the image contents is {totalSize}");
 
-        return CreateVdisk(target, totalSize, logger, dynamic, zeroFill, vhdx)
-            .Concat(_ => PartitionTable.Util.CreateLayout(bootSizeInBytes > 0 ? [bootSizeInBytes, 0] : [0], totalSize, Vhd.Util.LbaSize, logger, offsetLba, bootSizeInBytes == 0))
+        // Pinning this to scope, as it has IDisposables
+        using var result = CreateVdisk(target, totalSize, logger, dynamic, zeroFill, vhdx)
+            .BindConcat(
+                _ => PartitionTable.Util.CreateLayout(bootSizeInBytes > 0 ? [bootSizeInBytes, 0] : [0], totalSize, Vhd.Util.LbaSize, logger, offsetLba, bootSizeInBytes == 0),
+                (disk, list) => new {disk, list})
             .Bind(tuple =>
             {
-                var disk = tuple.Item1;
-                var list = tuple.Item2;
+                var disk = tuple.disk;
+                var list = tuple.list;
 
                 if (list.Count == 2)
                 {
@@ -65,7 +61,9 @@ public static class Util
 
                 return Flows.Val(disk);
             })
-            .MapDispose(_ => new Value<ulong>(dataSizeInBytes));
+            .MapDispose(_ => dataSizeInBytes.RefVal());
+
+        return result.IsErr ? new(result.UnwrapErr()) : Flows.Val(result.UnwrapVal());
     }
     
     /// <summary>
@@ -79,7 +77,7 @@ public static class Util
                 ? Vhd.Util.CreateDynamicVhd(target, totalSize, logger)
                 : Vhd.Util.CreateFixedVhd(target, totalSize, logger, zeroFill);
 
-            return result.Map(vhdInfo => VirtualDisk.OpenDisk(vhdInfo.Path, "vhd", FileAccess.ReadWrite, "", ""));
+            return result.MapOr(vhdInfo => VirtualDisk.OpenDisk(vhdInfo.Path, "vhd", FileAccess.ReadWrite, "", ""), "Failed to open VHD");
         }
         else
         {
@@ -87,7 +85,7 @@ public static class Util
                 ? Vhdx.Util.CreateDynamic(target, totalSize, logger)
                 : Vhdx.Util.CreateFixed(target, totalSize, logger, zeroFill);
 
-            return result.Map(x => x as VirtualDisk);
+            return result.Map(VirtualDisk (x) => x);
         }
     }
 

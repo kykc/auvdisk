@@ -57,12 +57,12 @@ namespace auvdisk.Cli
                     }
                 }
 
-                return Flow<Value<char>>.Val(new Value<char>(bootLetter));
+                return Flows.Val(new Value<char>(bootLetter));
             }
             catch (ExitCodeReadException ex)
             {
                 logger.Error(ex.StandardError);
-                return Flow<Value<char>>.Err($"Bcdboot exited with non-zero exit code <{ex.ExitCode}>");
+                return new($"Bcdboot exited with non-zero exit code <{ex.ExitCode}>");
             }
         }
     }

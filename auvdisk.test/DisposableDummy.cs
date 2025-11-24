@@ -8,6 +8,11 @@ namespace auvdisk.test
 
         public void Dispose()
         {
+            if (Disposed)
+            {
+                throw new InvalidOperationException();
+            }
+            
             Disposed = true;
         }
     }

@@ -6,12 +6,6 @@ namespace auvdisk.test.Commander
 {
     public class FileSystemTest
     {
-        public FileSystemTest()
-        {
-            DiscUtils.Complete.SetupHelper.SetupComplete();
-            Program.IsInteractive = false;
-        }
-
         [Fact]
         public void TestNativeFsPathManipulation()
         {

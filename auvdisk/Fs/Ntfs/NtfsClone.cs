@@ -21,7 +21,7 @@ namespace auvdisk.Fs.Ntfs
             public string Complete => "Cloned";
         }
 
-        public static void TestLastNtfsCluster(Stream source, ILog logger)
+        public static Stream TestLastNtfsCluster(Stream source, ILog logger)
         {
             string CalcChecksum(byte[] subj)
             {
@@ -72,6 +72,8 @@ namespace auvdisk.Fs.Ntfs
             {
                 Console.WriteLine($"  Checksum last extent: {CalcChecksum(lastExtentBytes)}");
             }
+
+            return source;
         }
         
         /*

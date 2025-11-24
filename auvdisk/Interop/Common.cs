@@ -1,13 +1,11 @@
 using auvdisk.Extensions;
 using auvdisk.Log;
-using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using auvdisk.Cli;
 using auvdisk.DiskImage;
 #if WINDOWS
-using Alphaleonis.Win32.Vss;
 using auvdisk.Fs.Ntfs;
 using auvdisk.Interop.Win32;
 #endif
@@ -80,7 +78,7 @@ namespace auvdisk.Interop
 #endif
         }
 
-        internal static void RegisterPlatformSpecificVerbs(VerbHandlers handlers, ILog logger)
+        internal static void RegisterPlatformSpecificVerbs(VerbHandlers handlers, ILog logger, IFlowContext flowCtx)
         {
 #if WINDOWS
 #pragma warning disable CA1416
@@ -171,6 +169,8 @@ namespace auvdisk.Interop
                 };
                 
                 var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
+                    .WithSuperUserRights()
                     .WithCheckedTargetAvailable((opts) => opts.Target, logger)
                     .WithCheckedTargetExtension(opts => opts.Target, opts => opts.Vhdx ? ".vhdx" : ".vhd")
                     .MapOr(NormalizeDriveLetter, "Invalid source volume path")
@@ -187,7 +187,10 @@ namespace auvdisk.Interop
                 }
                 else
                 {
-                    var result = Interop.Win32.VhdMounter.Mount(rawOpts.Target, logger);
+                    var result = Flows.Val(rawOpts)
+                        .WithCtx(flowCtx)
+                        .WithSuperUserRights()
+                        .Bind(opts => VhdMounter.Mount(opts.Target, logger));
                     
                     return result.LogErrorIfAny(logger) ? 1 : 0;
                 }
@@ -196,39 +199,50 @@ namespace auvdisk.Interop
             // TODO: interactivity like in ChangePartitionType?
             handlers.Register((AssignVolumeLetter rawOpts) =>
             {
-                var result = Interop.Win32.DriveLetterManager.AddDriveLetterToVolume(rawOpts.Volume, rawOpts.Letter.First(), logger);
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
+                    .WithSuperUserRights()
+                    .Bind(opts => DriveLetterManager.AddDriveLetterToVolume(opts.Volume, opts.Letter.First(), logger));
                 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
 
             handlers.Register((UnassignVolumeLetter rawOpts) =>
             {
-                var result = Interop.Win32.DriveLetterManager.RemoveDriveLetterFromVolume(rawOpts.Letter.First(), logger);
+                var result = Flows.Val(rawOpts)
+                    .WithCtx(flowCtx)
+                    .WithSuperUserRights()
+                    .Bind(opts => DriveLetterManager.RemoveDriveLetterFromVolume(opts.Letter.First(), logger));
                 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
 
-            handlers.Register((CheckNtfsLastCluster opts) =>
+            handlers.Register((CheckNtfsLastCluster rawOpts) =>
             {
-                if (opts.UseVss)
+                if (rawOpts.UseVss)
                 {
-                    using var vssResult = Win32.Vss.Backup.Make(opts.Volume, logger);
-                    
-                    var result = vssResult
-                        .Map(vss =>
-                        {
-                            NtfsClone.TestLastNtfsCluster(new BlockDeviceUnbufferedStream(vss.Root, opts.GrantExtendedIoctl), logger);
-
-                            return None.Value;
-                        });
+                    using var result = Flows.Val(rawOpts)
+                        .WithCtx(flowCtx)
+                        .WithSuperUserRights()
+                        .BindConcat(opts => Win32.Vss.Backup.Make(opts.Volume, logger), (opts, vss) => new { vss, opts })
+                        .LogOk(logger, state => $"Created snapshot {state.vss.Root} for volume {state.opts.Volume}")
+                        .MapConcat(
+                            state => NtfsClone.TestLastNtfsCluster(new BlockDeviceUnbufferedStream(state.vss.Root, state.opts.GrantExtendedIoctl), logger),
+                            (state, stream) => new { stream, state.vss, state.opts })
+                        .MapDispose(state => new {state.vss, state.opts}, state => state.stream)
+                        .LogOk(logger, state => $"Closing snapshot {state.vss.Root} for volume {state.opts.Volume}")
+                        .MapDispose(state => state.opts, state => state.vss);
                     
                     return result.LogErrorIfAny(logger) ? 1 : 0;
                 }
                 else
                 {
-                    NtfsClone.TestLastNtfsCluster(new BlockDeviceUnbufferedStream(opts.Volume, opts.GrantExtendedIoctl), logger);
+                    var result = Flows.Val(rawOpts)
+                        .WithCtx(flowCtx)
+                        .WithSuperUserRights()
+                        .Map(opts => NtfsClone.TestLastNtfsCluster(new BlockDeviceUnbufferedStream(opts.Volume, opts.GrantExtendedIoctl), logger));
                     
-                    return 0;
+                    return result.LogErrorIfAny(logger) ? 1 : 0;
                 }
             });
 #pragma warning restore CA1416

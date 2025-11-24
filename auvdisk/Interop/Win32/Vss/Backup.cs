@@ -12,6 +12,13 @@ namespace auvdisk.Interop.Win32.Vss
 
         private Backup(string volumeName)
         {
+            volumeName = volumeName switch 
+            {
+                [var l] => $"{l}:\\",
+                [var l, _] => $"{l}:\\",
+                _ => volumeName
+            };
+            
             try
             {
                 IVssFactory vss = VssFactoryProvider.Default.GetVssFactory();
@@ -36,14 +43,10 @@ namespace auvdisk.Interop.Win32.Vss
 
         public static Flow<Backup> Make(string volumeName, ILog logger)
         {
-            try
-            {
-                return Flow<Backup>.Val(new Backup(volumeName));
-            }
-            catch (Exception e) when (Program.ExceptionFilter(e))
-            {
-                return new(e.Message);
-            }
+            return Flows.Val(None.Value)
+                .HandleAll()
+                .Map(_ => new Backup(volumeName))
+                .PopCtx();
         }
 
         public void Dispose()

@@ -5,7 +5,6 @@ using auvdisk.Log;
 using DiscUtils;
 using DiscUtils.Streams;
 using DiskAccessLibrary.VHD;
-using Microsoft.VisualStudio.TestPlatform.TestHost;
 
 namespace auvdisk.test;
 
@@ -104,7 +103,9 @@ public static class TestUtil
         return Flows.Val(None.Value)
             .Check(_ => Directory.Exists(targetDir), _ => "Target directory does not exist")
             .Check(_ => File.Exists(sourcePath), _ => "Source VHD does not exist")
-            .TryBind(_ => Util.OpenDiskWithDu(sourcePath, logger), (Exception e) => $"Failed to open source image with error: {e.Message}")
+            .Handle((Exception e) => e.Message)
+            .Bind(_ => Util.OpenDiskWithDu(sourcePath, logger))
+            .PopCtx()
             .MapDispose(disk =>
             {
                 var layers = disk.Layers.ToList();
@@ -117,13 +118,13 @@ public static class TestUtil
             .BindConcat(
                 x => DiskImage.Util.CreateVdisk(x.parentTarget, (ulong)x.solidLayer.Capacity, logger, x.solidLayer.IsSparse, false, false),
                 (x, y) => new { x.solidLayer, x.layersTail, x.parentTarget, targetDisk = y })
-            .BindConcat(x => // BindConcat instead of CheckDiscard to retain original result, omitting now disposed x.targetDisk
+            .BindConcat(x => // BindConcat instead of BindErr to retain original result, omitting now disposed x.targetDisk
             {
                 using var targetDisk = x.targetDisk;
                 using var solidLayerDisk = VirtualDisk.OpenDisk(x.solidLayer.FullPath, FileAccess.Read);
 
                 return DiskImage.Util.LazyCopyDiskContents(solidLayerDisk, targetDisk, logger);
-            }, (x, y) => new { x.solidLayer, x.layersTail, x.parentTarget })
+            }, (x, _) => new { x.solidLayer, x.layersTail, x.parentTarget })
             .Bind(x =>
             {
                 var parentTarget = x.parentTarget;
