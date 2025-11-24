@@ -1,6 +1,7 @@
 using auvdisk.DiskImage.Vhd;
 using auvdisk.Extensions;
 using auvdisk.Log;
+using DiscUtils.Fat;
 using DiskAccessLibrary;
 
 namespace auvdisk.PartitionTable;
@@ -62,6 +63,12 @@ public static class Util
                     logger.Log($"Initializing {targetPath} with GPT partition table (boundaries in LBA, LBA Size = {lbaSize}): {ptString}");
                     using var duDisk = DiscUtils.VirtualDisk.OpenDisk(targetPath, FileAccess.ReadWrite);
                     InitializeDisk(duDisk, 2048L, layout);
+
+                    if (markBoot)
+                    {
+                        logger.Log($"Formatting boot partition with FAT filesystem");
+                        FatFileSystem.FormatPartition(duDisk, 0, "BOOT");
+                    }
 
                     return Flows.Val(targetPath);
                 }

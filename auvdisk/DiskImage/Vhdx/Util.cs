@@ -6,44 +6,50 @@ namespace auvdisk.DiskImage.Vhdx;
 
 public static class Util
 {
-    public static Flow<DiscUtils.Vhdx.Disk> CreateFixed(string path, ulong size, Log.ILog logger, bool forceZeroFill = false)
+    public static Flow<Disk> CreateFixed(string path, ulong size, Log.ILog logger, bool forceZeroFill = false)
     {
-        try
-        {
-            // "touch" file
-            new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None).Close();
-        }
-        catch (Exception e) when (Program.ExceptionFilter(e))
-        {
-            return Flows.Err<DiscUtils.Vhdx.Disk>(e.Message);
-        }
-            
-        if (!Fs.Util.HandleResizeFile(path, size, forceZeroFill, logger))
-        {
-            logger.Warning("Failed to resize file, falling back to DiscUtils. Full zero-fill w/o progress report might happen");
-        }
-        
-        var targetStream =
-            new FileStream(path, FileMode.Open, FileAccess.ReadWrite);
-        
-        var disk = DiscUtils.Vhdx.Disk.InitializeFixed(targetStream, DiscUtils.Streams.Ownership.Dispose, (long)size)!;
+        var rq = new { path, size, forceZeroFill, logger };
 
-        // Do not trust third-party libraries and their null-annotations
-        return Flows.ValOr(disk, "Failed to create fixed VHDx image");
+        return Flows.Val(rq)
+            .HandleAll()
+            // "touch" file
+            .SideEffect(opts => new FileStream(opts.path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None).Close())
+            .SideEffectIf(
+                opts => !Fs.Util.HandleResizeFile(opts.path, opts.size, opts.forceZeroFill, opts.logger),
+                opts => opts.logger.Warning("Failed to resize file, falling back to DiscUtils. Full zero-fill w/o progress report might happen"))
+            .MapConcat(
+                opts => new FileStream(opts.path, FileMode.Open, FileAccess.ReadWrite),
+                (opts, stream) => new { opts, stream })
+            .Bind((state, ctx) =>
+            {
+                var disk = Disk.InitializeFixed(state.stream, Ownership.Dispose, (long)state.opts.size);
+                ctx.RemoveDisposable(state.stream); // Now managed by the disk instance
+                return Flows.ValOr(disk, "Failed to create fixed VHDx image");
+            })
+            .PopCtx();
     }
 
-    public static Flow<DiscUtils.Vhdx.Disk> CreateDynamic(string path, ulong size, Log.ILog logger)
+    public static Flow<Disk> CreateDynamic(string path, ulong size, Log.ILog logger)
     {
-        var targetStream = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite);
+        var rq = new { path, size, logger };
 
-        var disk = DiscUtils.Vhdx.Disk.InitializeDynamic(targetStream, DiscUtils.Streams.Ownership.Dispose, (long)size)!;
-        
-        // Do not trust third-party libraries and their null-annotations
-        return Flows.ValOr(disk, "Failed to create dynamic VHDx image");
+        return Flows.Val(rq)
+            .HandleAll()
+            .MapConcat(
+                opts => new FileStream(opts.path, FileMode.CreateNew, FileAccess.ReadWrite),
+                (opts, stream) => new { opts, stream })
+            .Bind((state, ctx) =>
+            {
+                var disk = Disk.InitializeDynamic(state.stream, Ownership.Dispose, (long)size);
+                ctx.RemoveDisposable(state.stream); // Now managed by the disk instance
+                
+                return Flows.ValOr(disk, "Failed to create dynamic VHDx image");
+            })
+            .PopCtx();
     }
 
     // TODO: investigate VHDx parent locators. Need to check what DU writes here and is it sensible enough
-    public static Flow<DiscUtils.Vhdx.Disk> CreateDifferencing(string path, string parentPath, Log.ILog logger)
+    public static Flow<Disk> CreateDifferencing(string path, string parentPath, Log.ILog logger)
     {
         return Flows.Val(None.Value)
             .HandleAll()
@@ -60,5 +66,14 @@ public static class Util
                     parentAbsolutePath, parentRelativePath, DateTime.UtcNow);
             }, "Failed to create differencing VHDx image file")
             .PopCtx();
+    }
+
+    public static IDictionary<string, string> GetParentLocators(string path)
+    {
+        var image = new DiskImageFile(path, FileAccess.Read);
+
+        var info = image.Information;
+
+        return info.ParentLocatorEntries;
     }
 }

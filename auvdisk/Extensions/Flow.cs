@@ -480,6 +480,8 @@ namespace auvdisk.Extensions
         public Func<Exception, bool> ShouldCatch => ShouldCatchImpl;
         public Func<Exception, (string, bool)> ToErrorString => ToErrorStringImpl;
         
+        public bool IsEmpty => _handlersString.Count == 0 && _handlersFilter.Count == 0 && _others.Count == 0 && _disposables.Count == 0;
+        
         // For UTs
         internal IEnumerable<IFlowContext> Others => _others;
         
@@ -493,7 +495,7 @@ namespace auvdisk.Extensions
         public IFlowContext Pop()
         {
             var target = this;
-            
+            Debug.Assert(target._others.Count > 0, "_others.Count != 0");
             if (target._others.Count <= 0) return target;
             
             target._others.First().GetDisposables().ForEach(d => target.AddDisposable(d));
@@ -504,7 +506,7 @@ namespace auvdisk.Extensions
 
         public void AddDisposable(IDisposable disposable)
         {
-            if (!GetDisposables().Contains(disposable)) _disposables.Add(disposable);
+            _disposables.Add(disposable);
         }
 
         public void RemoveDisposable(IDisposable disposable)
