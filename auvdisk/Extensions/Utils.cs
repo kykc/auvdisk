@@ -208,21 +208,6 @@ namespace auvdisk.Extensions
             Program.DebugOutput = currentHandler;
         }
 
-        public static void ForEach<T>(this IEnumerable<T> subj, Action<T> action, bool parallel = false)
-        {
-            if (parallel)
-            {
-                Parallel.ForEach(subj, action);
-            }
-            else
-            {
-                foreach (var el in subj)
-                {
-                    action(el);
-                }
-            }
-        }
-
         public static bool If(Action action, Func<bool> condition)
         {
             if (condition())
@@ -394,8 +379,6 @@ namespace auvdisk.Extensions
         {
             return action.Check((subj) => size(subj).ParseByteLength().HasValue, (_) => "Failed to parse size in bytes");
         }
-
-        public static Value<T> RefVal<T>(this T value) where T: struct => new(value);
 
         public static ulong DivideAndCeil(this ulong value, ulong divisor)
         {

@@ -1,10 +1,11 @@
 using System.Security.Cryptography;
 using auvdisk.DiskImage.Vhd;
-using auvdisk.Extensions;
 using auvdisk.Log;
 using DiscUtils;
 using DiscUtils.Streams;
 using DiskAccessLibrary.VHD;
+using ausharp.Flow;
+using ausharp;
 
 namespace auvdisk.test;
 

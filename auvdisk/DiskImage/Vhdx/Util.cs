@@ -15,8 +15,8 @@ public static class Util
             // "touch" file
             .SideEffect(opts => new FileStream(opts.path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None).Close())
             .SideEffectIf(
-                opts => !Fs.Util.HandleResizeFile(opts.path, opts.size, opts.forceZeroFill, opts.logger),
-                opts => opts.logger.Warning("Failed to resize file, falling back to DiscUtils. Full zero-fill w/o progress report might happen"))
+                (opts, _) => !Fs.Util.HandleResizeFile(opts.path, opts.size, opts.forceZeroFill, opts.logger),
+                (opts, _) => opts.logger.Warning("Failed to resize file, falling back to DiscUtils. Full zero-fill w/o progress report might happen"))
             .MapConcat(
                 opts => new FileStream(opts.path, FileMode.Open, FileAccess.ReadWrite),
                 (opts, stream) => new { opts, stream })

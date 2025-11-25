@@ -9,6 +9,9 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: '${{ secrets.CI_TOKEN }}'
       - name: build with dotnet
         run: |
           pushd auvdisk && dotnet publish -c Release -r win-x64 -f net9.0 --self-contained -t:PackChoco /p:IsWindows=true && popd

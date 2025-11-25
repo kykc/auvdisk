@@ -1,0 +1,3 @@
+[submodule "ausharp"]
+	path = ausharp
+	url = ../ausharp.git

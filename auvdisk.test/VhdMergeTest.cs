@@ -2,6 +2,7 @@ using auvdisk.DiskImage;
 using auvdisk.Extensions;
 using auvdisk.Log;
 using DiscUtils;
+using ausharp.Extensions;
 
 namespace auvdisk.test;
 

@@ -9,7 +9,7 @@
     <RollForward>LatestMajor</RollForward>
     <LangVersion>Latest</LangVersion>
     <AssemblyName>auvdisk</AssemblyName>
-    <Version>1.9.15</Version>
+    <Version>1.9.16</Version>
     <Authors>Alexander Automatl</Authors>
     <Company>Tomatl Inc</Company>
     <IsWindows Condition="$([MSBuild]::IsOSPlatform('Windows'))">true</IsWindows>
@@ -55,5 +55,8 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ausharp\ausharp\ausharp.csproj" />
   </ItemGroup>
 </Project>

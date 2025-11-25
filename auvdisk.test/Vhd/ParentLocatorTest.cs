@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
-using auvdisk.Extensions;
+using ausharp.Flow;
+using ausharp;
 
 namespace auvdisk.test.Vhd
 {
