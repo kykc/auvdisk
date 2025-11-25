@@ -78,7 +78,7 @@ namespace auvdisk.Interop
 #endif
         }
 
-        internal static void RegisterPlatformSpecificVerbs(VerbHandlers handlers, ILog logger, IFlowContext flowCtx)
+        internal static void RegisterPlatformSpecificVerbs(VerbHandlers handlers, ILog logger, IFlowContextHandler flowCtx)
         {
 #if WINDOWS
 #pragma warning disable CA1416
@@ -169,7 +169,7 @@ namespace auvdisk.Interop
                 };
                 
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .WithSuperUserRights()
                     .WithCheckedTargetAvailable((opts) => opts.Target, logger)
                     .WithCheckedTargetExtension(opts => opts.Target, opts => opts.Vhdx ? ".vhdx" : ".vhd")
@@ -188,7 +188,7 @@ namespace auvdisk.Interop
                 else
                 {
                     var result = Flows.Val(rawOpts)
-                        .WithCtx(flowCtx)
+                        .WithHandler(flowCtx)
                         .WithSuperUserRights()
                         .Bind(opts => VhdMounter.Mount(opts.Target, logger));
                     
@@ -200,7 +200,7 @@ namespace auvdisk.Interop
             handlers.Register((AssignVolumeLetter rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .WithSuperUserRights()
                     .Bind(opts => DriveLetterManager.AddDriveLetterToVolume(opts.Volume, opts.Letter.First(), logger));
                 
@@ -210,7 +210,7 @@ namespace auvdisk.Interop
             handlers.Register((UnassignVolumeLetter rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .WithSuperUserRights()
                     .Bind(opts => DriveLetterManager.RemoveDriveLetterFromVolume(opts.Letter.First(), logger));
                 
@@ -222,7 +222,7 @@ namespace auvdisk.Interop
                 if (rawOpts.UseVss)
                 {
                     using var result = Flows.Val(rawOpts)
-                        .WithCtx(flowCtx)
+                        .WithHandler(flowCtx)
                         .WithSuperUserRights()
                         .BindConcat(opts => Win32.Vss.Backup.Make(opts.Volume, logger), (opts, vss) => new { vss, opts })
                         .LogOk(logger, state => $"Created snapshot {state.vss.Root} for volume {state.opts.Volume}")
@@ -238,7 +238,7 @@ namespace auvdisk.Interop
                 else
                 {
                     var result = Flows.Val(rawOpts)
-                        .WithCtx(flowCtx)
+                        .WithHandler(flowCtx)
                         .WithSuperUserRights()
                         .Map(opts => NtfsClone.TestLastNtfsCluster(new BlockDeviceUnbufferedStream(opts.Volume, opts.GrantExtendedIoctl), logger));
                     

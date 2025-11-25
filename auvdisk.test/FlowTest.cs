@@ -106,19 +106,19 @@ namespace auvdisk.test
             var result = Flows.Val(42.RefVal())
                 .Handle((InvalidOperationException e) => e.Message)
                 .Map(MakeMapper<InvalidOperationException>())
-                .PopCtx();
+                .PopHandler();
 
             Assert.False(result.IsVal);
             Assert.Throws<DivideByZeroException>(() =>
                 Flows.Val(42.RefVal())
                     .Handle((InvalidOperationException e) => e.Message)
                     .Map(MakeMapper<DivideByZeroException>())
-                    .PopCtx());
+                    .PopHandler());
 
             result = Flows.Err<Value<int>>("Divide by zero")
                 .Handle((InvalidOperationException e) => e.Message)
                 .Map(MakeMapper<NullReferenceException>())
-                .PopCtx();
+                .PopHandler();
 
             Assert.False(result.IsVal);
         }
@@ -146,21 +146,21 @@ namespace auvdisk.test
                 .Handle((InvalidOperationException e) => e.Message)
                 .SideEffect(_ => throw new InvalidOperationException());
             
-            DefaultFlowContext? ctx = result.Context as DefaultFlowContext;
+            FlowContext ctx = result.Context;
             
             Assert.NotNull(ctx);
-            Assert.Single(ctx.Others);
+            Assert.Single(ctx.Handlers);
             Assert.True(result.IsErr);
             
             var result2 = Flows.Val(None.Value)
                 .Handle((InvalidOperationException e) => e.Message)
                 .Map(_ => 42.RefVal())
-                .PopCtx();
+                .PopHandler();
             
-            ctx = result2.Context as DefaultFlowContext;
+            ctx = result2.Context;
             
             Assert.NotNull(ctx);
-            Assert.Empty(ctx.Others);
+            Assert.Empty(ctx.Handlers);
             Assert.True(result2.IsVal);
             
             Assert.Throws<InvalidOperationException>(() => result2 = result2.SideEffect(_ => throw new InvalidOperationException()));
@@ -181,7 +181,7 @@ namespace auvdisk.test
             var result = Flows.Val(None.Value)
                 .HandleAll()
                 .Map(_ => new DisposableDummy())
-                .PopCtx();
+                .PopHandler();
             
             result.Dispose();
             Assert.True(result.UnwrapVal().Disposed);
@@ -190,21 +190,28 @@ namespace auvdisk.test
             set.Add(42);
             set.Add(42);
             Assert.Single(set);
+            
+            var ctx2 = new FlowContext();
+            ctx2.With(FlowContextHandler.Create((NullReferenceException ex) => ex.Message));
+            ctx2.With(FlowContextHandler.Create((InvalidOperationException ex) => ex.Message));
+            var result2 = Flow<None>.Val(None.Value, ctx2)
+                .PopHandler()
+                .SideEffect(_ => throw new NullReferenceException());
+            
+            Assert.True(result2.IsErr);
+            Assert.Single(result2.Context.Handlers);
         }
 
         [Fact]
         public void TestContext()
         {
-            IFlowContext context = new DefaultFlowContext()
-                .Handle((NullReferenceException ex) => ex.Message);
+            IFlowContextHandler contextHandler = FlowContextHandler.Create((NullReferenceException ex) => ex.Message);
             
-            context = context.With(new DefaultFlowContext());
-
             try
             {
                 throw new NullReferenceException();
             }
-            catch (Exception ex) when (context.ShouldCatch(ex))
+            catch (Exception ex) when (contextHandler.ShouldCatch(ex))
             {
                 Assert.True(true);
             }
@@ -215,7 +222,7 @@ namespace auvdisk.test
                 {
                     throw new InvalidEnumArgumentException();
                 }
-                catch (Exception ex) when (context.ShouldCatch(ex))
+                catch (Exception ex) when (contextHandler.ShouldCatch(ex))
                 {
                     Assert.True(false);
                 }

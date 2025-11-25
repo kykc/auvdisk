@@ -21,31 +21,27 @@ namespace auvdisk.Extensions
 
     public static class Flows
     {
-        public static Flow<TSubj> Optional<TSubj>(Optional<TSubj> value, string error, IFlowContext? context = null) where TSubj: class
+        public static Flow<TSubj> Optional<TSubj>(Optional<TSubj> value, string error, IFlowContextHandler? context = null) where TSubj: class
         {
-            context ??= Flow<TSubj>.DefaultCtx();
-            
             return value.HasValue ? Val(value.Value, context) : Err<TSubj>(error, context);
         }
         
-        public static Flow<TSubj> Val<TSubj>(TSubj value, IFlowContext? context = null) where TSubj: class
+        public static Flow<TSubj> Val<TSubj>(TSubj value, IFlowContextHandler? context = null) where TSubj: class
         {
-            return Flow<TSubj>.Val(value, context ?? Flow<TSubj>.DefaultCtx());
+            return Flow<TSubj>.Val(value, new FlowContext(context));
         }
 
-        public static Flow<TSubj> ValOr<TSubj>(TSubj? value, string error, IFlowContext? context = null) where TSubj : class
+        public static Flow<TSubj> ValOr<TSubj>(TSubj? value, string error, IFlowContextHandler? context = null) where TSubj : class
         {
-            context ??= Flow<TSubj>.DefaultCtx();
-            
             return value != null ? Val(value, context) : Err<TSubj>(error, context);
         }
         
-        public static Flow<TSubj> Err<TSubj>(string error, IFlowContext? context = null) where TSubj: class
+        public static Flow<TSubj> Err<TSubj>(string error, IFlowContextHandler? context = null) where TSubj: class
         {
-            return Flow<TSubj>.Err(error, context ?? Flow<TSubj>.DefaultCtx());
+            return Flow<TSubj>.Err(error, new FlowContext(context));
         }
 
-        public static Flow<Value<TSubj>> RefVal<TSubj>(TSubj value, IFlowContext? context = null) where TSubj : struct
+        public static Flow<Value<TSubj>> RefVal<TSubj>(TSubj value, IFlowContextHandler? context = null) where TSubj : struct
         {
             return Val(value.RefVal(), context);
         }
@@ -53,33 +49,33 @@ namespace auvdisk.Extensions
     
     public static class FlowExtensions
     {
-        public static Flow<TSubj> Flow<TSubj>(this Optional<TSubj> subj, string error, IFlowContext? context = null) where TSubj: class
+        public static Flow<TSubj> Flow<TSubj>(this Optional<TSubj> subj, string error, IFlowContextHandler? context = null) where TSubj: class
         {
             return subj.HasValue ? Flows.Val(subj.Value, context) : Flows.Err<TSubj>(error, context);
         }
 
-        public static Flow<TSubj> Flow<TSubj>(this TSubj? subj, string error, IFlowContext? context = null) where TSubj : class
+        public static Flow<TSubj> Flow<TSubj>(this TSubj? subj, string error, IFlowContextHandler? context = null) where TSubj : class
         {
             return Flows.ValOr(subj, error, context);
         }
         
-        public static Flow<Value<TSubj>> Flow<TSubj>(this TSubj? subj, string error, IFlowContext? context = null) where TSubj : struct
+        public static Flow<Value<TSubj>> Flow<TSubj>(this TSubj? subj, string error, IFlowContextHandler? context = null) where TSubj : struct
         {
             return subj.HasValue ? Flows.Val(new Value<TSubj>(subj.Value), context) : Flows.Err<Value<TSubj>>(error, context);
         }
 
-        public static Flow<TSubj> Flow<TSubj>(this TSubj subj, IFlowContext? context = null) where TSubj : class
+        public static Flow<TSubj> Flow<TSubj>(this TSubj subj, IFlowContextHandler? context = null) where TSubj : class
         {
             return Flows.Val(subj, context);
         }
 
-        public static Flow<None> Flow(this bool value, string error, IFlowContext? context = null)
+        public static Flow<None> Flow(this bool value, string error, IFlowContextHandler? context = null)
         {
             return value ? Flows.Val(None.Value, context) : Flows.Err<None>(error, context); 
         }
     }
 
-    public static class Extensions
+    public static class FlowOperations
     {
         public static Flow<TRes> MapDispose<TSubj, TRes>(this Flow<TSubj> subj, Func<TSubj, TRes> mapper)
             where TRes : class
@@ -120,12 +116,12 @@ namespace auvdisk.Extensions
             where TNew: class
             where TSubj: class
         {
-            Flow<TNew> BinderWrapper(TSubj s, IFlowContext ctx) => binder(s);
+            Flow<TNew> BinderWrapper(TSubj s, FlowContext ctx) => binder(s);
 
             return subj.BindConcat(BinderWrapper, converter, changeContext);
         }
         
-        public static Flow<TRes> BindConcat<TSubj, TNew, TRes>(this Flow<TSubj> subj, Func<TSubj, IFlowContext, Flow<TNew>> binder, Func<TSubj, TNew, TRes> converter, bool changeContext = false)
+        public static Flow<TRes> BindConcat<TSubj, TNew, TRes>(this Flow<TSubj> subj, Func<TSubj, FlowContext, Flow<TNew>> binder, Func<TSubj, TNew, TRes> converter, bool changeContext = false)
             where TRes : class
             where TNew: class
             where TSubj: class
@@ -215,7 +211,7 @@ namespace auvdisk.Extensions
             return subj.SideEffectIf(_ => true, action);
         }
 
-        public static Flow<TSubj> GetContext<TSubj>(this Flow<TSubj> subj, Action<IFlowContext> action) where TSubj : class
+        public static Flow<TSubj> GetContext<TSubj>(this Flow<TSubj> subj, Action<FlowContext> action) where TSubj : class
         {
             action(subj.Context);
 
@@ -229,7 +225,7 @@ namespace auvdisk.Extensions
             return subj.BindConcat(binder, (_, right) => right, switchContext);
         }
         
-        public static Flow<TRes> Bind<TSubj, TRes>(this Flow<TSubj> subj, Func<TSubj, IFlowContext, Flow<TRes>> binder, bool switchContext = false)
+        public static Flow<TRes> Bind<TSubj, TRes>(this Flow<TSubj> subj, Func<TSubj, FlowContext, Flow<TRes>> binder, bool switchContext = false)
             where TSubj : class
             where TRes : class
         {
@@ -301,12 +297,12 @@ namespace auvdisk.Extensions
             where TSubj : class
             where TOther : class
         {
-            Flow<TOther> BinderAdapter(TSubj s, IFlowContext ctx) => binder(s);
+            Flow<TOther> BinderAdapter(TSubj s, FlowContext ctx) => binder(s);
 
             return subj.BindErrIf(condition, BinderAdapter, switchContext);
         }
         
-        public static Flow<TSubj> BindErrIf<TSubj, TOther>(this Flow<TSubj> subj, Func<TSubj, bool> condition, Func<TSubj, IFlowContext, Flow<TOther>> binder, bool switchContext = false) 
+        public static Flow<TSubj> BindErrIf<TSubj, TOther>(this Flow<TSubj> subj, Func<TSubj, bool> condition, Func<TSubj, FlowContext, Flow<TOther>> binder, bool switchContext = false) 
             where TSubj : class
             where TOther : class
         {
@@ -329,14 +325,14 @@ namespace auvdisk.Extensions
             return subj.BindConcat(binder, (left, _) => left, switchContext);
         }
         
-        public static Flow<TSubj> BindErr<TSubj, TOther>(this Flow<TSubj> subj, Func<TSubj, IFlowContext, Flow<TOther>> binder, bool switchContext = false) 
+        public static Flow<TSubj> BindErr<TSubj, TOther>(this Flow<TSubj> subj, Func<TSubj, FlowContext, Flow<TOther>> binder, bool switchContext = false) 
             where TSubj : class
             where TOther : class
         {
             return subj.BindConcat(binder, (left, _) => left, switchContext);
         }
         
-        public static Flow<TSubj> Finally<TSubj>(this Flow<TSubj> subj, Action<IFlowContext> action) where TSubj : class
+        public static Flow<TSubj> Finally<TSubj>(this Flow<TSubj> subj, Action<FlowContext> action) where TSubj : class
         {
             try
             {
@@ -364,31 +360,45 @@ namespace auvdisk.Extensions
     {
         private readonly TSubj? _value;
         private readonly string? _error;
-        private readonly IFlowContext _context;
         public bool IsErr => _error != null;
         public bool IsVal => _value != null;
-        public IFlowContext Context => _context;
-        
-        public static Func<IFlowContext> DefaultCtx => () => new DefaultFlowContext();
+        public FlowContext Context { get; }
 
-        // This allows to construct error Flow w/o naming its type explicitly
-        public Flow(string error, IFlowContext? context = null)
+        // This allows to construct error Flow w/o naming its type parameters explicitly
+        public Flow(string error, FlowContext? context = null)
         {
+#if DEBUG
+            // All the operations on Flow should always pass the context explicitly
+            // I found no better way to guard myself from making an easy mistake of omitting the context somewhere
+            if (!context.IsSome())
+            {
+                var stackTrace = new StackTrace();
+                var frame = stackTrace.GetFrame(1);
+
+                if (frame != null)
+                {
+                    var method = frame.GetMethod();
+                    var callingClass = method?.DeclaringType;
+
+                    Debug.Assert(!(callingClass?.FullName?.StartsWith("auvdisk.Extensions.Flow") ?? false), "Flow constructed w/o context internally");
+                }
+            }
+#endif
             _value = null;
             _error = error;
-            _context = context ?? DefaultCtx();
+            Context = context ?? new FlowContext();
         }
 
-        private Flow(TSubj? value, string? error, IFlowContext context)
+        private Flow(TSubj? value, string? error, FlowContext context)
         {
             Debug.Assert(value != null || error != null, "value != null || error != null");
             
             _value = value;
             _error = error;
-            _context = context;
+            Context = context;
         }
 
-        public static Flow<TSubj> Val(TSubj value, IFlowContext context)
+        public static Flow<TSubj> Val(TSubj value, FlowContext context)
         {
             if (value is IDisposable disposable)
             {
@@ -398,34 +408,33 @@ namespace auvdisk.Extensions
             return new Flow<TSubj>(value, null, context);
         }
         
-        public static Flow<TSubj> Err(string error, IFlowContext context)
+        public static Flow<TSubj> Err(string error, FlowContext context)
         {
             return new Flow<TSubj>(null, error, context);
         }
 
-        public Flow<TSubj> WithCtx(IFlowContext context)
+        public Flow<TSubj> WithHandler(IFlowContextHandler contextHandler)
         {
-            return new(_value, _error, _context.With(context));
+            Context.With(contextHandler);
+            
+            return this;
         }
 
         public Flow<TSubj> Handle<TEx>(Func<TEx, string> handleString) where TEx : Exception
         {
-            return WithCtx(new DefaultFlowContext().Handle(handleString));
+            return WithHandler(FlowContextHandler.Create(handleString));
         }
 
-        public Flow<TSubj> PopCtx()
+        public Flow<TSubj> PopHandler()
         {
-            return new(_value, _error, _context.Pop());
+            Context.Pop();
+
+            return this;
         }
 
         public Flow<TSubj> HandleAll()
         {
-            return WithCtx(new DefaultFlowContext().Handle((Exception ex) => ex.Message));
-        }
-        
-        public Flow<TSubj> ResetCtx()
-        {
-            return new(_value, _error, DefaultCtx());
+            return WithHandler(FlowContextHandler.Create(_ => true));
         }
 
         public TSubj UnwrapVal()
@@ -440,12 +449,12 @@ namespace auvdisk.Extensions
 
         public void Dispose()
         {
-            foreach (var disposable in _context.GetDisposables().Distinct().ToList())
+            foreach (var disposable in Context.GetDisposables().Distinct().ToList())
             {
                 try
                 {
                     disposable.Dispose();
-                    _context.RemoveDisposable(disposable);
+                    Context.RemoveDisposable(disposable);
                 }
                 catch (Exception e) when (Program.ExceptionFilter(e))
                 {
@@ -457,53 +466,28 @@ namespace auvdisk.Extensions
         }
     }
 
-    public interface IFlowContext
+    public interface IFlowContextHandler
     {
         Func<Exception, bool> ShouldCatch { get; }
         Func<Exception, (string, bool)> ToErrorString { get; }
-
-        IFlowContext With(IFlowContext context);
-        IFlowContext Pop();
-        
-        void AddDisposable(IDisposable disposable);
-        void RemoveDisposable(IDisposable disposable);
-        IEnumerable<IDisposable> GetDisposables();
     }
 
-    class DefaultFlowContext : IFlowContext
+    public class FlowContext
     {
-        private readonly List<(Type, Delegate)> _handlersString = [];
-        private readonly List<Func<Exception, bool>> _handlersFilter = [];
-        private readonly LinkedList<IFlowContext> _others = [];
+        private readonly LinkedList<IFlowContextHandler> _handlers = [];
         private readonly HashSet<IDisposable> _disposables = [];
-
+        
         public Func<Exception, bool> ShouldCatch => ShouldCatchImpl;
         public Func<Exception, (string, bool)> ToErrorString => ToErrorStringImpl;
         
-        public bool IsEmpty => _handlersString.Count == 0 && _handlersFilter.Count == 0 && _others.Count == 0 && _disposables.Count == 0;
-        
         // For UTs
-        internal IEnumerable<IFlowContext> Others => _others;
+        internal IEnumerable<IFlowContextHandler> Handlers => _handlers;
+
+        public FlowContext(IFlowContextHandler? context = null)
+        {
+            if (context != null) _handlers.AddFirst(context);
+        }
         
-        public IFlowContext With(IFlowContext context)
-        {
-            _others.AddFirst(context);
-
-            return this;
-        }
-
-        public IFlowContext Pop()
-        {
-            var target = this;
-            Debug.Assert(target._others.Count > 0, "_others.Count != 0");
-            if (target._others.Count <= 0) return target;
-            
-            target._others.First().GetDisposables().ForEach(d => target.AddDisposable(d));
-            target._others.RemoveFirst();
-
-            return target;
-        }
-
         public void AddDisposable(IDisposable disposable)
         {
             _disposables.Add(disposable);
@@ -512,46 +496,31 @@ namespace auvdisk.Extensions
         public void RemoveDisposable(IDisposable disposable)
         {
             _disposables.Remove(disposable);
-            _others.ForEach(o => o.RemoveDisposable(disposable));
         }
 
         public IEnumerable<IDisposable> GetDisposables()
         {
-            return _disposables.Union(_others.SelectMany(o => o.GetDisposables()));
+            return _disposables;
         }
 
-        private void AddStringHandler<TEx>(Func<TEx, string> handler) where TEx : Exception
+        public void With(IFlowContextHandler contextHandler)
         {
-            _handlersString.Add((typeof(TEx), handler));
+            _handlers.AddFirst(contextHandler);
         }
 
-        private void AddFilterHandler(Func<Exception, bool> filter)
+        public void Pop()
         {
-            _handlersFilter.Add(filter);
+            _handlers.RemoveFirst();
         }
 
-        public DefaultFlowContext Handle<TEx>(Func<TEx, string> handleString, Func<Exception, bool> handleFilter) where TEx : Exception
+        internal void ClearHandlers()
         {
-            var newInst = this;
-            
-            newInst.AddStringHandler(handleString);
-            newInst.AddFilterHandler(handleFilter);
-            
-            return newInst;
+            _handlers.Clear();
         }
-
-        public DefaultFlowContext Handle<TEx>(Func<TEx, string> handleString) where TEx : Exception
-        {
-            var newInst = this;
-            
-            newInst.Handle(handleString, e => e is TEx);
-
-            return newInst;
-        }
-
+        
         private (string, bool) ToErrorStringImpl(Exception ex)
         {
-            foreach (var other in _others)
+            foreach (var other in _handlers)
             {
                 if (other.ToErrorString(ex) is (var str, true))
                 {
@@ -559,17 +528,47 @@ namespace auvdisk.Extensions
                 }
             }
             
-            foreach (var item in _handlersString.Where(x => x.Item1.IsInstanceOfType(ex)))
-            {
-                return ((string)item.Item2.DynamicInvoke(ex)!, true);
-            }
-            
             return (ex.Message, false);
         }
 
         private bool ShouldCatchImpl(Exception ex)
         {
-            return _others.Any(x => x.ShouldCatch(ex)) || _handlersFilter.Any(x => x(ex));
+            return _handlers.Any(x => x.ShouldCatch(ex));
+        }
+    }
+    
+    class FlowContextHandler : IFlowContextHandler
+    {
+        private readonly (Type, Delegate) _toString;
+        private readonly Func<Exception, bool> _filter;
+
+        public Func<Exception, bool> ShouldCatch => ShouldCatchImpl;
+        public Func<Exception, (string, bool)> ToErrorString => ToErrorStringImpl;
+
+        private FlowContextHandler(Func<Exception, bool> filter, (Type, Delegate) toString)
+        {
+            _filter = filter;
+            _toString = toString;
+        }
+
+        public static FlowContextHandler Create(Func<Exception, bool> filter)
+        {
+            return new FlowContextHandler(filter, (typeof(Exception), (Exception e) => e.Message));
+        }
+
+        public static FlowContextHandler Create<TEx>(Func<TEx, string> toString) where TEx : Exception
+        {
+            return new FlowContextHandler(ex => ex is TEx, (typeof(TEx), toString));
+        }
+
+        private (string, bool) ToErrorStringImpl(Exception ex)
+        {
+            return _toString.Item1.IsInstanceOfType(ex) ? ((string)_toString.Item2.DynamicInvoke(ex)!, true) : (ex.Message, false);
+        }
+
+        private bool ShouldCatchImpl(Exception ex)
+        {
+            return _filter(ex);
         }
     }
 }

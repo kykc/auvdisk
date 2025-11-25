@@ -26,7 +26,7 @@ public static class Util
                 ctx.RemoveDisposable(state.stream); // Now managed by the disk instance
                 return Flows.ValOr(disk, "Failed to create fixed VHDx image");
             })
-            .PopCtx();
+            .PopHandler();
     }
 
     public static Flow<Disk> CreateDynamic(string path, ulong size, Log.ILog logger)
@@ -41,11 +41,11 @@ public static class Util
             .Bind((state, ctx) =>
             {
                 var disk = Disk.InitializeDynamic(state.stream, Ownership.Dispose, (long)size);
-                ctx.RemoveDisposable(state.stream); // Now managed by the disk instance
+                ctx.RemoveDisposable(state.stream); // Now managed/consumed by the disk instance
                 
                 return Flows.ValOr(disk, "Failed to create dynamic VHDx image");
             })
-            .PopCtx();
+            .PopHandler();
     }
 
     // TODO: investigate VHDx parent locators. Need to check what DU writes here and is it sensible enough
@@ -65,7 +65,7 @@ public static class Util
                 return Disk.InitializeDifferencing(state.subjectStream, Ownership.Dispose, state.parentDisk, Ownership.Dispose,
                     parentAbsolutePath, parentRelativePath, DateTime.UtcNow);
             }, "Failed to create differencing VHDx image file")
-            .PopCtx();
+            .PopHandler();
     }
 
     public static IDictionary<string, string> GetParentLocators(string path)

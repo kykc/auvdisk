@@ -105,7 +105,7 @@ public static class TestUtil
             .Check(_ => File.Exists(sourcePath), _ => "Source VHD does not exist")
             .Handle((Exception e) => e.Message)
             .Bind(_ => Util.OpenDiskWithDu(sourcePath, logger))
-            .PopCtx()
+            .PopHandler()
             .MapDispose(disk =>
             {
                 var layers = disk.Layers.ToList();

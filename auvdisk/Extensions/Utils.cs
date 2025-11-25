@@ -324,7 +324,7 @@ namespace auvdisk.Extensions
                 .Check(x => File.Exists(source(x)), (x) => $"Source file {source(x)} does not exist")
                 .HandleAll()
                 .Map(TryOpenForReading)
-                .PopCtx();
+                .PopHandler();
         }
         
         public static Flow<TSubj> WithCheckedStreamBoundaries<TSubj>(this Flow<TSubj> action, Func<TSubj, string> path, Func<TSubj, ulong> offset, Func<TSubj, ulong> length, ILog logger)
@@ -362,7 +362,7 @@ namespace auvdisk.Extensions
                 .Check(subj => !Path.Exists(target(subj)), (subj) => $"{target(subj)} already exists")
                 .HandleAll()
                 .Map(TryCreate)
-                .PopCtx();
+                .PopHandler();
         }
 
         public static Flow<TSubj> WithSuperUserRights<TSubj>(this Flow<TSubj> action) where TSubj : class

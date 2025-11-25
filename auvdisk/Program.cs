@@ -5,7 +5,6 @@ using auvdisk.Extensions;
 using CommandLine;
 using auvdisk.DiskImage;
 using auvdisk.Cli;
-using auvdisk.DiskImage.Vhd;
 using auvdisk.Log;
 using Common.Logging;
 using Spectre.Console;
@@ -50,12 +49,12 @@ namespace auvdisk
             }
         }
 
-        private static Func<T, int> MakeCreateVdiskHandler<T>(ILog logger, IFlowContext ctx) where T: CreateVdisk
+        private static Func<T, int> MakeCreateVdiskHandler<T>(ILog logger, IFlowContextHandler ctx) where T: CreateVdisk
         {
             return (rawOpts) =>
             {
                 using var result = Flows.Val(rawOpts)
-                    .WithCtx(ctx)
+                    .WithHandler(ctx)
                     .WithCheckedSize(x => x.Size)
                     .WithCheckedTargetAvailable(x => x.Target, logger)
                     .WithCheckedTargetExtension(x => x.Target, x => x.IsVhdx() ? ".vhdx" : ".vhd")
@@ -104,7 +103,6 @@ namespace auvdisk
 
             var logger = new Log.Logger();
             
-            var flowCtx = new DefaultFlowContext();
             var unexpectedExceptionHandler = (Exception ex) =>
             {
                 logger.Debug($"[yellow][[DEBUG]][/] [red]Unhandled exception [underline]<{ex.GetType().ToString().EscapeMarkup()}>[/] with message:[/] [yellow]{ex.Message.EscapeMarkup()}[/]");
@@ -112,7 +110,7 @@ namespace auvdisk
 
                 return ex.Message;
             };
-            flowCtx.Handle(unexpectedExceptionHandler, _ => true);
+            var flowCtx = FlowContextHandler.Create(unexpectedExceptionHandler);
 
             var cliResult = Utils.IfElse(() => UseCustomHelpRenderer,
                 () =>
@@ -179,7 +177,7 @@ namespace auvdisk
             handlers.Register((Cli.LoopToVhd rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .Bind(opts => DiskImageConverter.ConvertLoopToVhd(opts.Source, opts.Target, logger, opts.Verbose, opts.ZeroFill, opts.NoBoot));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
@@ -188,7 +186,7 @@ namespace auvdisk
             handlers.Register((Cli.VhdToLoop rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .Bind(opts => DiskImageConverter.ConvertVhdToLoop(opts.Source, opts.Target, logger, opts.Verbose, opts.PartIndex));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
@@ -197,7 +195,7 @@ namespace auvdisk
             handlers.Register((Cli.ImgToVhd rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .Bind(opts => DiskImageConverter.ConvertImgToVhd(opts.Source, logger, opts.Verbose));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
@@ -206,7 +204,7 @@ namespace auvdisk
             handlers.Register((Cli.VhdToImg rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .Bind(opts => DiskImageConverter.ConvertVhdToImg(opts.Source, logger, opts.Verbose));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
@@ -215,7 +213,7 @@ namespace auvdisk
             handlers.Register((Cli.CreateDiffVhd rawOpts) =>
             {
                 using var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .WithCheckedTargetAvailable(opts => opts.Child, logger)
                     .WithCheckedSourceExists(opts => opts.Parent, logger)
                     .WithCheckedDiskType(opts => opts.Vhdx ? "VHDX" : "VHD", opts => opts.Parent, opts => opts.Verbose, logger)
@@ -246,7 +244,7 @@ namespace auvdisk
             handlers.Register((Cli.ExtractFile rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .WithCheckedSourceExists(x => x.Source, logger)
                     .WithCheckedTargetAvailable(x => x.Target, logger)
                     .WithCheckedStreamBoundaries(x => x.Source, x => x.Offset, x => x.Length, logger)
@@ -258,7 +256,7 @@ namespace auvdisk
             handlers.Register((Cli.DiagVhd rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .WithCheckedSourceExists(x => x.Source, logger)
                     .Map(opts => DiskImage.Vhd.Util.OutputDiagnosticInfo(opts.Source, logger).RefVal());
 
@@ -274,7 +272,7 @@ namespace auvdisk
                 };
 
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .WithCheckedSize(x => x.Size)
                     .WithCheckedSourceExists(x => x.Target, logger)
                     .Map(parseSize)
@@ -288,7 +286,7 @@ namespace auvdisk
                 var fixedValue = FixCommandLineParserNullable(x => x.Fixed, ["-f", "--fixed"], rawOpts, args, true);
                 
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .Bind(opts => DiskImageConverter.ConvertVhdToVhdx(opts.Source, opts.Target, logger, opts.Verbose, fixedValue, opts.ZeroFill));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
@@ -299,7 +297,7 @@ namespace auvdisk
                 var fixedValue = FixCommandLineParserNullable(x => x.Fixed, ["-f", "--fixed"], rawOpts, args, true);
                 
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .Bind(opts => DiskImageConverter.ConvertVhdxToVhd(opts.Source, opts.Target, logger, opts.Verbose, fixedValue, opts.ZeroFill));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
@@ -308,7 +306,7 @@ namespace auvdisk
             handlers.Register((Cli.GenVmdkWrapper rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .WithCheckedSourceExists(opts => opts.Source, logger)
                     .WithCheckedDiskType(_ => "RAW", opts => opts.Source, _ => false, logger)
                     .MapOr(opts => new { opts, vmdk = DiskImage.Vmdk.VmdkFlatWrapper.Create(opts.Source, logger) }, "Failed to create VMDK wrapper")
@@ -331,7 +329,7 @@ namespace auvdisk
             handlers.Register((Cli.Qcow2ToRaw rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .Bind(opts => DiskImageConverter.ConvertQcow2ToRaw(opts.Source, opts.Target, logger, opts.Verbose));
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
@@ -340,7 +338,7 @@ namespace auvdisk
             handlers.Register((Cli.ProbeBcd rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .WithCheckedSourceExists(opts => opts.Source, logger)
                     .SideEffect(opts => BCD.Util.ProbeBcd(opts.Source, opts.Verbose, logger));
 
@@ -350,7 +348,7 @@ namespace auvdisk
             handlers.Register((Cli.BrowseVdisk rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .WithCheckedSourceExists(opts => opts.Source, logger)
                     .SideEffect(opts => Commander.FsCommander.OpenDiskImage(opts.Source, logger));
 
@@ -362,7 +360,7 @@ namespace auvdisk
                 if (rawOpts.List)
                 {
                     var result = Flows.Val(rawOpts)
-                        .WithCtx(flowCtx)
+                        .WithHandler(flowCtx)
                         .WithSuperUserRights()
                         .Bind(opts => DiskImage.Factory.MakeFsListFromAvailableVolumes(logger, opts.TreeOutput, opts.Humanize));
 
@@ -371,7 +369,7 @@ namespace auvdisk
                 else
                 {
                     var result = Flows.Val(rawOpts)
-                        .WithCtx(flowCtx)
+                        .WithHandler(flowCtx)
                         .WithSuperUserRights()
                         .Bind(_ => Commander.FsCommander.OpenLocalFs(logger));
 
@@ -398,7 +396,7 @@ namespace auvdisk
             handlers.Register((ResizeFileUnsafe rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .WithCtx(flowCtx)
+                    .WithHandler(flowCtx)
                     .Check(opts => Fs.Util.HandleResizeFile(opts.Target, opts.Size, opts.ZeroFill, logger), _ => "Failed to resize file");
 
                 return result.IsVal ? 0 : 1;

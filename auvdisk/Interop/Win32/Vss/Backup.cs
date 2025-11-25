@@ -46,7 +46,7 @@ namespace auvdisk.Interop.Win32.Vss
             return Flows.Val(None.Value)
                 .HandleAll()
                 .Map(_ => new Backup(volumeName))
-                .PopCtx();
+                .PopHandler();
         }
 
         public void Dispose()

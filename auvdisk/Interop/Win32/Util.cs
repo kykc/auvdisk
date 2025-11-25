@@ -272,7 +272,7 @@ namespace auvdisk.Interop.Win32
                 .BindConcat(opts => Vss.Backup.Make(opts.volume, opts.logger), (opts, vss) => new { opts, vss })
                 .Handle((Exception e) => e.Message)
                 .MapConcat(state => new BlockDeviceUnbufferedStream(state.vss.Root, true), (state, snapStream) => new { state.vss, state.opts, snapStream })
-                .PopCtx()
+                .PopHandler()
                 .LogOk(logger, state => $"Created snapshot {state.vss.Root} for volume {state.opts.volume}")
                 .BindErr(state => DiskImage.Util.CreateVdiskWithGptLayout(
                     state.opts.target, state.opts.bootable ? 512UL * 1024 * 1024 : 0UL, (ulong)state.snapStream.Length, 
@@ -290,7 +290,7 @@ namespace auvdisk.Interop.Win32
                             FatFileSystem.FormatPartition(disk, 0, "BOOT");
                             return Flows.Val(None.Value);
                         })
-                        .PopCtx()
+                        .PopHandler()
                         .Bind(_ => NtfsClone.Clone(state.snapStream, partStream , state.opts.logger));
                 })
                 .BindErrIf(state => state.opts.bootable, state => // If requested, prepare boot files on EFI partition using bcdboot
