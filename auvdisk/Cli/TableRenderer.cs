@@ -46,9 +46,8 @@ public static class TableRenderer
     
     public static class ToStringHelper
     {
-        private static readonly HashSet<Type> MeaningfulToStringTypes = new()
-        {
-            // Primitives
+        private static readonly HashSet<Type> MeaningfulToStringTypes =
+        [
             typeof(string),
             typeof(char),
             typeof(bool),
@@ -58,16 +57,16 @@ public static class TableRenderer
             typeof(long), typeof(ulong),
             typeof(float), typeof(double),
             typeof(decimal),
-        
+
             // Common value types
             typeof(DateTime),
             typeof(DateTimeOffset),
             typeof(TimeSpan),
             typeof(Guid),
-            typeof(Uri),
-        
+            typeof(Uri)
+
             // Nullable versions are handled separately
-        };
+        ];
 
         public static bool HasMeaningfulToString(Type type)
         {
@@ -91,14 +90,8 @@ public static class TableRenderer
         }
     }
 
-    public static string ToStr(this object obj)
-    {
-        return ToStrImpl(obj);
-    }
-    
     public static string ToStrImpl(object? subj)
     {
-        Console.WriteLine(subj?.GetType()?.FullName);
         if (subj == null)
         {
             return "<null>";

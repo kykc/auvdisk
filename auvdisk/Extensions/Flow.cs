@@ -2,6 +2,7 @@ using System.Diagnostics;
 using auvdisk.Log;
 using DotNext;
 using ausharp.Flow;
+using Spectre.Console.Rendering;
 
 namespace auvdisk.Extensions;
 
@@ -23,6 +24,11 @@ internal static class FlowExtensions
     }
 
     public static Flow<TSubj> LogIf<TSubj>(this Flow<TSubj> subj, ILog logger, Func<TSubj, bool> condition, string msg) where TSubj : class
+    {
+        return subj.SideEffectIf((val, _) => condition(val), (_, _) => logger.Log(msg));
+    }
+    
+    public static Flow<TSubj> LogIf<TSubj>(this Flow<TSubj> subj, ILog logger, Func<TSubj, bool> condition, IRenderable msg) where TSubj : class
     {
         return subj.SideEffectIf((val, _) => condition(val), (_, _) => logger.Log(msg));
     }

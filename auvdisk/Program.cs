@@ -310,18 +310,10 @@ namespace auvdisk
                     .WithCheckedSourceExists(opts => opts.Source, logger)
                     .WithCheckedDiskType(_ => "RAW", opts => opts.Source, _ => false, logger)
                     .MapOr(opts => new { opts, vmdk = DiskImage.Vmdk.VmdkFlatWrapper.Create(opts.Source, logger) }, "Failed to create VMDK wrapper")
-                    .SideEffect(x =>
-                    {
-                        Utils.If(() => logger.Log(new Rule("[green]Resulting VMDK[/]").LeftJustified()),
-                            () => !x.opts.Silent);
-                        logger.Log(x.vmdk?.ToString().EscapeMarkup() ?? ""); // On error logger will contain the reason already
-                        Utils.If(() => logger.Log(new Rule("[green]End of VMDK[/]").LeftJustified()),
-                            () => !x.opts.Silent);
-                        Utils.If(
-                            () => logger.Log(
-                                "Put that into a file, place it into the same folder as the source image and you're good to go"),
-                            () => !x.opts.Silent);
-                    });
+                    .LogIf(logger, state => !state.opts.Silent, new Rule("[green]Resulting VMDK[/]").LeftJustified())
+                    .LogOk(logger, state => state.vmdk?.ToString().EscapeMarkup() ?? "")
+                    .LogIf(logger, state => !state.opts.Silent, new Rule("[green]End of VMDK[/]").LeftJustified())
+                    .LogIf(logger, state => !state.opts.Silent, "Put that into a file, place it into the same folder as the source image and you're good to go");
 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });

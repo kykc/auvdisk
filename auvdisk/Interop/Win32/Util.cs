@@ -32,6 +32,8 @@ namespace auvdisk.Interop.Win32
         [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global")]
         public record CreateFileFastUnsafeResult(bool HandleCreated, bool SetFilePointerResult, bool SetEndOfFileResult,
             string SetFileAllocationInfoResult, string SetFileDataLengthResult, bool CloseResult, bool IsSuccess);
+        
+        private record BootableWindowsLayout(VhdMounter.VhdVolumeInfo EfiVolume, VhdMounter.VhdVolumeInfo? DataVolume, char EfiTargetLetter);
 
         [SupportedOSPlatform("windows5.1.2600")]
         public static CreateFileFastUnsafeResult ResizeFileFastUnsafe(string target, ulong size, Log.ILog logger)
@@ -248,23 +250,21 @@ namespace auvdisk.Interop.Win32
             return new BlockDeviceUnbufferedStream(deviceId);
         }
 
+        private static Flow<BootableWindowsLayout> FindBootableWindowsLayout(IEnumerable<VhdMounter.VhdVolumeInfo> volumes)
+        {
+            const char efiTargetLetter = 'X'; // TODO: ideally, check that it is not already taken
+
+            var vhdVolumeInfos = volumes.ToList();
+            var efiVolume = vhdVolumeInfos.FirstOrDefault(v => v.FileSystem == "FAT32");
+            var maybeDataVolume = vhdVolumeInfos.FirstOrDefault(v => v.FileSystem == "NTFS");
+
+            return Flows.ValOr(efiVolume, "Failed to detect/find EFI/data volumes")
+                .Map(efi => new BootableWindowsLayout(EfiVolume: efi, DataVolume: maybeDataVolume, EfiTargetLetter: efiTargetLetter));
+        }
+
         [SuppressMessage("ReSharper", "ConvertToLambdaExpression")]
         public static Flow<None> CloneVolumeToVirtualDiskWithVss(string volume, string target, ILog logger, bool createFixed = false, bool forceZeroFill = false, bool bootable = false, bool vhdx = false)
         {
-            var findVolumes = (IEnumerable<VhdMounter.VhdVolumeInfo> volumes) =>
-            {
-                const char efiTargetLetter = 'X'; // TODO: ideally, check that it is not already taken
-
-                var vhdVolumeInfos = volumes.ToList();
-                var efiVolume = vhdVolumeInfos.Where(v => v.FileSystem == "FAT32").FirstOrNone();
-                var dataVolume = vhdVolumeInfos.Where(v => v.FileSystem == "NTFS").FirstOrNone();
-
-                return efiVolume
-                    .Concat(dataVolume)
-                    .Convert(x => new {efi = x.Item1, data = x.Item2, efiTargetLetter})
-                    .Flow($"Failed to detect/find EFI/data volumes");
-            };
-
             var request = new { volume, target, createFixed, forceZeroFill, bootable, vhdx, logger };
             
             // Pinned to the scope, as there are IDisposable values inside: Backup and BlockDeviceUnbufferedStream
@@ -293,20 +293,29 @@ namespace auvdisk.Interop.Win32
                         .PopHandler()
                         .Bind(_ => NtfsClone.Clone(state.snapStream, partStream , state.opts.logger));
                 })
-                .BindErrIf(state => state.opts.bootable, state => // If requested, prepare boot files on EFI partition using bcdboot
-                {
-                    return VhdMounter.Mount(state.opts.target, state.opts.logger)
-                        .Bind(findVolumes)
-                        .BindErr(v => DriveLetterManager.AddDriveLetterToVolume(v.efi.Path, v.efiTargetLetter, state.opts.logger))
-                        .Bind(v => CliTools.ExecuteBcdBoot(v.efiTargetLetter, v.data.DriveLetter ?? 'C', state.opts.logger)) // ugly fallback to C, but I don't have better solution at the moment
-                        .Bind(l => DriveLetterManager.RemoveDriveLetterFromVolume(l.Val, state.opts.logger))
-                        .Check(_ => VhdMounter.Dismount(state.opts.target, state.opts.logger), (_) => $"Failed to dismount {state.opts.target}");
-                })
+                .BindErrIf( // If requested, prepare boot files on EFI partition using bcdboot
+                    state => state.opts.bootable, 
+                    state => InitializeEfiBootPartitionWithWinBcdBootloader(state.opts.target, state.opts.logger))
                 .LogOk(logger, state => $"Closing snapshot {state.vss.Root} for volume {state.opts.volume}")
                 .MapDispose(state => new {state.opts, state.vss}, state => state.snapStream)
                 .MapDispose(state => state.opts, state => state.vss);
 
             return result.IsErr ? new(result.UnwrapErr()) : Flows.Val(None.Value);
+        }
+
+        public static Flow<Value<char>> InitializeEfiBootPartitionWithWinBcdBootloader(string target, ILog logger, char? sourceWinPartitionDriveLetter = null)
+        {
+            var opts = new { target, logger };
+            
+            return VhdMounter.Mount(opts.target, opts.logger)
+                .Bind(FindBootableWindowsLayout)
+                .BindErr(v => DriveLetterManager.AddDriveLetterToVolume(v.EfiVolume.Path, v.EfiTargetLetter, opts.logger))
+                .SideEffectIf(
+                    (layout, _) => !layout.DataVolume.IsSome() && !sourceWinPartitionDriveLetter.IsSome(), // ugly fallback to C, but I don't have better solution at the moment
+                    (_, _) => logger.Warning("Failed to find source data volume, falling back to C"))
+                .Bind(v => CliTools.ExecuteBcdBoot(v.EfiTargetLetter, sourceWinPartitionDriveLetter ?? v.DataVolume?.DriveLetter ?? 'C', opts.logger))
+                .Bind(l => DriveLetterManager.RemoveDriveLetterFromVolume(l.Val, opts.logger))
+                .Check(_ => VhdMounter.Dismount(opts.target, opts.logger), _ => $"Failed to dismount {opts.target}");
         }
     }
 }

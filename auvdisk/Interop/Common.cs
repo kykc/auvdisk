@@ -245,6 +245,16 @@ namespace auvdisk.Interop
                     return result.LogErrorIfAny(logger) ? 1 : 0;
                 }
             });
+
+            handlers.Register((InstallBootloader rawOpts) =>
+            {
+                var result = Flows.Val(rawOpts)
+                    .WithCheckedSourceExists(opts => opts.Target, logger)
+                    .WithSuperUserRights()
+                    .Bind(opts => Win32.Util.InitializeEfiBootPartitionWithWinBcdBootloader(opts.Target, logger));
+                
+                return result.LogErrorIfAny(logger) ? 1 : 0;
+            });
 #pragma warning restore CA1416
 #endif
         }

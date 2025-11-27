@@ -354,6 +354,7 @@ namespace auvdisk.DiskImage.Vhd
         // This function tries to mimic what Windows does when creating differencing VHDs
         // It also returns relative paths with \ as directory separator on all platforms to avoid confusing Windows
         // For supported scenarios this function produces identical results on Windows and Posix systems (hopefully)
+        // TODO: return Flow instead of throwing
         internal static string NormalizeRelativePathToParent(string c, string p)
         {
             Regex isRootedWinPath = new Regex(@"^[\W\w]\:\\.*");
@@ -423,45 +424,58 @@ namespace auvdisk.DiskImage.Vhd
                 return Flows.Err<DiscUtils.Vhd.Disk>("Failed to read VHD footer");
             }
 
-            var footer = maybeFooter;
-
-            if (footer.DiskType != VirtualHardDiskType.Differencing)
+            if (maybeFooter.DiskType != VirtualHardDiskType.Differencing)
             {
-                return Flows.Val(new DiscUtils.Vhd.Disk(path, FileAccess.Read));
+                return Flows.Val(None.Value)
+                    .HandleAll()
+                    .Map(_ => new DiscUtils.Vhd.Disk(path, FileAccess.Read))
+                    .PopHandler();
             }
             
-            var diskType = footer.DiskType;
+            var diskType = maybeFooter.DiskType;
             var diskPath = path;
 
-            List<DiscUtils.Vhd.DiskImageFile> layers = [new DiscUtils.Vhd.DiskImageFile(diskPath, FileAccess.Read)];
-            
-            while (diskType == VirtualHardDiskType.Differencing)
+            List<DiscUtils.Vhd.DiskImageFile> layers = [];
+
+            try
             {
-                using var diffHandler = new DifferencingVhdHandler(diskPath);
-                
-                var parentLocations = diffHandler.FindParentLocation().ToList();
-                
-                var found = parentLocations.Any();
+                layers.Add(new DiscUtils.Vhd.DiskImageFile(diskPath, FileAccess.Read));
 
-                if (found)
+                while (diskType == VirtualHardDiskType.Differencing)
                 {
-                    var layer = new DiskImageFile(parentLocations.First(), FileAccess.Read);
-                    layers.Add(layer);
-                    diskType = ConvertVhdTypeFromDuToDal(layer.Information.DiskType);
-                    diskPath = parentLocations.First();
-                }
-                else
-                {
-                    foreach (var locator in diffHandler.ReadParentLocators())
+                    using var diffHandler = new DifferencingVhdHandler(diskPath);
+
+                    var parentLocations = diffHandler.FindParentLocation().ToList();
+
+                    var found = parentLocations.Any();
+
+                    if (found)
                     {
-                        logger.Error($"Locator entry: ({(DynamicDiskHeader.ParentLocatorPlatformCode)locator.Item1.PlatformCode}) ({locator.Item2})");
+                        var layer = new DiskImageFile(parentLocations.First(), FileAccess.Read);
+                        layers.Add(layer);
+                        diskType = ConvertVhdTypeFromDuToDal(layer.Information.DiskType);
+                        diskPath = parentLocations.First();
                     }
+                    else
+                    {
+                        foreach (var locator in diffHandler.ReadParentLocators())
+                        {
+                            logger.Error(
+                                $"Locator entry: ({(DynamicDiskHeader.ParentLocatorPlatformCode)locator.Item1.PlatformCode}) ({locator.Item2})");
+                        }
 
-                    return Flows.Err<DiscUtils.Vhd.Disk>("Failed to find parent VHD");
+                        return Flows.Err<DiscUtils.Vhd.Disk>("Failed to find parent VHD");
+                    }
                 }
-            }
 
-            return Flows.Val(new DiscUtils.Vhd.Disk(layers, Ownership.Dispose));
+                return Flows.Val(new DiscUtils.Vhd.Disk(layers, Ownership.Dispose));
+            }
+            catch (Exception ex) when (Program.ExceptionFilter(ex))
+            {
+                layers.ForEach(l => l.Dispose());
+
+                return new(ex.Message);
+            }
         }
 
         public static FileType ConvertVhdTypeFromDalToDu(VirtualHardDiskType type)

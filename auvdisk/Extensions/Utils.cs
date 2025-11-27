@@ -23,14 +23,6 @@ namespace auvdisk.Extensions
     
     internal static class Utils
     {
-        public static string JoinTo(this string value, params string[] others)
-        {
-            StringBuilder stringBuilder = new StringBuilder(value);
-            foreach (string other in others)
-                stringBuilder.Append(other);
-            return stringBuilder.ToString();
-        }
-        
         public static void WithProgress(ILog logger, IProgressData startData, Func<Throttle<IProgressData>?, IProgressData> action,
             bool? forceProgress = null)
         {

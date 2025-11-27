@@ -451,6 +451,15 @@ namespace auvdisk.Cli
         [Option("vss", Required = false, Default = false, HelpText = "Use VSS")]
         public bool UseVss { get; set; } = false;
     }
+    
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("install-bootloader", HelpText = "Install EFI boot loader on a virtual disk with GPT partition table")]
+    [NotSupported(!Program.IsWindows)]
+    class InstallBootloader
+    {
+        [Option('t', "target", Required = true, HelpText = "Target disk image path")]
+        public string Target { get; set; } = "";
+    }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     [Verb("notepad", HelpText = "Notepad", Hidden = true)]

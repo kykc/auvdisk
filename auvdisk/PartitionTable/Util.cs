@@ -78,11 +78,6 @@ public static class Util
                 }
             });
     }
-    
-    public static Flow<VhdFileInfo> InitializeDisk(VhdFileInfo vhdInfo, ulong size, string partitions, bool markBoot, ILog logger)
-    {
-        return InitializeDisk(vhdInfo.Path, size, partitions, markBoot, logger).Map(_ => vhdInfo);
-    }
 
     public static Flow<List<GuidPartitionEntry>> CreateLayout(ulong[] sizes, ulong diskSize, ulong lbaSize, ILog logger,
         ulong offsetLba = 2048, bool noBoot = false)
