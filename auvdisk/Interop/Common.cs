@@ -249,7 +249,6 @@ namespace auvdisk.Interop
             handlers.Register((InstallBootloader rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .WithCheckedSourceExists(opts => opts.Target, logger)
                     .WithSuperUserRights()
                     .Bind(opts => Win32.Util.InitializeEfiBootPartitionWithWinBcdBootloader(opts.Target, logger));
                 

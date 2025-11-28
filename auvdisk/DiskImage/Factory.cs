@@ -70,7 +70,8 @@ namespace auvdisk.DiskImage
             return fsList.Select((x, idx) => new KeyValuePair<string, DiscFileSystem>(GetFsName(idx, x), x)).ToDictionary();
         }
 
-        public static Flow<FsCollection> MakeFsListFromAvailableVolumes(ILog logger, bool treeOutput = false, bool humanize = false)
+        public static Flow<FsCollection> MakeFsListFromVolumes(IEnumerable<PhysicalVolumeInfo> volumes, ILog logger,
+            bool treeOutput = false, bool humanize = false, bool silent = false)
         {
             string[] MakeTableRow(PhysicalVolumeInfo volume, DiscFileSystem? fs) => 
             [
@@ -85,7 +86,7 @@ namespace auvdisk.DiskImage
                 volume.BytesPerSector?.ToString() ?? "N/A"
             ];
             
-            return Interop.Common.GetVolumes(logger).Map((volumeList) =>
+            return Flows.Val(volumes).Map((volumeList) =>
             {
                 var fsList = new List<DiscFileSystem>();
                 var disposableList = new List<IDisposable>();
@@ -145,7 +146,7 @@ namespace auvdisk.DiskImage
                     tuiStructure[parentDeviceCaption].Add(MakeTableRow(volume, fs));
                 }
 
-                if (Program.IsInteractive)
+                if (Program.IsInteractive && !silent)
                 {
                     if (!treeOutput)
                     {
@@ -187,6 +188,12 @@ namespace auvdisk.DiskImage
 
                 return new FsCollection(disposableList, GetFileSystems(fsList), "OS Volumes");
             });
+        }
+
+        public static Flow<FsCollection> MakeFsListFromAvailableVolumes(ILog logger, bool treeOutput = false, bool humanize = false)
+        {
+            return Interop.Common.GetVolumes(logger)
+                .Bind(volumes => MakeFsListFromVolumes(volumes, logger, treeOutput, humanize, false));
         }
 
         public static FsCollection? MakeFsListFromVdisk(string path, ILog logger)

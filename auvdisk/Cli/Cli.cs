@@ -453,7 +453,7 @@ namespace auvdisk.Cli
     }
     
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    [Verb("install-bootloader", HelpText = "Install EFI boot loader on a virtual disk with GPT partition table")]
+    [Verb("install-bootloader", HelpText = "Install EFI boot loader on a virtual disk with GPT partition table (Windows only)")]
     [NotSupported(!Program.IsWindows)]
     class InstallBootloader
     {

@@ -40,7 +40,7 @@ public static class TableRenderer
                 .FirstOrDefault(i => i.IsGenericType && 
                                      i.GetGenericTypeDefinition() == typeof(IEnumerable<>));
         
-            return enumInterface?.GetGenericArguments()?.First() ?? null;
+            return enumInterface?.GetGenericArguments().First() ?? null;
         }
     }
     
@@ -124,19 +124,46 @@ public static class TableRenderer
         }
     }
 
-    public static void RenderTable<T>(IEnumerable<T> subj, ILog logger, bool showAll = false)
+    private static void RenderClassWithProps<T>(List<PropertyInfo> props, IEnumerable<T> subj, ILog logger)
     {
-        if (subj.Any())
-        {
-            var props = subj.First()!.GetType().GetProperties().Where(x => x.GetCustomAttribute<DisplayAttribute>() != null || showAll).ToList();
-            var table = Utils.MakeConsoleTable(props.Select(x => x.GetCustomAttribute<DisplayAttribute>()?.Name ?? x.Name).ToArray());
+        var table = Utils.MakeConsoleTable(props.Select(x => x.GetCustomAttribute<DisplayAttribute>()?.Name ?? x.Name).ToArray());
 
-            foreach (var el in subj)
-            {
-                table.AddRow(props.Select(p => ToStrImpl(p.GetValue(el))).ToArray());
-            }
+        foreach (var el in subj)
+        {
+            table.AddRow(props.Select(p => ToStrImpl(p.GetValue(el))).ToArray());
+        }
+
+        logger.Log(table);
+    }
+
+    private static void RenderRecordOneliner<T>(Type type, ConstructorInfo ctor, IEnumerable<T> subj, ILog logger)
+    {
+        var table = Utils.MakeConsoleTable(ctor.GetParameters().Select(x => x.Name ?? x.Position.ToString()).ToArray());
+
+        foreach (var el in subj)
+        {
+            table.AddRow(ctor.GetParameters().Where(x => x.Name != null).Select(param => ToStrImpl(type.GetProperty(param.Name!)?.GetValue(el))).ToArray());
+        }
                 
-            logger.Log(table);
+        logger.Log(table);
+    }
+
+    public static void RenderTable<T>(IEnumerable<T> subjRaw, ILog logger, bool showAll = false)
+    {
+        var subj = subjRaw.ToList();
+
+        if (!subj.Any()) return;
+        
+        var type = subj.First()!.GetType();
+        var props = type.GetProperties().Where(x => x.GetCustomAttribute<DisplayAttribute>() != null || showAll).ToList();
+            
+        if (props.Any()) // class with properties
+        {
+            RenderClassWithProps(props, subj, logger);
+        }
+        else if (type.GetConstructors().FirstOrDefault() is { } ctor) // one-liner record definitions
+        {
+            RenderRecordOneliner(type, ctor, subj, logger);
         }
     }
 }
