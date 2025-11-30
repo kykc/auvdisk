@@ -254,6 +254,27 @@ namespace auvdisk.Interop
                 
                 return result.LogErrorIfAny(logger) ? 1 : 0;
             });
+            
+            handlers.Register((ToggleEfi rawOpts) =>
+            {
+                var result = Flows.Val(rawOpts)
+                    .Bind(opts => new BcdBootloaderInstaller(logger).FindBootableWindowsLayoutInMounted(opts.DriveLetter.First()))
+                    .BindErr(layout =>
+                    {
+                        if (Directory.Exists($"{layout.EfiTargetLetter}:"))
+                        {
+                            logger.Log($"Dismounting <{layout.EfiTargetLetter}>");
+                            return DriveLetterManager.RemoveDriveLetterFromVolume(layout.EfiTargetLetter, logger);
+                        }
+                        else
+                        {
+                            logger.Log($"Mounting {layout.EfiVolumePath} to <{layout.EfiTargetLetter}>");
+                            return DriveLetterManager.AddDriveLetterToVolume(layout.EfiVolumePath, layout.EfiTargetLetter, logger);
+                        }
+                    });
+
+                return result.LogErrorIfAny(logger) ? 1 : 0;
+            });
 #pragma warning restore CA1416
 #endif
         }

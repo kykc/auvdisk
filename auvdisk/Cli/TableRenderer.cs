@@ -98,15 +98,15 @@ public static class TableRenderer
         }
         else if (EnumerableHelper.IsEnumerable(subj))
         {
-            if (subj is System.Collections.IEnumerable zhopa)
+            if (subj is System.Collections.IEnumerable collection)
             {
                 List<object> subjForLinq = new List<object>();
                         
-                foreach (var el in zhopa)
+                foreach (var el in collection)
                 {
                     subjForLinq.Add(el);
                 }
-                        
+                
                 return string.Join(", ", subjForLinq.Select(x => x.ToString()));
             }
             else

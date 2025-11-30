@@ -2,7 +2,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using auvdisk.Cli;
 using auvdisk.Extensions;
 using auvdisk.Log;
 using DiscUtils.Fat;
@@ -13,7 +12,6 @@ using Windows.Win32.Storage.FileSystem;
 using Windows.Wdk.Storage.FileSystem;
 using Windows.Wdk.System.SystemServices;
 using Windows.Win32.System.IO;
-using auvdisk.DiskImage;
 using auvdisk.Fs.Ntfs;
 using DiscUtils;
 using Spectre.Console;
@@ -32,11 +30,6 @@ namespace auvdisk.Interop.Win32
         [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global")]
         public record CreateFileFastUnsafeResult(bool HandleCreated, bool SetFilePointerResult, bool SetEndOfFileResult,
             string SetFileAllocationInfoResult, string SetFileDataLengthResult, bool CloseResult, bool IsSuccess);
-        
-        private record BootableWindowsLayout(
-            string EfiVolumePath, 
-            char EfiTargetLetter, 
-            char? SourceWindowsLetter);
 
         [SupportedOSPlatform("windows5.1.2600")]
         public static CreateFileFastUnsafeResult ResizeFileFastUnsafe(string target, ulong size, Log.ILog logger)
@@ -253,45 +246,6 @@ namespace auvdisk.Interop.Win32
             return new BlockDeviceUnbufferedStream(deviceId);
         }
 
-        private static Flow<BootableWindowsLayout> FindBootableWindowsLayout(IEnumerable<VhdMounter.VhdVolumeInfo> volumes)
-        {
-            const char efiTargetLetter = 'X'; // TODO: ideally, check that it is not already taken
-
-            var vhdVolumeInfos = volumes.ToList();
-            var efiVolume = vhdVolumeInfos.FirstOrDefault(v => v.FileSystem == "FAT32");
-            var maybeDataVolume = vhdVolumeInfos.FirstOrDefault(v => v.FileSystem == "NTFS");
-
-            return Flows.ValOr(efiVolume, "Failed to detect/find EFI/data volumes")
-                .Map(efi => new BootableWindowsLayout(
-                    EfiVolumePath: efi.Path, 
-                    EfiTargetLetter: efiTargetLetter, 
-                    SourceWindowsLetter: maybeDataVolume?.DriveLetter));
-        }
-
-        private static Flow<BootableWindowsLayout> FindBootableWindowsLayout(char mountedVolumeLetter, ILog logger)
-        {
-            const char efiTargetLetter = 'X'; // TODO: ideally, check that it is not already taken
-            
-            IEnumerable<PhysicalVolumeInfo> VolumesOnSameDevice(List<PhysicalVolumeInfo> volumes, char letter)
-            {
-                var maybeVolume = volumes.FirstOrDefault(v => v.MountPoints.Contains(@$"{letter}:\"));
-
-                return maybeVolume.IsSome() ? volumes.Where(x => x.ParentDeviceId == maybeVolume!.ParentDeviceId) : [];
-            }
-
-            return Common.GetVolumes(logger)
-                .Map(volumes => VolumesOnSameDevice(volumes.ToList(), mountedVolumeLetter))
-                .MapOr(volumes => volumes.Where(v =>
-                    {
-                        using var fs = Common.OpenPartitionByIdReadonly(v.DeviceId, logger);
-                        var fsInfoList = FileSystemManager.DetectFileSystems(fs);
-                        
-                        return fsInfoList.Any(x => x.Name == "FAT");
-                    }).FirstOrDefault(), "Failed to find FAT32 volume")
-                .MapOr(v => v.MountPoints.FirstOrDefault(x => x.Contains("Volume")), "Failed to find FAT32 volume mount point")
-                .Map(v => new BootableWindowsLayout(v, efiTargetLetter, mountedVolumeLetter));
-        }
-
         [SuppressMessage("ReSharper", "ConvertToLambdaExpression")]
         public static Flow<None> CloneVolumeToVirtualDiskWithVss(string volume, string target, ILog logger, bool createFixed = false, bool forceZeroFill = false, bool bootable = false, bool vhdx = false)
         {
@@ -332,91 +286,10 @@ namespace auvdisk.Interop.Win32
 
             return result.IsErr ? new(result.UnwrapErr()) : Flows.Val(None.Value);
         }
-
-        public static TOut MapTo<TIn, TOut>(this TIn source, Func<TIn, TOut> func)
+        
+        public static Flow<None> InitializeEfiBootPartitionWithWinBcdBootloader(string target, ILog logger)
         {
-            return func(source);
-        }
-
-        public static Flow<None> InitializeEfiBootPartitionWithWinBcdBootloader(string target, ILog logger, char? sourceWinPartitionDriveLetter = null)
-        {
-            var opts = new { target, logger };
-            
-            char? targetLetter = target switch 
-            {
-                [var l] => l, // C
-                [var l, _] => l, // C:
-                [var l, _, _] => l, // C:\
-                _ => null
-            };
-            
-            var isMountedDisk = targetLetter.HasValue;
-            var isVhd = !isMountedDisk && new DiskProbe(target, logger).Probe().MapTo(x => x.IsSuccess() && new[]{"VHD", "VHDX"}.Contains(x.Disk?.ImageType ?? ""));
-            
-            if (isMountedDisk)
-            {
-                return FindBootableWindowsLayout(targetLetter!.Value, logger)
-                    .Bind(v => InitializeEfiBootPartitionWithWinBcdBootloaderImpl(v.EfiVolumePath, v.EfiTargetLetter,
-                        v.SourceWindowsLetter!.Value, logger))
-                    .Map(_ => None.Value);
-            }
-            else if (isVhd)
-            {
-                bool shouldUnmount = false;
-                
-                var result = VhdMounter.Mount(opts.target, opts.logger)
-                    .SideEffect(_ => shouldUnmount = true)
-                    .Bind(FindBootableWindowsLayout)
-                    .SideEffectIf( // TODO: add confirm if fallback is effective
-                        (layout, _) => !layout.SourceWindowsLetter.IsSome() && !sourceWinPartitionDriveLetter.IsSome(), // ugly fallback to C, but I don't have better solution at the moment
-                        (_, _) => logger.Warning("Failed to find source data volume, falling back to C"))
-                    .Map(v => v with { SourceWindowsLetter = sourceWinPartitionDriveLetter ?? v.SourceWindowsLetter ?? 'C' })
-                    .Bind(
-                        v => InitializeEfiBootPartitionWithWinBcdBootloaderImpl(v.EfiVolumePath, v.EfiTargetLetter,
-                        v.SourceWindowsLetter!.Value, logger))
-                    .Map(_ => None.Value);
-
-                var unmountResult = Flows.Val(None.Value)
-                    .BindErrIf(
-                        _ => shouldUnmount,
-                        _ => VhdMounter.Dismount(opts.target, opts.logger).Flow($"Failed to dismount {opts.target}"));
-                
-                return result.BindErr(_ => unmountResult);
-            }
-            else
-            {
-                return new($"Unknown target {target}");
-            }
-        }
-
-        private static Flow<Value<char>> InitializeEfiBootPartitionWithWinBcdBootloaderImpl(string efiVolumePath, char efiTargetLetter, char sourceWindowsLetter, ILog logger)
-        {
-            var rq =  new { efiVolumePath, efiTargetLetter, sourceWindowsLetter, logger };
-            
-            return Flows.Val(rq)
-                .Check(
-                    opts => !ContainsEfiBootloader(opts.efiVolumePath), 
-                    opts => $"Target volume <{opts.efiVolumePath}> already contains EFI bootloader")
-                .Check(
-                    opts => ContainsWindows(opts.sourceWindowsLetter),
-                    opts => $"Source volume <{opts.sourceWindowsLetter}> does not contain Windows")
-                .BindErr(opts => DriveLetterManager.AddDriveLetterToVolume(opts.efiVolumePath, opts.efiTargetLetter, opts.logger))
-                .BindErr(opts => CliTools.ExecuteBcdBoot(opts.efiTargetLetter, opts.sourceWindowsLetter, opts.logger))
-                .Bind(opts => DriveLetterManager.RemoveDriveLetterFromVolume(opts.efiTargetLetter, opts.logger));
-        }
-
-        private static bool ContainsEfiBootloader(string volumePath)
-        {
-            var target = $"{volumePath}EFI";
-            
-            return Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any();
-        }
-
-        private static bool ContainsWindows(char volumeLetter)
-        {
-            var target = @$"{volumeLetter}:\Windows";
-            
-            return Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any();
+            return new BcdBootloaderInstaller(logger).InstallBootloader(target);
         }
     }
 }

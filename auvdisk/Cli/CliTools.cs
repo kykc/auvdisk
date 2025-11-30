@@ -1,4 +1,3 @@
-using auvdisk.Extensions;
 using auvdisk.Log;
 using SimpleExec;
 
@@ -11,7 +10,7 @@ namespace auvdisk.Cli
         {
             try
             {
-                var (stdOut, stdErr) = SimpleExec.Command.ReadAsync("dd",
+                _ = SimpleExec.Command.ReadAsync("dd",
                     ["if=/dev/zero", $"of={filename}", "bs=1", "count=0", $"seek={size.ToString()}"]).GetAwaiter().GetResult();
 
                 return Flows.Val(new Value<int>(0));

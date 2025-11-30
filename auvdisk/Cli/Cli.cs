@@ -1,11 +1,5 @@
 using CommandLine;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace auvdisk.Cli
 {
@@ -459,6 +453,15 @@ namespace auvdisk.Cli
     {
         [Option('t', "target", Required = true, HelpText = "Target disk image path")]
         public string Target { get; set; } = "";
+    }
+
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+    [Verb("toggle-efi", HelpText = "Provided drive letter of the mounted NTFS volume mount/unmount EFI Boot partition from the same device")]
+    [NotSupported(!Program.IsWindows)]
+    class ToggleEfi
+    {
+        [Option('l', "letter", Required = true, HelpText = "Target drive letter")]
+        public string DriveLetter { get; set; } = "";
     }
 
     [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]

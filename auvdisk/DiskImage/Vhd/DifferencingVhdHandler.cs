@@ -5,7 +5,7 @@ using Spectre.Console;
 
 namespace auvdisk.DiskImage.Vhd
 {
-    class DifferencingVhdHandler : IDisposable
+    internal sealed class DifferencingVhdHandler : IDisposable
     {
         public class ProgressData : IProgressData
         {

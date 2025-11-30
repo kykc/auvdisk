@@ -1,7 +1,5 @@
-using System.Diagnostics;
 using auvdisk.Log;
 using DotNext;
-using ausharp.Flow;
 using Spectre.Console.Rendering;
 
 namespace auvdisk.Extensions;
@@ -36,10 +34,5 @@ internal static class FlowExtensions
     public static Flow<TSubj> LogOk<TSubj>(this Flow<TSubj> subj, ILog logger, string msg) where TSubj : class
     {
         return subj.SideEffect(_ => logger.Log(msg));
-    }
-    
-    public static Flow<TSubj> Optional<TSubj>(Optional<TSubj> value, string error, IFlowContextHandler? context = null) where TSubj: class
-    {
-        return value.HasValue ? Flows.Val(value.Value, context) : Flows.Err<TSubj>(error, context);
     }
 }

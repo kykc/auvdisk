@@ -404,9 +404,9 @@ namespace auvdisk
 
             handlers.Register([SuppressMessage("ReSharper", "ConvertToLambdaExpression")](Notepad rawOpts) =>
             {
-                using var result = Flows.Val(rawOpts).Map(_ => None.Value);
-
-                return 0;
+                using var result = Dbg.Notepad.EntryPoint(rawOpts, logger);
+                
+                return result.LogErrorIfAny(logger) ? 1 : 0;
             });
 #endif
 
@@ -419,7 +419,5 @@ namespace auvdisk
 
             return exitCode;
         }
-        
-        
     }
 }

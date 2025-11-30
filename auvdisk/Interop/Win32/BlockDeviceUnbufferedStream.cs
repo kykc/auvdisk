@@ -38,7 +38,7 @@ namespace auvdisk.Interop.Win32
         public BlockDeviceUnbufferedStream(string path, bool fsCtlAllowExtendedIo = false, long? length = null) :
             this(Windows.Win32.PInvoke.CreateFile(
                 path,
-                (uint)FileAccess.Read,
+                (uint)Util.GENERIC_READ,
                 FILE_SHARE_MODE.FILE_SHARE_READ | FILE_SHARE_MODE.FILE_SHARE_WRITE,
                 null,
                 FILE_CREATION_DISPOSITION.OPEN_EXISTING,

@@ -5,7 +5,7 @@ using auvdisk.Log;
 
 namespace auvdisk.Interop.Win32.Vss
 {
-    public class Backup : IDisposable
+    public sealed class Backup : IDisposable
     {
         private readonly IVssBackupComponents _backup;
         private readonly Snapshot _snap;

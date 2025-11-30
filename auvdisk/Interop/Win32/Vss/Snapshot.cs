@@ -3,7 +3,7 @@ using Alphaleonis.Win32.Vss;
 
 namespace auvdisk.Interop.Win32.Vss
 {
-    class Snapshot : IDisposable
+    internal sealed class Snapshot : IDisposable
     {
         private readonly IVssBackupComponents _backup;
         private readonly Guid _setId;
@@ -26,6 +26,7 @@ namespace auvdisk.Interop.Win32.Vss
         public void Dispose()
         {
             try { Delete(); } catch { }
+            
         }
 
         public void AddVolume(string volumeName)

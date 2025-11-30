@@ -10,7 +10,7 @@ using PhysicalVolumeInfo = auvdisk.Interop.PhysicalVolumeInfo;
 
 namespace auvdisk.DiskImage
 {
-    public class FsCollection : IDisposable
+    public sealed class FsCollection : IDisposable
     {
         public string Caption { get; }
         public IEnumerable<IDisposable> Entities { get; }

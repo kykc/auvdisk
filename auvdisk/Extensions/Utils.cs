@@ -1,13 +1,7 @@
-using System.Numerics;
-using System.Reflection.Emit;
-using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using auvdisk.Bytes;
 using auvdisk.DiskImage;
-using auvdisk.Interop;
 using auvdisk.Log;
-using CommandLine;
 using DiskAccessLibrary.VHD;
 using Spectre.Console;
 
@@ -121,7 +115,7 @@ namespace auvdisk.Extensions
 
             double pow = Math.Floor((bytes>0 ? Math.Log(bytes) : 0) / Math.Log(1024));
             pow = Math.Min(pow, units.Count-1);
-            double value = (double)bytes / Math.Pow(1024, pow);
+            double value = bytes / Math.Pow(1024, pow);
             return value.ToString(pow==0 ? "F0" : "F2") + "" + units[(int)pow];
         }
 
@@ -271,7 +265,7 @@ namespace auvdisk.Extensions
         {
             return action
                 .LogOk(logger, x => $"Checking that source file contains valid {(diskType(x) == "" ? "disk" : diskType(x))} image")
-                .Map(x => new {opts = x, probe = new DiskProbe(source(x), verbose(x) ? logger : new NullLogger(), fs => { }).Probe()})
+                .Map(x => new {opts = x, probe = new DiskProbe(source(x), verbose(x) ? logger : new NullLogger(), _ => { }).Probe()})
                 .Check((res) => res.probe.Disk != null, x => $"No {diskType(x.opts)} footer and/or partition table found, exiting")
                 .Check((res) => res.probe.Disk!.ImageType == diskType(res.opts) || diskType(res.opts) == "", (res) => $"Expected {diskType(res.opts)} image file got {res.probe.Disk!.ImageType}")
                 .Map(x => x.opts);
@@ -282,10 +276,15 @@ namespace auvdisk.Extensions
         {
             return action
                 .LogOk(logger, x => $"Checking that source file contains valid {(fsType(x) == "" ? "filesystem" : fsType(x))} image")
-                .Map(x => new { opts = x, probe = new DiskProbe(source(x), verbose(x) ? logger : new NullLogger() , fs => { }).Probe() })
+                .Map(x => new { opts = x, probe = new DiskProbe(source(x), verbose(x) ? logger : new NullLogger() , _ => { }).Probe() })
                 .Check(x => x.probe.Fs != null, (_) => "No filesystem found, exiting")
                 .Check(x => x.probe.Fs!.FsType == fsType(x.opts) || fsType(x.opts) == "", x => $"Expected {fsType(x.opts)} filesystem, got {x.probe.Fs!.FsType}")
                 .Map(x => x.opts);
+        }
+        
+        public static TOut MapTo<TIn, TOut>(this TIn source, Func<TIn, TOut> func)
+        {
+            return func(source);
         }
         
         public static Flow<TSubj> WithCheckedSourceExists<TSubj>(this Flow<TSubj> action, Func<TSubj, string> source, ILog logger)
@@ -293,7 +292,7 @@ namespace auvdisk.Extensions
         {
             TSubj TryOpenForReading(TSubj subj)
             {
-                File.OpenRead(source(subj))?.Close();
+                File.OpenRead(source(subj)).Close();
                 return subj;
             }
 
@@ -374,7 +373,7 @@ namespace auvdisk.Extensions
 
         public static ulong DivideAndCeil(this ulong value, ulong divisor)
         {
-            return (ulong)Math.Ceiling((double)value / (double)divisor);
+            return (ulong)Math.Ceiling((double)value / divisor);
         }
     }
 }
