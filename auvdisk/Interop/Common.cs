@@ -258,13 +258,27 @@ namespace auvdisk.Interop
             handlers.Register((ToggleEfi rawOpts) =>
             {
                 var result = Flows.Val(rawOpts)
-                    .Bind(opts => new BcdBootloaderInstaller(logger).FindBootableWindowsLayoutInMounted(opts.DriveLetter.First()))
-                    .BindErr(layout =>
+                    .BindConcat(
+                        _ => GetVolumes(logger), 
+                        (opts, volumes) => new { opts, volumes })
+                    .BindConcat(
+                        state => new BcdBootloaderInstaller(logger, state.volumes).FindBootableWindowsLayoutInMounted(state.opts.DriveLetter.First()),
+                        (state, layout) => new { state.opts, state.volumes, layout })
+                    .BindErr(state =>
                     {
-                        if (Directory.Exists($"{layout.EfiTargetLetter}:"))
+                        var layout = state.layout;
+                        
+                        char? currentLetter = state.volumes
+                            .Where(v => v.MountPoints.Contains(state.layout.EfiVolumePath))
+                            .SelectMany(v => v.MountPoints)
+                            .Where(m => m.Length <= 3)
+                            .Select(m => new char?(m.ToUpper().First()))
+                            .FirstOrDefault();
+                        
+                        if (currentLetter.IsSome())
                         {
-                            logger.Log($"Dismounting <{layout.EfiTargetLetter}>");
-                            return DriveLetterManager.RemoveDriveLetterFromVolume(layout.EfiTargetLetter, logger);
+                            logger.Log($"Dismounting <{currentLetter}>");
+                            return DriveLetterManager.RemoveDriveLetterFromVolume(currentLetter!.Value, logger);
                         }
                         else
                         {

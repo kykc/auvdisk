@@ -9,7 +9,7 @@ using DiscUtils;
 namespace auvdisk.Interop.Win32;
 
 [SupportedOSPlatform("windows5.1.2600")]
-public class BcdBootloaderInstaller(ILog initLogger)
+public class BcdBootloaderInstaller(ILog initLogger, IEnumerable<PhysicalVolumeInfo>? physicalVolumeInfos = null)
 {
     internal record BootableWindowsLayout(
         string EfiVolumePath, 
@@ -17,7 +17,7 @@ public class BcdBootloaderInstaller(ILog initLogger)
         char? SourceWindowsLetter);
     
     private ILog Logger => initLogger;
-    private char EfiTargetLetter => 'X'; // TODO: ideally, check that it is not already taken 
+    private IEnumerable<PhysicalVolumeInfo>? PhysicalVolumes { get; set; } = physicalVolumeInfos;
     
     public Flow<None> InstallBootloader(string target)
     {
@@ -78,17 +78,40 @@ public class BcdBootloaderInstaller(ILog initLogger)
         var maybeDataVolume = vhdVolumeInfos.FirstOrDefault(v => v.FileSystem == "NTFS");
 
         return Flows.ValOr(efiVolume, "Failed to detect/find EFI/data volumes")
-            .Map(efi => new BootableWindowsLayout(
-                EfiVolumePath: efi.Path, 
-                EfiTargetLetter: EfiTargetLetter, 
+            .BindConcat(
+                _ => FindFreeDriveLetter(),
+                (efi, letter) => new { efi, letter })
+            .Map(state => new BootableWindowsLayout(
+                EfiVolumePath: state.efi.Path, 
+                EfiTargetLetter: state.letter.Val, 
                 SourceWindowsLetter: maybeDataVolume?.DriveLetter));
+    }
+
+    internal Flow<Value<char>> FindFreeDriveLetter()
+    {
+        return GetPhysicalVolumes()
+            .Bind(volumes =>
+            {
+                var allocatedLetters = volumes
+                    .SelectMany(v => v.MountPoints)
+                    .Where(m => m.Length <= 3)
+                    .Select(m => m.ToUpper().First())
+                    .Distinct().OrderBy(x => x).ToList();
+
+                var usableLetters = "CDEFGHIJKLMNOPQRSTUVWX".ToCharArray();
+
+                char? targetLetter = usableLetters.Reverse().Select(x => x as char?)
+                    .FirstOrDefault(x => !allocatedLetters.Contains(x!.Value));
+
+                return Flows.RefValOr(targetLetter, "No unassigned drive letter found");
+            });
     }
 
     internal Flow<BootableWindowsLayout> FindBootableWindowsLayoutInMounted(char mountedVolumeLetter)
     {
         var logger = Logger;
         
-        return Common.GetVolumes(logger)
+        return GetPhysicalVolumes()
             .Map(volumes => FindVolumesOnSameDevice(volumes.ToList(), mountedVolumeLetter))
             .MapOr(volumes => volumes.Where(v =>
                 {
@@ -98,7 +121,14 @@ public class BcdBootloaderInstaller(ILog initLogger)
                     return fsInfoList.Any(x => x.Name == "FAT");
                 }).FirstOrDefault(), "Failed to find FAT32 volume")
             .MapOr(v => v.MountPoints.FirstOrDefault(x => x.Contains("Volume")), "Failed to find FAT32 volume mount point")
-            .Map(v => new BootableWindowsLayout(v, EfiTargetLetter, mountedVolumeLetter));
+            .BindConcat(_ => FindFreeDriveLetter(), (volumePath, letter) => new { volumePath, letter })
+            .Map(state => new BootableWindowsLayout(state.volumePath, state.letter.Val, mountedVolumeLetter));
+    }
+
+    private Flow<IEnumerable<PhysicalVolumeInfo>> GetPhysicalVolumes()
+    {
+        return Flows.FirstValOrLastErr(() => PhysicalVolumes.Flow("Value wasn't provided"), () => Common.GetVolumes(Logger))
+            .SideEffect(volumes => PhysicalVolumes = volumes);
     }
     
     private Flow<Value<char>> InitializeEfiBootPartitionWithWinBcdBootloader(string efiVolumePath, char efiTargetLetter, char sourceWindowsLetter)

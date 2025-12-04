@@ -57,6 +57,7 @@ packages directly from this repo (see `.gitea/workflows` for some examples on pa
 | mount-volume          | Assign letter to volume (Windows only)                                                                                                          |
 | unmount-volume        | Remove drive letter association from volume (Windows only)                                                                                      |
 | install-bootloader    | Install EFI boot loader on a virtual disk with GPT partition table (Windows only)                                                               |
+| toggle-efi            | Provided drive letter of the mounted NTFS volume mount/unmount EFI Boot partition from the same device                                          |
 
 ## Unit tests
 
