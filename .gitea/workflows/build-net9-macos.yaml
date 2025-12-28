@@ -1,0 +1,23 @@
+name: build macos package
+run-name: ${{ gitea.actor }} is building auvdisk
+on: [push]
+
+jobs:
+  build-deb:
+    runs-on: automatl-net9-ubuntu2404
+    if: gitea.ref == 'refs/heads/main'
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: '${{ secrets.CI_TOKEN }}'
+      - name: build deb
+        run: |
+          dotnet deb install && pushd auvdisk && dotnet publish -c Release -r osx-arm64 -f net9.0 --self-contained -t:CreateDeb
+      - name: rename deb
+        run: |
+          mv auvdisk/bin/Release/net9.0/osx-arm64/auvdisk*.deb auvdisk.deb
+      - name: upload deb
+        run: |
+          curl --fail-with-body --no-progress-meter -i -w "\n\n" --user ${{ secrets.CI_USER }}:${{ secrets.CI_TOKEN }} --upload-file auvdisk.deb https://${{ vars.AU_GITEA_HOST }}/api/packages/audist/debian/pool/osx/main/upload
